@@ -27,6 +27,8 @@ Do not run ordinary long-lived browser automation or unbounded collector jobs in
 
 Use Supabase Postgres as the primary database.
 
+Use Supabase's current publishable/secret API key model for new hosted Auth and API clients, while retaining legacy anon/service-role and `SUPA_*` names for Supabase CLI/local compatibility.
+
 Expected core tables:
 
 - `sources`
@@ -128,7 +130,7 @@ Expected environments:
 The repository keeps a full safe variable template in [`.env.example`](../.env.example). Required groups include:
 
 - app/admin secrets
-- Supabase/Postgres credentials
+- Supabase/Postgres credentials, including publishable/secret keys and CLI-compatible local aliases
 - collector authentication
 - AMAP map/geocoding credentials when enabled
 - OpenAI-compatible text inference credentials

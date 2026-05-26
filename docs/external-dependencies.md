@@ -30,7 +30,24 @@ Purpose:
 Notes:
 
 - Supabase Auth is optional for MVP admin access; a simpler protected admin route can be used first if appropriate.
+- Prefer current publishable keys for browser clients and secret keys for server-only Supabase clients.
+- Keep legacy anon/service-role names and `SUPA_*` local aliases for Supabase CLI compatibility.
 - Use Postgres constraints and idempotency keys to prevent duplicate article ingestion.
+
+## Observation
+
+Purpose:
+
+- Monitor deployments, runtime errors, web vitals, traffic, and platform behavior without adding a separate APM service.
+
+Initial provider:
+
+- Vercel built-in logs, Observability, Web Analytics, and Speed Insights.
+
+Notes:
+
+- Do not add Sentry, Datadog, New Relic, or other third-party observability dependencies for MVP.
+- Add third-party drains only if a later issue needs longer retention, external correlation, or compliance controls.
 
 ## Playwright
 

@@ -198,6 +198,7 @@ Environment:
 
 - `VERCEL_PROJECT_ID`
 - `VERCEL_TEAM_ID`
+- `VERCEL_TOKEN`
 - `CRON_SECRET`
 - `VERCEL_WORKFLOW_ENABLED`
 - `VERCEL_QUEUE_ENABLED`
@@ -222,16 +223,41 @@ Expected responsibilities:
 Environment:
 
 - `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SECRET_KEY`
+- legacy compatibility: `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- local CLI compatibility: `SUPA_API_URL`, `SUPA_DB_URL`, `SUPA_ANON_KEY`, `SUPA_SERVICE_KEY`
 - `DATABASE_URL`
 - optional `SUPABASE_DB_DIRECT_URL`
+- optional local/self-hosted Auth: `JWT_SECRET`
 
 Implementation notes:
 
+- Use the publishable key for browser/mobile clients and RLS-respecting user sessions.
+- Use the secret key, or legacy service-role key when required, only in server-side code.
+- Do not expose server-only Supabase keys through `NEXT_PUBLIC_` variables.
+- Keep `SUPA_*` aliases compatible with `supabase status --output env` for local CLI scripts.
 - Use constraints and idempotency keys to prevent duplicate ingestion.
-- Use service-role access only on the server.
 - Keep public reads behind API or row-level policies appropriate for the app scaffold.
+
+## Observation
+
+Use Vercel built-in observation for the MVP instead of adding a third-party APM service.
+
+Planned use:
+
+- Vercel dashboard build logs and runtime logs
+- Vercel Observability for functions, edge requests, middleware, external API requests, Workflow runs, and related platform signals
+- Vercel Web Analytics for privacy-friendly visitor analytics
+- Vercel Speed Insights for real-user web vitals
+
+Environment:
+
+- `OBSERVABILITY_PROVIDER=vercel`
+- `VERCEL_WEB_ANALYTICS_ENABLED`
+- `VERCEL_SPEED_INSIGHTS_ENABLED`
+
+Do not add Sentry, Datadog, New Relic, or OpenTelemetry drains unless a later implementation issue explicitly adopts them.
 
 ## Text Inference
 

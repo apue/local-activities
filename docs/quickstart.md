@@ -25,11 +25,19 @@ Fill `.env.local` with real values only on your machine. Do not commit secrets.
 Minimum groups to prepare:
 
 - app/admin secrets: `ADMIN_ACCESS_TOKEN`, `COLLECTOR_API_KEY`, `INTERNAL_API_SECRET`
-- Supabase/Postgres: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`
+- Supabase/Postgres: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `DATABASE_URL`
+- Supabase CLI/local compatibility: `SUPA_API_URL`, `SUPA_DB_URL`, `SUPA_ANON_KEY`, `SUPA_SERVICE_KEY`
 - map/geocoding: `NEXT_PUBLIC_AMAP_JS_API_KEY`, `AMAP_WEB_SERVICE_API_KEY`
 - text inference: `TEXT_INFERENCE_API_BASE_URL`, `TEXT_INFERENCE_API_KEY`, `TEXT_INFERENCE_MODEL`
 - search/crawling: `EXA_API_KEY`, `SERPER_API_KEY`, `FIRECRAWL_API_KEY`
-- Vercel: `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, `CRON_SECRET`
+- Vercel: `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, `VERCEL_TOKEN`, `CRON_SECRET`
+
+For Supabase Auth, prefer the current hosted API key pair:
+
+- browser/client code: `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- server-only admin code: `SUPABASE_SECRET_KEY`
+
+Keep legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in the template for compatibility with older Supabase examples and libraries. Keep `SUPA_*` aliases for scripts that consume `supabase status --output env` from the local CLI stack.
 
 ## Scaffold With Next.js
 
@@ -87,6 +95,8 @@ vercel deploy
 vercel logs --deployment <preview-deployment-id> --level error
 ```
 
+For non-interactive CLI use, set `VERCEL_TOKEN` in `.env.local` or the calling shell. Prefer the environment variable over passing `--token` inline so the token is less likely to appear in logs.
+
 ## GitHub And Vercel Preview Deployments
 
 Manually connect the GitHub fork/repository to the Vercel project in the Vercel dashboard so each PR gets an automatic preview deployment.
@@ -113,6 +123,17 @@ Keep these boundaries:
 - Do not place unbounded Playwright sessions inside ordinary request/response handlers.
 
 Only enable `VERCEL_WORKFLOW_ENABLED=true` after the first concrete workflow implementation lands.
+
+## Observation
+
+Use Vercel built-in observation for the MVP:
+
+- build logs and runtime logs in the Vercel dashboard
+- Vercel Observability for function, edge, middleware, external request, and workflow signals
+- Vercel Web Analytics for visitor analytics
+- Vercel Speed Insights for real-user web vitals
+
+Do not add Sentry, Datadog, New Relic, or other third-party observability providers unless a later issue explicitly requires one.
 
 ## Project Agent Config
 
