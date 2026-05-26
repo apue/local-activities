@@ -33,6 +33,304 @@ Local Collector
 
 The web app and API stay together in one Next.js application for the MVP. Browser automation runs outside Vercel on a controlled local machine or VM.
 
+## System Modules
+
+### Public Web Frontend
+
+Responsibilities:
+
+- Present upcoming, published activities for mobile users.
+- Provide shareable event detail pages.
+- Surface time, venue, reservation status, official source, and map links before secondary content.
+
+Reads:
+
+- published `CanonicalEvent` records
+- selected source metadata for attribution
+- location fields needed for map links
+
+Writes:
+
+- none in the MVP
+
+Permissions:
+
+- public read access to published, upcoming event data only
+- no access to drafts, source run diagnostics, extraction evidence, or admin notes
+
+Interfaces:
+
+- server-rendered Next.js routes for public pages
+- read-only backend queries scoped to published events
+
+### Admin Dashboard
+
+Responsibilities:
+
+- Add seed URLs.
+- Review source health and source run history.
+- Review event drafts before publication.
+- Resolve duplicate, update, and cancellation queues.
+- Apply admin decisions and overrides.
+
+Reads:
+
+- `Source`
+- `SourceRun`
+- `SourcePost`
+- `EventDraft`
+- `CanonicalEvent`
+- `EventRevision`
+- collector failures and diagnostics
+
+Writes:
+
+- source status overrides
+- review decisions
+- event publish state
+- event revision decisions
+- canonical event corrections
+
+Permissions:
+
+- admin only
+- must not be accessible to public users or collectors
+
+Interfaces:
+
+- protected Next.js admin routes
+- server actions or admin API routes backed by authorization checks
+
+### Backend API
+
+Responsibilities:
+
+- Accept authenticated collector uploads.
+- Validate schemas and idempotency keys.
+- Persist normalized collector results.
+- Orchestrate extraction, matching, revisions, and publication policy.
+- Serve public and admin data through scoped access paths.
+
+Reads:
+
+- all application tables required for orchestration
+
+Writes:
+
+- source run records
+- article indexes and snapshots
+- event drafts
+- match results
+- event revisions
+- canonical events through backend policy only
+
+Permissions:
+
+- collector endpoints require collector API keys
+- admin endpoints require admin authorization
+- public endpoints expose published events only
+
+Interfaces:
+
+- collector ingest API routes
+- admin routes or server actions
+- public read routes
+- internal service functions for extraction, matching, and location
+
+### Collector Runtime
+
+Responsibilities:
+
+- Check tracked sources every 4 hours.
+- Use browser automation or an agent adapter to observe official pages.
+- Upload normalized source run reports, article indexes, article snapshots, event drafts, and failures.
+- Report failure reasons instead of hiding operational problems.
+
+Reads:
+
+- source tasks from backend
+- browser-visible source pages
+- local browser profile or collector runtime state
+
+Writes:
+
+- uploads only through collector API
+- no direct database writes
+
+Permissions:
+
+- collector API key
+- may create observations, snapshots, drafts, and failure reports
+- cannot publish events or mutate canonical events directly
+
+Interfaces:
+
+- `CollectorAdapter`
+- collector ingest API
+- local browser automation runtime
+
+### Extraction / LLM Module
+
+Responsibilities:
+
+- Classify article snapshots as event, update, cancellation, or non-event.
+- Extract one or more event drafts from unstructured text.
+- Attach evidence snippets and confidence values.
+- Identify uncertain fields that require admin review.
+
+Reads:
+
+- article snapshots
+- source metadata
+- optional existing canonical event context for update/cancellation interpretation
+
+Writes:
+
+- `EventDraft`
+- extraction status
+- extraction evidence and uncertainty notes
+
+Permissions:
+
+- internal backend service only
+- LLM output is draft evidence, not final application state
+
+Interfaces:
+
+- `ArticleSnapshot -> EventDraft[]`
+- schema-validated structured output
+
+### Matching / Revision Module
+
+Responsibilities:
+
+- Match event drafts to existing canonical events.
+- Produce duplicate decisions or review candidates.
+- Detect field conflicts, updates, and cancellation proposals.
+- Preserve match explanations and revision evidence.
+
+Reads:
+
+- event drafts
+- canonical events
+- event mentions
+- source relationship and organizer metadata
+
+Writes:
+
+- match results
+- `EventMention` links
+- `EventRevision` proposals
+- canonical event updates only through accepted policy or admin decision
+
+Permissions:
+
+- internal backend service only
+- cannot bypass admin review for low-confidence or high-impact changes
+
+Interfaces:
+
+- `EventDraft -> MatchDecision`
+- `EventDraft + CanonicalEvent -> RevisionProposal[]`
+
+### Location Module
+
+Responsibilities:
+
+- Normalize venue names and addresses.
+- Resolve coordinates through a geocoding provider.
+- Build map deeplinks for public event pages.
+- Preserve provider metadata and coordinate system.
+
+Reads:
+
+- venue and address fields from event drafts and canonical events
+
+Writes:
+
+- geocoding results
+- location confidence
+- coordinate system metadata
+
+Permissions:
+
+- internal backend service only
+- provider credentials are server-side secrets
+
+Interfaces:
+
+- `GeocodingProvider`
+- `MapLinkProvider`
+
+### Database
+
+Responsibilities:
+
+- Store source, collector, extraction, event, and revision state.
+- Enforce idempotency and relational integrity.
+- Keep canonical event state separate from source article mentions.
+
+Reads and writes:
+
+- all persistent application state through backend-controlled access paths
+
+Permissions:
+
+- service-role access is backend only
+- no direct database access from public frontend or collector runtime
+
+## Data Ownership
+
+- Public frontend owns presentation only.
+- Admin dashboard owns human review decisions and explicit overrides.
+- Collector runtime owns observed page state and run diagnostics.
+- Extraction / LLM module owns draft suggestions, evidence, and uncertainty notes.
+- Matching / revision module owns match explanations and revision proposals.
+- Backend policy owns canonical event creation, publication, updates, and status transitions.
+- Database owns durable state but does not encode business decisions without backend policy.
+
+## API Surface
+
+Public API or routes:
+
+- read published, upcoming events
+- read public event detail data
+- no draft, diagnostic, or admin fields
+
+Admin API or server actions:
+
+- add seed URLs
+- review event drafts
+- resolve duplicate candidates
+- accept or reject revision proposals
+- update source status and admin notes
+- read source run diagnostics
+
+Collector API:
+
+- `POST /api/collector/source-run`
+- `POST /api/collector/article-index`
+- `POST /api/collector/article-snapshot`
+- `POST /api/collector/event-draft`
+- `POST /api/collector/failure`
+
+Internal service functions:
+
+- extraction
+- event matching
+- revision proposal
+- geocoding
+- publication policy
+
+## Permission Boundaries
+
+- Public users can read published upcoming events only.
+- Admin users can review and mutate source, draft, revision, and canonical event state.
+- Collectors can upload observations and failures but cannot publish or update canonical events directly.
+- LLM and agent modules can propose drafts and explanations but cannot own final state.
+- Service-role database credentials stay server-side.
+- External provider secrets stay server-side or in the local collector environment, never in public frontend code.
+
 ## Core Domain Model
 
 ### Source

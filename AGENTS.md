@@ -76,7 +76,10 @@ The handoff must be enough for a new Codex session to continue without reading c
 - `docs/superpowers/specs/2026-05-26-local-activities-design.md`: implementation-facing system design for the approved current slice.
 - `docs/external-dependencies.md`: third-party services and why they are used.
 - `docs/technical-baseline.md`: language, framework, database, deployment, and architectural baseline.
+- `docs/testing-strategy.md`: how each type of feature should be validated.
+- `docs/security-and-permissions.md`: security, secret, and permission boundaries.
 - `CONTRIBUTING.md`: human-readable development workflow and review policy.
+- `.github/codex/prompts/review.md`: Codex PR review guidance.
 
 Keep future ideas out of the design spec unless they affect the current implementation boundary.
 
