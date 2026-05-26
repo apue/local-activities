@@ -1,5 +1,7 @@
 # External Dependencies
 
+See also [MVP Tech Stack And End-To-End Feature Notes](tech-stack.md) for planned environment variables and feature-level integration notes.
+
 ## Vercel
 
 Purpose:
@@ -11,8 +13,10 @@ Purpose:
 Notes:
 
 - Vercel is appropriate for the MVP web surface and lightweight API handling.
-- Long-running browser automation should not run inside Vercel functions.
-- Scheduled collection should be handled by the local collector or a worker runtime.
+- Vercel Cron can trigger lightweight scheduled callbacks.
+- Vercel Workflow, Sandbox, and Queue are candidate services for future orchestration or bounded exceptional extraction work.
+- Long-running browser automation should not run inside ordinary Vercel request/response functions.
+- Scheduled collection should be handled by the local collector or a worker runtime unless a later PR adopts a bounded Vercel-native orchestration pattern.
 
 ## Supabase
 
@@ -63,7 +67,7 @@ Purpose:
 
 Initial candidates:
 
-- Amap for China address accuracy.
+- AMAP for China address accuracy and the MVP assumption.
 - Google Maps for validation-stage convenience.
 - Mapbox or OpenStreetMap-based services for later alternatives.
 - WeChat map capabilities for future mini program integration.
@@ -72,6 +76,52 @@ Notes:
 
 - Business logic depends on `GeocodingProvider` and map-link abstractions.
 - Store coordinate system metadata such as `WGS84`, `GCJ02`, or `BD09`.
+- AMAP credentials are split between browser-side JS keys and server-side Web Service keys.
+
+## Crawling Providers
+
+Purpose:
+
+- Discover official pages and extract content where platform policies allow it.
+- Provide non-browser alternatives before falling back to local browser automation.
+
+Initial candidates:
+
+- Exa for search and page discovery.
+- Firecrawl for page scraping/extraction.
+
+Notes:
+
+- Keep `BASE_URL` and `API_KEY` variables distinct per provider.
+- Provider outputs are still untrusted collector inputs; the backend validates and deduplicates.
+
+## Text-To-Speech Provider
+
+Purpose:
+
+- Generate optional short audio summaries for reviewed event details.
+
+Initial candidates:
+
+- Cartesia.
+- ElevenLabs.
+
+Notes:
+
+- TTS is not required for core event discovery.
+- Cache audio by event revision or summary hash to avoid regenerating on every view.
+
+## Calendar Integration
+
+Purpose:
+
+- Help users save events to personal calendars.
+
+Notes:
+
+- Start with standards-based `.ics` downloads, subscribable feeds, and Google Calendar prefill links.
+- Apple Calendar works with `.ics` files and subscribed calendar feeds; no Apple OAuth is needed for MVP.
+- Google Calendar API write access should wait until the product has user accounts and a clear need for authenticated calendar sync.
 
 ## GitHub
 

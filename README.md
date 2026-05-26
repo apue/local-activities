@@ -19,7 +19,7 @@ This repository is currently documentation-first. It defines the MVP scope and s
 ## Documents
 
 - [Requirements](docs/requirements.md)
-- [Design Spec](docs/superpowers/specs/2026-05-26-local-activities-design.md)
+- [MVP Tech Stack And End-To-End Feature Notes](docs/tech-stack.md)
 - [External Dependencies](docs/external-dependencies.md)
 - [Technical Baseline](docs/technical-baseline.md)
 - [Contributing](CONTRIBUTING.md)
@@ -33,6 +33,9 @@ This repository is currently documentation-first. It defines the MVP scope and s
 - Database: Supabase Postgres
 - Collector runtime: local Node.js worker with Playwright-compatible adapter abstraction
 - LLM usage: structured event extraction and uncertain-case assistance
+- Map/geocoding: AMAP-first provider abstraction for China
+- Calendar: `.ics` export/feed first; OAuth calendar writes later only if needed
+- Crawling: provider adapters for Exa/Firecrawl plus replaceable collector outputs
 
 ## Next Step
 

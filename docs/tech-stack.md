@@ -1,0 +1,314 @@
+# MVP Tech Stack And End-To-End Feature Notes
+
+This document records the intended MVP stack for future implementation PRs. It is planning-level: it names services, integration boundaries, and environment variables, but it does not require all features to ship in the first app scaffold.
+
+## Product Slice
+
+The app remains a mobile-first guide to official cultural activities in Beijing. The end-to-end user experience should stay simple:
+
+1. A collector finds official event announcements.
+2. The backend validates and normalizes candidate events.
+3. Admin review resolves uncertain extraction, duplicates, and updates.
+4. Public users browse actionable upcoming events, usually for weekend planning.
+5. Event detail pages expose official source links, map actions, and calendar actions.
+
+## User-Facing Experience
+
+### Discovery Views
+
+MVP public views:
+
+- This weekend
+- Today available
+- Reservation closing soon
+- Upcoming
+- Event detail
+
+The primary screen should not be a map-first browsing experience. Map support is useful on event detail pages and as a future secondary discovery surface.
+
+### Event Detail Actions
+
+An event detail page should prioritize:
+
+- Time and date
+- Venue name and address
+- Reservation status and deadline
+- Official source link
+- Reservation/action link
+- Map open button
+- Add-to-calendar button
+- Optional audio summary
+
+## Map And Geocoding
+
+### Current Assumption
+
+Use AMAP for the China MVP because it has strong local coverage and uses the coordinate systems expected by many Chinese map experiences.
+
+### Environment
+
+- `NEXT_PUBLIC_MAP_PROVIDER=amap`
+- `NEXT_PUBLIC_MAP_COORDINATE_SYSTEM=GCJ02`
+- `NEXT_PUBLIC_AMAP_JS_API_KEY`
+- `AMAP_WEB_SERVICE_API_KEY`
+- `AMAP_SECURITY_JS_CODE` when AMAP JS security configuration requires it
+
+### Implementation Boundary
+
+Keep a provider abstraction even if AMAP is the only provider at first:
+
+- `GeocodingProvider`: venue/address to coordinates
+- `MapLinkProvider`: event location to app/web deeplinks
+- `MapEmbedProvider`: optional public detail page map component
+
+Store coordinate-system metadata with coordinates. For AMAP, expect `GCJ02`; do not silently mix it with `WGS84` or `BD09`.
+
+## Event Schema
+
+The current planned event model is intentionally simple. It is enough for MVP if it supports:
+
+- title
+- summary
+- start/end time
+- registration deadline
+- venue name/address
+- city/district
+- coordinates plus coordinate system
+- organizer/source
+- reservation requirement and URL
+- source URL
+- status
+- confidence and evidence
+
+The schema can evolve later. The important rule is that crawler and agent outputs remain untrusted drafts. Backend validation, deduplication, and publish-state decisions stay authoritative.
+
+## Calendar View And Personal Calendar Sync
+
+### Common Practice
+
+For this kind of public-events MVP, start with standards-based calendar export before account-level calendar write access.
+
+Recommended order:
+
+1. Generate per-event `.ics` downloads.
+2. Generate `webcal://` or HTTPS `.ics` subscription feeds for saved filters such as upcoming events.
+3. Add convenience links for Google Calendar prefill URLs.
+4. Only later add authenticated Google Calendar API write access if users clearly need two-way or one-click sync.
+
+### Apple Calendar
+
+Apple Calendar commonly works well with:
+
+- a downloadable `.ics` file for one event
+- a subscribable calendar feed URL for many events
+
+No Apple OAuth integration is needed for MVP.
+
+### Google Calendar
+
+For MVP, use one of these:
+
+- Google Calendar template URL for a single event add flow
+- `.ics` file import
+- subscribed calendar feed
+
+Only use the Google Calendar API if the product adds user accounts, OAuth consent, and explicit permission to write into a user's calendar.
+
+### Environment
+
+- `CALENDAR_PUBLIC_BASE_URL`
+- `CALENDAR_PRODUCT_ID`
+- `CALENDAR_DEFAULT_TIMEZONE=Asia/Shanghai`
+- optional future OAuth: `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, `GOOGLE_CALENDAR_REDIRECT_URI`
+
+## Text-To-Speech
+
+TTS is a nice-to-have event-detail enhancement, not a core MVP dependency. It can provide a short audio summary for users browsing on mobile or in WeChat.
+
+Candidate providers:
+
+- Cartesia
+- ElevenLabs
+
+Use provider-neutral configuration:
+
+- `TTS_PROVIDER`
+- `TTS_API_BASE_URL`
+- `TTS_API_KEY`
+- `TTS_MODEL`
+- `TTS_VOICE_ID`
+
+Implementation notes:
+
+- Cache generated audio by event revision or summary hash.
+- Do not regenerate audio on every page view.
+- Keep source text short and clearly generated from already-reviewed event fields.
+
+## Webpage Crawling And Extraction
+
+### Providers
+
+Use distinct provider configuration so discovery and crawling can be swapped independently:
+
+- Exa: search and page discovery
+  - `EXA_BASE_URL`
+  - `EXA_API_KEY`
+- Firecrawl: page crawling and content extraction where allowed
+  - `FIRECRAWL_BASE_URL`
+  - `FIRECRAWL_API_KEY`
+
+### Collector Boundary
+
+Crawlers, Playwright runs, and agent-assisted extraction should all emit normalized objects rather than writing final event rows directly.
+
+Expected normalized outputs:
+
+- source run report
+- article index item
+- article snapshot
+- event draft
+- failure report
+
+Do not bypass login walls, captchas, or platform protections. Report structured failures such as `captcha_required`, `login_required`, or `fetch_blocked`.
+
+## Vercel
+
+Vercel remains the expected app platform.
+
+Planned use:
+
+- Next.js frontend and API routes
+- Preview deployments for PR review
+- Production deployment for the public app
+- Vercel Cron for lightweight scheduled triggers
+- Vercel Workflow as a candidate for orchestration of bounded backend tasks
+- Vercel Sandbox as a candidate for exceptional scraping or extraction cases that cannot be handled by Firecrawl, as long as runtime and policy constraints are respected
+- Vercel Queue is TBD
+
+Important boundary:
+
+- Do not make long-running browser automation depend on ordinary Vercel request/response functions.
+- Keep the collector runtime replaceable and allow local/VM execution for browser-heavy work.
+
+Environment:
+
+- `VERCEL_PROJECT_ID`
+- `VERCEL_TEAM_ID`
+- `CRON_SECRET`
+- `VERCEL_WORKFLOW_ENABLED`
+- `VERCEL_QUEUE_ENABLED`
+- `VERCEL_SANDBOX_ENABLED`
+- `VERCEL_SANDBOX_API_KEY` if that product path is adopted
+
+## Supabase
+
+Supabase Postgres is the primary relational store.
+
+Expected responsibilities:
+
+- source registry
+- source run history
+- source posts and article snapshots
+- event drafts
+- canonical events
+- event mentions
+- event revisions
+- collector failures
+
+Environment:
+
+- `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL`
+- optional `SUPABASE_DB_DIRECT_URL`
+
+Implementation notes:
+
+- Use constraints and idempotency keys to prevent duplicate ingestion.
+- Use service-role access only on the server.
+- Keep public reads behind API or row-level policies appropriate for the app scaffold.
+
+## Text Inference
+
+Use an OpenAI-compatible text inference boundary where possible.
+
+Planned uses:
+
+- classify articles as event/update/cancellation/non-event
+- extract event drafts
+- summarize event details
+- assist duplicate or update review, without directly mutating canonical state
+
+Environment:
+
+- `TEXT_INFERENCE_PROVIDER`
+- `TEXT_INFERENCE_API_BASE_URL`
+- `TEXT_INFERENCE_API_KEY`
+- `TEXT_INFERENCE_MODEL`
+- `TEXT_INFERENCE_ENDPOINT_STYLE`
+
+Endpoint style:
+
+- Prefer the OpenAI Responses-style API where available.
+- Support chat-completions-compatible providers, likely including DeepSeek, if Responses API is unavailable.
+
+Persist prompt version, model name, and extraction confidence with outputs for reproducibility.
+
+## Local Development Environment
+
+Expected local tools:
+
+- direnv
+- pnpm
+- Vercel CLI
+- Supabase CLI
+
+The repository includes:
+
+- `.env.example`: safe template for all expected variables
+- `.envrc`: loads `.env.local` and `.env` if present, and adds `node_modules/.bin` to `PATH`
+
+Recommended setup:
+
+```bash
+cp .env.example .env.local
+# edit .env.local
+direnv allow
+```
+
+## MCP
+
+The likely project-level MCP need is Context7 for current framework and provider documentation lookup.
+
+Planning variable:
+
+- `MCP_CONTEXT7_ENABLED=true`
+
+No other MCP server should be assumed for MVP unless an implementation task requires it.
+
+## Agent Skills For Future Implementation
+
+Project-level agent work should prefer these skill areas when relevant:
+
+- Vercel deployment and Next.js best practices
+- Supabase Postgres schema and query best practices
+- React/Next.js performance and composition practices
+- provider documentation lookup through Context7
+
+These are workflow aids, not production dependencies.
+
+## Implementation Priority
+
+Suggested order for future PRs:
+
+1. App scaffold and environment validation.
+2. Supabase schema and typed data contracts.
+3. Collector ingest API with schema validation and idempotency.
+4. Event list/detail UX.
+5. AMAP geocoding and map links.
+6. Calendar `.ics` export and Google Calendar prefill links.
+7. Crawling provider adapters.
+8. Text inference extraction pipeline.
+9. Optional TTS audio summaries.
+10. Vercel Workflow/Sandbox/Queue experiments only when a concrete orchestration problem exists.

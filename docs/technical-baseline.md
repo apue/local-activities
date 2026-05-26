@@ -19,7 +19,9 @@ Rationale:
 
 Use Vercel for the web app and ingest API.
 
-Do not run browser automation or long collector jobs on Vercel.
+Vercel Cron may trigger lightweight scheduled checks or orchestration callbacks. Vercel Workflow, Vercel Sandbox, and Vercel Queue are planning-level candidates for bounded orchestration or exceptional extraction cases; adopt them only when an implementation task needs them.
+
+Do not run ordinary long-lived browser automation or unbounded collector jobs inside request/response Vercel functions.
 
 ## Database
 
@@ -123,11 +125,15 @@ Expected environments:
 - Vercel production
 - local collector machine
 
-Required environment variables will include:
+The repository keeps a full safe variable template in [`.env.example`](../.env.example). Required groups include:
 
-- `DATABASE_URL`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `COLLECTOR_API_KEY`
-- `LLM_API_KEY`
-- map provider credentials when enabled
+- app/admin secrets
+- Supabase/Postgres credentials
+- collector authentication
+- AMAP map/geocoding credentials when enabled
+- OpenAI-compatible text inference credentials
+- optional TTS provider credentials
+- optional Exa/Firecrawl crawling provider credentials
+- optional Vercel Cron/Workflow/Sandbox/Queue configuration
+
+See [MVP Tech Stack And End-To-End Feature Notes](tech-stack.md) for feature-by-feature stack notes.
