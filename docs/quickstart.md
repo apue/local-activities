@@ -8,8 +8,9 @@ This repository is documentation-first until the app scaffold is approved. Use t
 - pnpm 11.
 - Vercel CLI.
 - Supabase CLI.
+- agent-browser CLI.
 - direnv.
-- Access to the fork branch intended for the PR, usually `sparticle9:env/agent-stack`.
+- Access to the working branch intended for the PR.
 
 ## Local Environment
 
@@ -99,14 +100,13 @@ For non-interactive CLI use, set `VERCEL_TOKEN` in `.env.local` or the calling s
 
 ## GitHub And Vercel Preview Deployments
 
-Manually connect the GitHub fork/repository to the Vercel project in the Vercel dashboard so each PR gets an automatic preview deployment.
+Manually connect the GitHub repository to the Vercel project in the Vercel dashboard so each PR gets an automatic preview deployment.
 
-Expected setup:
+Expected shape:
 
-- Git repository: `sparticle9/local-activities`
-- PR target: `apue/local-activities:main`
-- work branch: `env/agent-stack` or a smaller feature branch from it
-- Vercel production branch: `main`
+- the project repository is connected to Vercel
+- the production branch matches the repository's default release branch
+- feature branches and PRs create Vercel preview deployments
 - Vercel preview environment variables filled from the same groups as `.env.example`
 
 Use the Vercel dashboard for project-level Git binding because it is easier to review installation permissions, production branch settings, and preview deployment behavior there than from a one-off CLI command.
@@ -144,6 +144,7 @@ Project-level skills live in `.agents/skills`.
 Current project skills:
 
 - `frontend-design`: Anthropic frontend design skill.
+- `agent-browser`: agent-browser CLI skill for browser automation and verification workflows.
 - `firecrawl`: Firecrawl CLI skill for search, scrape, crawl, map, and browser-style web operations.
 - `exa-search`: Exa search skill discovered through `find-skills`.
 - `vercel-nextjs`, `vercel-cli`, `vercel-env-vars`, `vercel-workflow`, `vercel-observability`: Vercel/Next.js implementation and operations skills.
