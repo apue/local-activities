@@ -4,8 +4,8 @@ This repository is documentation-first until the app scaffold is approved. Use t
 
 ## Prerequisites
 
-- Node.js with Corepack enabled.
-- pnpm.
+- Node.js 24 LTS.
+- pnpm 11.
 - Vercel CLI.
 - Supabase CLI.
 - direnv.
@@ -138,5 +138,17 @@ Do not add Sentry, Datadog, New Relic, or other third-party observability provid
 ## Project Agent Config
 
 The repository includes `.codex/config.toml` with the built-in Context7 MCP endpoint. Use Context7 for current framework and provider docs during implementation planning, especially for Next.js, Vercel, Supabase, Hono, and Vitest details.
+
+Project-level skills live in `.agents/skills`.
+
+Current project skills:
+
+- `frontend-design`: Anthropic frontend design skill.
+- `firecrawl`: Firecrawl CLI skill for search, scrape, crawl, map, and browser-style web operations.
+- `exa-search`: Exa search skill discovered through `find-skills`.
+- `vercel-nextjs`, `vercel-cli`, `vercel-env-vars`, `vercel-workflow`, `vercel-observability`: Vercel/Next.js implementation and operations skills.
+- `vercel-deployment`, `vercel-react-best-practices`: Vercel deployment and React/Next.js performance skills.
+- `supabase-postgres-best-practices`: Supabase/Postgres schema and query guidance.
+- `web-design-guidelines`: UI review guidance.
 
 Keep user-level secrets outside the repository.
