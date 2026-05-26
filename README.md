@@ -20,6 +20,7 @@ This repository is currently documentation-first. It defines the MVP scope and s
 
 - [Requirements](docs/requirements.md)
 - [MVP Tech Stack And End-To-End Feature Notes](docs/tech-stack.md)
+- [Bootstrap Quickstart](docs/quickstart.md)
 - [External Dependencies](docs/external-dependencies.md)
 - [Technical Baseline](docs/technical-baseline.md)
 - [Contributing](CONTRIBUTING.md)
@@ -35,8 +36,9 @@ This repository is currently documentation-first. It defines the MVP scope and s
 - LLM usage: structured event extraction and uncertain-case assistance
 - Map/geocoding: AMAP-first provider abstraction for China
 - Calendar: `.ics` export/feed first; OAuth calendar writes later only if needed
-- Crawling: provider adapters for Exa/Firecrawl plus replaceable collector outputs
+- Search/crawling: provider adapters for Exa, Serper, and Firecrawl plus replaceable collector outputs
+- Durable orchestration: Vercel Workflow for bounded multi-step backend work when implementation needs it
 
 ## Next Step
 
-Review the documents and confirm the MVP boundaries before scaffolding the application.
+Review the documents and follow the [Bootstrap Quickstart](docs/quickstart.md) when it is time to scaffold the application.

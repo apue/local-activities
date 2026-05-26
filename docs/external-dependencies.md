@@ -14,7 +14,8 @@ Notes:
 
 - Vercel is appropriate for the MVP web surface and lightweight API handling.
 - Vercel Cron can trigger lightweight scheduled callbacks.
-- Vercel Workflow, Sandbox, and Queue are candidate services for future orchestration or bounded exceptional extraction work.
+- Vercel Workflow is the likely durable serverless execution option for bounded orchestration work.
+- Vercel Sandbox and Queue are candidate services for exceptional extraction or queueing cases.
 - Long-running browser automation should not run inside ordinary Vercel request/response functions.
 - Scheduled collection should be handled by the local collector or a worker runtime unless a later PR adopts a bounded Vercel-native orchestration pattern.
 
@@ -78,7 +79,7 @@ Notes:
 - Store coordinate system metadata such as `WGS84`, `GCJ02`, or `BD09`.
 - AMAP credentials are split between browser-side JS keys and server-side Web Service keys.
 
-## Crawling Providers
+## Search And Crawling Providers
 
 Purpose:
 
@@ -88,7 +89,8 @@ Purpose:
 Initial candidates:
 
 - Exa for search and page discovery.
-- Firecrawl for page scraping/extraction.
+- Serper for search-engine-style result discovery.
+- Firecrawl for page search, crawling, scraping, and extraction.
 
 Notes:
 

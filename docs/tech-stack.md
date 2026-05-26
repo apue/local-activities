@@ -144,7 +144,7 @@ Implementation notes:
 - Do not regenerate audio on every page view.
 - Keep source text short and clearly generated from already-reviewed event fields.
 
-## Webpage Crawling And Extraction
+## Search, Crawling, And Extraction
 
 ### Providers
 
@@ -153,7 +153,10 @@ Use distinct provider configuration so discovery and crawling can be swapped ind
 - Exa: search and page discovery
   - `EXA_BASE_URL`
   - `EXA_API_KEY`
-- Firecrawl: page crawling and content extraction where allowed
+- Serper: search-engine-style result discovery
+  - `SERPER_BASE_URL`
+  - `SERPER_API_KEY`
+- Firecrawl: page search, crawling, scraping, and content extraction where allowed
   - `FIRECRAWL_BASE_URL`
   - `FIRECRAWL_API_KEY`
 
@@ -181,12 +184,13 @@ Planned use:
 - Preview deployments for PR review
 - Production deployment for the public app
 - Vercel Cron for lightweight scheduled triggers
-- Vercel Workflow as a candidate for orchestration of bounded backend tasks
+- Vercel Workflow as the likely durable serverless execution option for bounded multi-step backend tasks
 - Vercel Sandbox as a candidate for exceptional scraping or extraction cases that cannot be handled by Firecrawl, as long as runtime and policy constraints are respected
 - Vercel Queue is TBD
 
 Important boundary:
 
+- Use Workflow for durable orchestration and resumable backend steps, not as a place to hide unbounded browser sessions.
 - Do not make long-running browser automation depend on ordinary Vercel request/response functions.
 - Keep the collector runtime replaceable and allow local/VM execution for browser-heavy work.
 
@@ -281,9 +285,10 @@ direnv allow
 
 The likely project-level MCP need is Context7 for current framework and provider documentation lookup.
 
-Planning variable:
+Project configuration:
 
-- `MCP_CONTEXT7_ENABLED=true`
+- `.codex/config.toml` enables the built-in Context7 MCP endpoint.
+- `MCP_CONTEXT7_ENABLED=true` records the expected local environment posture.
 
 No other MCP server should be assumed for MVP unless an implementation task requires it.
 
@@ -308,7 +313,7 @@ Suggested order for future PRs:
 4. Event list/detail UX.
 5. AMAP geocoding and map links.
 6. Calendar `.ics` export and Google Calendar prefill links.
-7. Crawling provider adapters.
+7. Search and crawling provider adapters.
 8. Text inference extraction pipeline.
 9. Optional TTS audio summaries.
-10. Vercel Workflow/Sandbox/Queue experiments only when a concrete orchestration problem exists.
+10. Vercel Workflow for the first concrete durable orchestration problem; Sandbox/Queue experiments only when a concrete extraction or queueing problem exists.

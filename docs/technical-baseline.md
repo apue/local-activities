@@ -19,7 +19,7 @@ Rationale:
 
 Use Vercel for the web app and ingest API.
 
-Vercel Cron may trigger lightweight scheduled checks or orchestration callbacks. Vercel Workflow, Vercel Sandbox, and Vercel Queue are planning-level candidates for bounded orchestration or exceptional extraction cases; adopt them only when an implementation task needs them.
+Vercel Cron may trigger lightweight scheduled checks or orchestration callbacks. Vercel Workflow is the likely durable serverless execution option for bounded multi-step backend jobs such as extraction orchestration, source-run follow-up, review-state transitions, or retryable provider calls. Vercel Sandbox and Vercel Queue remain planning-level candidates for exceptional extraction or queueing cases; adopt them only when an implementation task needs them.
 
 Do not run ordinary long-lived browser automation or unbounded collector jobs inside request/response Vercel functions.
 
@@ -133,7 +133,7 @@ The repository keeps a full safe variable template in [`.env.example`](../.env.e
 - AMAP map/geocoding credentials when enabled
 - OpenAI-compatible text inference credentials
 - optional TTS provider credentials
-- optional Exa/Firecrawl crawling provider credentials
+- optional Exa/Serper/Firecrawl search and crawling provider credentials
 - optional Vercel Cron/Workflow/Sandbox/Queue configuration
 
 See [MVP Tech Stack And End-To-End Feature Notes](tech-stack.md) for feature-by-feature stack notes.
