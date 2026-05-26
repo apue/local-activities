@@ -13,6 +13,7 @@ This project builds a mobile-first web app for aggregating official cultural act
 - Treat collector and agent outputs as untrusted inputs. The backend must validate, deduplicate, and decide publish state.
 - Preserve source health and failure reasons as product-visible state, not hidden logs.
 - Prefer mobile-first UI assumptions because early users will likely open the product on phones or inside WeChat.
+- Use Vercel built-in observation for MVP operations: dashboard logs, Observability, Web Analytics, and Speed Insights. Do not add Sentry, Datadog, New Relic, or other third-party APM unless the user explicitly expands scope.
 
 ## GitHub Workflow
 
@@ -73,21 +74,28 @@ The handoff must be enough for a new Codex session to continue without reading c
 ## Documentation Layers
 
 - `docs/requirements.md`: user needs, committed MVP requirements, non-goals, success criteria.
-- `docs/superpowers/specs/2026-05-26-local-activities-design.md`: implementation-facing system design for the approved current slice.
+- `docs/quickstart.md`: bootstrap and local setup guide for the first implementation PR.
+- `docs/tech-stack.md`: feature-by-feature MVP stack notes and environment-variable groups.
 - `docs/external-dependencies.md`: third-party services and why they are used.
 - `docs/technical-baseline.md`: language, framework, database, deployment, and architectural baseline.
 - `CONTRIBUTING.md`: human-readable development workflow and review policy.
 
-Keep future ideas out of the design spec unless they affect the current implementation boundary.
+Do not rely on `docs/superpowers` as the current source of truth unless the user explicitly asks for it. Keep future ideas out of implementation docs unless they affect the current boundary.
 
 ## Technical Direction
 
+- Use Node.js 24 LTS and pnpm 11 for the application bootstrap.
 - Use TypeScript for the web app and collector-facing shared contracts.
 - Use Next.js as a full-stack app first; do not split frontend and backend in the MVP.
+- Use Hono only where route grouping improves collector/admin API clarity.
+- Use Vitest for unit tests and focused integration tests after scaffolding.
 - Deploy the web app and API on Vercel.
+- Use Vercel Workflow as the likely durable serverless execution option for bounded multi-step backend work. Do not use ordinary request/response Vercel functions for unbounded browser sessions or long collector jobs.
 - Use Supabase Postgres as the primary relational database.
+- Prefer Supabase publishable/secret API keys for new hosted Auth and API clients. Keep legacy anon/service-role variables and `SUPA_*` local aliases for Supabase CLI compatibility.
 - Run crawler or browser automation outside Vercel.
 - Design collector ingestion around abstract result types, not around a specific Playwright or agent implementation.
+- Use Exa, Serper, and Firecrawl as search/crawling candidates through provider abstractions. Firecrawl may be used for search as well as scraping/extraction where policy allows.
 
 ## Collector Principles
 
@@ -104,3 +112,11 @@ Keep future ideas out of the design spec unless they affect the current implemen
 - Before publishing, inspect `git status` and stage only intended files.
 - Stage only files that belong to the current issue or repository-maintenance task.
 - Record validation commands in the PR and in the issue handoff.
+
+## Agent Tooling
+
+- Project-level Codex config lives in `.codex/config.toml` and enables Context7 MCP for current framework/provider documentation.
+- Project-level skills live in `.agents/skills`; use those before relying on global skill copies when they match the task.
+- Relevant project skills include `frontend-design`, `firecrawl`, `exa-search`, `vercel-nextjs`, `vercel-cli`, `vercel-env-vars`, `vercel-workflow`, `vercel-observability`, `vercel-deployment`, `vercel-react-best-practices`, `supabase-postgres-best-practices`, and `web-design-guidelines`.
+- Use Context7 for current docs when working with Next.js, Vercel, Supabase, Hono, Vitest, or other fast-moving APIs.
+- Keep user-level secrets outside the repository. `.env.example` is a placeholder template only.
