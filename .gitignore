@@ -6,6 +6,7 @@ node_modules/
 out/
 dist/
 coverage/
+*.tsbuildinfo
 
 # env
 .env
@@ -27,3 +28,4 @@ yarn-debug.log*
 .collector-profile/
 playwright-report/
 test-results/
+.vercel
