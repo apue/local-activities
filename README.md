@@ -22,6 +22,7 @@ This repository is currently documentation-first. It defines the MVP scope and s
 - [Design Spec](docs/superpowers/specs/2026-05-26-local-activities-design.md)
 - [External Dependencies](docs/external-dependencies.md)
 - [Technical Baseline](docs/technical-baseline.md)
+- [Contributing](CONTRIBUTING.md)
 - [Agent Instructions](AGENTS.md)
 
 ## Recommended MVP Stack

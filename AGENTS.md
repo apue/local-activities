@@ -14,12 +14,69 @@ This project builds a mobile-first web app for aggregating official cultural act
 - Preserve source health and failure reasons as product-visible state, not hidden logs.
 - Prefer mobile-first UI assumptions because early users will likely open the product on phones or inside WeChat.
 
+## GitHub Workflow
+
+All normal development after repository initialization must use the GitHub workflow:
+
+```text
+Issue -> branch -> implementation -> tests -> PR -> code review -> fix review comments -> checks pass -> merge
+```
+
+Rules:
+
+- Start work from a GitHub issue. If no issue exists, create one before coding.
+- Keep each issue independently testable. If a task cannot be verified on its own, split it.
+- Create one branch per issue, named `codex/<issue-number>-short-name` when possible.
+- Do not commit directly to `main` unless the user explicitly requests a repository-maintenance exception.
+- Open a PR for every normal code or documentation change.
+- Link the PR to its issue with `Closes #<issue-number>` when the PR completes the issue.
+- Fix code-review comments in the same PR, or explain why a requested change should not be made.
+- Merge only after tests and required checks pass.
+
+## Issue Management
+
+GitHub issues are the source of truth for requirements and task state.
+
+Before implementation, a coding agent must ensure the issue contains:
+
+- goal
+- scope
+- non-goals
+- acceptance criteria
+- testing expectations
+- implementation notes when needed
+
+For larger requests, split the work into multiple issues before coding. Prefer issues that deliver one observable behavior, one backend capability, one UI slice, or one infrastructure step.
+
+## Progress Handoff
+
+At the end of each work session or completed task, update the relevant issue with a handoff comment:
+
+```markdown
+## Handoff - YYYY-MM-DD
+
+Done:
+- ...
+
+Validated:
+- `command used`
+
+Open:
+- ...
+
+Next:
+- ...
+```
+
+The handoff must be enough for a new Codex session to continue without reading chat history.
+
 ## Documentation Layers
 
 - `docs/requirements.md`: user needs, committed MVP requirements, non-goals, success criteria.
 - `docs/superpowers/specs/2026-05-26-local-activities-design.md`: implementation-facing system design for the approved current slice.
 - `docs/external-dependencies.md`: third-party services and why they are used.
 - `docs/technical-baseline.md`: language, framework, database, deployment, and architectural baseline.
+- `CONTRIBUTING.md`: human-readable development workflow and review policy.
 
 Keep future ideas out of the design spec unless they affect the current implementation boundary.
 
@@ -45,3 +102,5 @@ Keep future ideas out of the design spec unless they affect the current implemen
 - Keep commits focused.
 - Do not rewrite history or reset user changes without explicit instruction.
 - Before publishing, inspect `git status` and stage only intended files.
+- Stage only files that belong to the current issue or repository-maintenance task.
+- Record validation commands in the PR and in the issue handoff.
