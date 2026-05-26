@@ -1,5 +1,7 @@
 # External Dependencies
 
+See also [MVP Tech Stack And End-To-End Feature Notes](tech-stack.md) for planned environment variables and feature-level integration notes.
+
 ## Vercel
 
 Purpose:
@@ -11,8 +13,11 @@ Purpose:
 Notes:
 
 - Vercel is appropriate for the MVP web surface and lightweight API handling.
-- Long-running browser automation should not run inside Vercel functions.
-- Scheduled collection should be handled by the local collector or a worker runtime.
+- Vercel Cron can trigger lightweight scheduled callbacks.
+- Vercel Workflow is the likely durable serverless execution option for bounded orchestration work.
+- Vercel Sandbox and Queue are candidate services for exceptional extraction or queueing cases.
+- Long-running browser automation should not run inside ordinary Vercel request/response functions.
+- Scheduled collection should be handled by the local collector or a worker runtime unless a later PR adopts a bounded Vercel-native orchestration pattern.
 
 ## Supabase
 
@@ -25,7 +30,24 @@ Purpose:
 Notes:
 
 - Supabase Auth is optional for MVP admin access; a simpler protected admin route can be used first if appropriate.
+- Prefer current publishable keys for browser clients and secret keys for server-only Supabase clients.
+- Keep legacy anon/service-role names and `SUPA_*` local aliases for Supabase CLI compatibility.
 - Use Postgres constraints and idempotency keys to prevent duplicate article ingestion.
+
+## Observation
+
+Purpose:
+
+- Monitor deployments, runtime errors, web vitals, traffic, and platform behavior without adding a separate APM service.
+
+Initial provider:
+
+- Vercel built-in logs, Observability, Web Analytics, and Speed Insights.
+
+Notes:
+
+- Do not add Sentry, Datadog, New Relic, or other third-party observability dependencies for MVP.
+- Add third-party drains only if a later issue needs longer retention, external correlation, or compliance controls.
 
 ## Playwright
 
@@ -63,7 +85,7 @@ Purpose:
 
 Initial candidates:
 
-- Amap for China address accuracy.
+- AMAP for China address accuracy and the MVP assumption.
 - Google Maps for validation-stage convenience.
 - Mapbox or OpenStreetMap-based services for later alternatives.
 - WeChat map capabilities for future mini program integration.
@@ -72,6 +94,53 @@ Notes:
 
 - Business logic depends on `GeocodingProvider` and map-link abstractions.
 - Store coordinate system metadata such as `WGS84`, `GCJ02`, or `BD09`.
+- AMAP credentials are split between browser-side JS keys and server-side Web Service keys.
+
+## Search And Crawling Providers
+
+Purpose:
+
+- Discover official pages and extract content where platform policies allow it.
+- Provide non-browser alternatives before falling back to local browser automation.
+
+Initial candidates:
+
+- Exa for search and page discovery.
+- Serper for search-engine-style result discovery.
+- Firecrawl for page search, crawling, scraping, and extraction.
+
+Notes:
+
+- Keep `BASE_URL` and `API_KEY` variables distinct per provider.
+- Provider outputs are still untrusted collector inputs; the backend validates and deduplicates.
+
+## Text-To-Speech Provider
+
+Purpose:
+
+- Generate optional short audio summaries for reviewed event details.
+
+Initial candidates:
+
+- Cartesia.
+- ElevenLabs.
+
+Notes:
+
+- TTS is not required for core event discovery.
+- Cache audio by event revision or summary hash to avoid regenerating on every view.
+
+## Calendar Integration
+
+Purpose:
+
+- Help users save events to personal calendars.
+
+Notes:
+
+- Start with standards-based `.ics` downloads, subscribable feeds, and Google Calendar prefill links.
+- Apple Calendar works with `.ics` files and subscribed calendar feeds; no Apple OAuth is needed for MVP.
+- Google Calendar API write access should wait until the product has user accounts and a clear need for authenticated calendar sync.
 
 ## GitHub
 

@@ -1,0 +1,10 @@
+# Project-level Codex configuration for Local Activities.
+#
+# Keep this file secret-free. Runtime API keys belong in .env.local or the
+# developer's user-level Codex config, not in the repository.
+
+[mcp_servers]
+
+[mcp_servers.context7]
+url = "https://mcp.context7.com/mcp"
+env_http_headers = { "CONTEXT7_API_KEY" = "CONTEXT7_API_KEY" }

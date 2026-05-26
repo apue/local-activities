@@ -19,7 +19,8 @@ This repository is currently documentation-first. It defines the MVP scope and s
 ## Documents
 
 - [Requirements](docs/requirements.md)
-- [Design Spec](docs/superpowers/specs/2026-05-26-local-activities-design.md)
+- [MVP Tech Stack And End-To-End Feature Notes](docs/tech-stack.md)
+- [Bootstrap Quickstart](docs/quickstart.md)
 - [External Dependencies](docs/external-dependencies.md)
 - [Technical Baseline](docs/technical-baseline.md)
 - [Testing Strategy](docs/testing-strategy.md)
@@ -35,7 +36,11 @@ This repository is currently documentation-first. It defines the MVP scope and s
 - Database: Supabase Postgres
 - Collector runtime: local Node.js worker with Playwright-compatible adapter abstraction
 - LLM usage: structured event extraction and uncertain-case assistance
+- Map/geocoding: AMAP-first provider abstraction for China
+- Calendar: `.ics` export/feed first; OAuth calendar writes later only if needed
+- Search/crawling: provider adapters for Exa, Serper, and Firecrawl plus replaceable collector outputs
+- Durable orchestration: Vercel Workflow for bounded multi-step backend work when implementation needs it
 
 ## Next Step
 
-Review the documents and confirm the MVP boundaries before scaffolding the application.
+Review the documents and follow the [Bootstrap Quickstart](docs/quickstart.md) when it is time to scaffold the application.
