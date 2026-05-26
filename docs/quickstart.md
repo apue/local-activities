@@ -10,15 +10,12 @@ This repository is documentation-first until the app scaffold is approved. Use t
 - Supabase CLI.
 - agent-browser CLI.
 - direnv.
-- Access to the working branch intended for the PR.
 
 If a common local CLI is missing on macOS, prefer installing it with Homebrew first. Keep global npm installs for tools that are not packaged well in Homebrew or that the project explicitly wants from npm:
 
 ```bash
-brew install node@24 pnpm vercel-cli supabase/tap/supabase direnv
+brew install node@24 pnpm vercel-cli supabase/tap/supabase agent-browser direnv
 ```
-
-Install `agent-browser` with its documented package manager path if Homebrew does not provide it in the local environment.
 
 ## Local Environment
 
