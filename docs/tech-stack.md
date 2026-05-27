@@ -197,6 +197,7 @@ Important boundary:
 Environment:
 
 - `VERCEL_PROJECT_ID`
+- `VERCEL_ORG_ID`
 - `VERCEL_TEAM_ID`
 - `VERCEL_TOKEN`
 - `CRON_SECRET`

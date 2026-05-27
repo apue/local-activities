@@ -36,7 +36,7 @@ Minimum groups to prepare:
 - map/geocoding: `NEXT_PUBLIC_AMAP_JS_API_KEY`, `AMAP_WEB_SERVICE_API_KEY`
 - text inference: `TEXT_INFERENCE_API_BASE_URL`, `TEXT_INFERENCE_API_KEY`, `TEXT_INFERENCE_MODEL`
 - search/crawling: `EXA_API_KEY`, `SERPER_API_KEY`, `FIRECRAWL_API_KEY`
-- Vercel: `VERCEL_PROJECT_ID`, `VERCEL_TEAM_ID`, `VERCEL_TOKEN`, `CRON_SECRET`
+- Vercel: `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID`, `VERCEL_TOKEN`, `CRON_SECRET`
 
 For Supabase Auth, prefer the current hosted API key pair:
 
