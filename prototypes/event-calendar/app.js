@@ -22,7 +22,7 @@ const events = [
     visual: "italy",
     summary:
       "意大利使馆文化中心与意大利驻华大使馆举办当代艺术讲座，艺术家 Pietro Ruffo、Flavio Favelli 与 Daniele Sigalot 到场分享。",
-    notes: ["实名预约，座位有限", "需持有效身份证件原件入场", "1.2米以下儿童谢绝入场"],
+    notes: ["实名预约，座位有限", "入场需携带有效身份证件原件", "1.2米以下儿童谢绝入场"],
     sourceUrl: "https://mp.weixin.qq.com/s/7pxDkaPCtPyaGKb5lGeG9g",
     actionImage: {
       label: "报名二维码",
@@ -60,7 +60,7 @@ const events = [
     visual: "sri-lanka",
     summary:
       "斯里兰卡驻华大使馆邀请公众参加卫塞节布施茶会，现场提供锡兰冰红茶与传统斯里兰卡小吃。",
-    notes: ["All are welcome", "信息主要来自中英文活动图", "地址已按中文图标准化"],
+    notes: ["公众可参加", "现场提供锡兰冰红茶与斯里兰卡传统小吃", "无需提前预约"],
     sourceUrl: "https://mp.weixin.qq.com/s/9LN6Uo2aurZXjMrerVuT6w",
     evidence: [
       {
@@ -94,7 +94,7 @@ const events = [
     visual: "india",
     summary:
       "由 Vidushi Surangama 与 Suramya Pushan 带来的卡塔克舞蹈、塔布拉鼓和 Abhinaya 表达大师课。",
-    notes: ["报名入口在海报二维码中", "适合印度文化、舞蹈与音乐爱好者"],
+    notes: ["请通过海报二维码报名", "适合印度文化、舞蹈与音乐爱好者", "建议提前保存报名信息"],
     sourceUrl: "https://mp.weixin.qq.com/s/lmSAjseKEzNU5drU3LLaeA",
     actionImage: {
       label: "报名二维码海报",
@@ -132,7 +132,7 @@ const events = [
     visual: "palladio",
     summary:
       "来源文章提及 Pietro Ruffo 与 Lois Conner 的作品在东景缘寺庙预展。时间和预约方式需要人工确认后才可公开发布。",
-    notes: ["这是 secondary mention", "不应自动发布为正式活动", "需要管理员确认活动边界"],
+    notes: ["时间、地点和预约方式仍待确认", "确认前不建议安排出行"],
     sourceUrl: "https://mp.weixin.qq.com/s/7pxDkaPCtPyaGKb5lGeG9g",
     evidence: [
       {
@@ -162,7 +162,7 @@ const events = [
     visual: "mexico",
     summary:
       "面向公众的墨西哥足球节，包含球星对谈、球迷挑战、足球锦标赛、美食与现场娱乐。",
-    notes: ["免费入场", "无需报名", "主流程默认不展示已结束活动"],
+    notes: ["免费入场", "无需报名", "活动已结束，仅作为历史参考"],
     sourceUrl: "https://mp.weixin.qq.com/s/tZcV_vd_3Y8G6NnyJNTdYw",
     evidence: [
       {
@@ -282,19 +282,40 @@ function renderDetail(event, mode = "desktop") {
           ${sourceLink}
         </div>
 
-        <section class="body-section">
-          <h3>确认事项</h3>
-          <p>${event.notes.join("；")}。</p>
-        </section>
+        ${renderRegistrationSection(event)}
 
         <section class="body-section">
-          <h3>官方证据</h3>
-          <div class="evidence-grid">
-            ${event.evidence.map(renderEvidence).join("")}
-          </div>
+          <h3>入场提示</h3>
+          <p>${event.notes.join("；")}。</p>
         </section>
       </div>
     </article>
+  `;
+}
+
+function renderRegistrationSection(event) {
+  if (event.reservation !== "need") {
+    return "";
+  }
+
+  const visual = event.actionImage?.visual;
+  const label = event.actionImage?.label || "报名二维码";
+
+  return `
+    <section class="body-section registration-panel">
+      <div>
+        <h3>报名二维码</h3>
+        <p>${event.reservationLabel}。打开二维码后，可长按或截图保存。</p>
+      </div>
+      ${
+        visual
+          ? `<button class="registration-qr" type="button" data-open-visual="${visual}" data-image-label="${label}">
+              ${renderVisual(visual, label, "evidence")}
+              <span class="evidence-label">${label}</span>
+            </button>`
+          : ""
+      }
+    </section>
   `;
 }
 
@@ -368,7 +389,7 @@ function openImageModal(visual, label) {
         </div>
         <div class="modal-content">
           ${renderVisual(visual, label, "modal-visual")}
-          <p>保留为官方 evidence；用户无需从图片中二次寻找核心时间地点。</p>
+          <p>原图保留在这里；核心时间、地点和报名信息已整理在页面上方。</p>
         </div>
       </div>
     </div>

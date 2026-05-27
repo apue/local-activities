@@ -379,6 +379,33 @@ h1 {
   color: #493f35;
 }
 
+.registration-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(185, 87, 61, 0.3);
+  border-radius: var(--radius);
+  background: #fff7ed;
+}
+
+.registration-panel h3 {
+  color: var(--terracotta-dark);
+}
+
+.registration-panel p {
+  margin-bottom: 0;
+}
+
+.registration-qr {
+  padding: 0;
+  border: 1px solid rgba(185, 87, 61, 0.35);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #fff;
+}
+
 .evidence-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -503,6 +530,14 @@ h1 {
 
   .section-heading p {
     margin-top: 4px;
+  }
+
+  .registration-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .registration-qr {
+    width: min(180px, 100%);
   }
 }
 
