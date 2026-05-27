@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Beijing Official Cultural Calendar Prototype</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar" aria-label="Page header">
+        <div>
+          <p class="eyebrow">Beijing official cultural calendar</p>
+          <h1>近期官方文化活动</h1>
+        </div>
+        <div class="date-chip" aria-label="Current calendar range">
+          <span>北京</span>
+          <strong>5月27日 - 6月10日</strong>
+        </div>
+      </header>
+
+      <main class="calendar-layout">
+        <section class="agenda-pane" aria-label="Event list">
+          <div class="section-heading">
+            <h2>活动日历</h2>
+            <p>按时间分组，优先显示可行动信息。</p>
+          </div>
+          <div id="agenda" class="agenda" aria-live="polite"></div>
+        </section>
+
+        <aside class="detail-pane" aria-label="Selected event detail">
+          <div id="desktop-detail" class="detail-card"></div>
+        </aside>
+      </main>
+    </div>
+
+    <section id="mobile-detail" class="mobile-detail" aria-hidden="true"></section>
+    <div id="modal-root"></div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
