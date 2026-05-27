@@ -12,6 +12,13 @@ The primary user checks the product on Thursday or Friday to decide what to do o
 
 - Show upcoming official cultural activities, with emphasis on the next 3 to 10 days.
 - Prioritize weekend planning over historical search.
+- Use a cultural-calendar homepage grouped by time, not a generic news feed.
+- Default public browsing should emphasize actionable upcoming events:
+  - today
+  - tomorrow when relevant
+  - this weekend
+  - next week
+  - later upcoming events
 - Make action-critical information visible:
   - activity title
   - organizer or source
@@ -21,11 +28,18 @@ The primary user checks the product on Thursday or Friday to decide what to do o
   - reservation URL or official action URL
   - source URL
   - current status
-- Support views for:
-  - this weekend
-  - today available
-  - reservation closing soon
-  - upcoming events worth planning
+- Event list cards should show a thumbnail, time, title, organizer/source, area or venue, and reservation/status tag.
+- Event detail pages should behave as action pages, not article mirrors. The detail page should prioritize:
+  - status and reservation requirement
+  - time
+  - venue name and address
+  - map action
+  - official source action
+  - registration link or registration QR code when required
+  - short description and entry notes
+- Public pages must not expose extraction diagnostics, admin review notes, raw confidence explanations, or labels such as "official evidence".
+- If a registration QR code is the only action mechanism, show a dedicated registration QR section and keep the core time, venue, and entry information as text.
+- Retain relevant poster or QR assets for user confirmation, but do not require users to read an image to discover action-critical information.
 - Hide expired events from the main user flow.
 - Keep every public activity page shareable by URL.
 
@@ -68,6 +82,15 @@ Detailed admin portal behavior is defined in [Admin Portal Requirements](admin-p
   - event drafts
   - failure reports
 - The collector implementation must be replaceable. Playwright, browser extension, Computer Use, AgentBrowser, or a future agent editor should all be able to emit the same result objects.
+- Browser-based collectors must scroll WeChat article pages far enough to trigger lazy-loaded images before deciding extraction is complete.
+- Collector outputs should preserve article images that are relevant to event facts, especially posters and registration QR codes.
+- Collector extraction should support these observed official-account page patterns:
+  - text-dominant article with complete time, venue, and reservation information
+  - image-dominant article where the event facts exist mainly in poster images
+  - QR-registration article where the registration mechanism is only present in an image
+  - article that mentions multiple related activities or project milestones
+  - expired article that should remain source evidence but not enter the main public flow
+- Missing public action fields should be reported as structured review reasons instead of filled by inference.
 
 ## Data Requirements
 
@@ -76,6 +99,18 @@ Detailed admin portal behavior is defined in [Admin Portal Requirements](admin-p
 - A single article may contain zero, one, or multiple activities.
 - Event matching must support no-ID deduplication using title, time, location, organizer, registration URL, and text evidence.
 - Updates and cancellations must create revision proposals or status changes with source evidence.
+- Event drafts should keep field-level provenance sufficient for admin review, but canonical public events should expose only user-facing fields.
+- Secondary mentions in a source article should not automatically become public events. They should become related mentions or low-confidence drafts until review confirms their event boundary.
+- Expired source posts may be retained for source health and matching history, but expired canonical events should be hidden from the default public homepage.
+
+## Source Page Pattern Examples
+
+Recent seed-page analysis established the following MVP fixture patterns:
+
+- Embassy article with a registration QR code embedded in a poster image: event facts can be extracted, and the QR image must be retained for the public registration section.
+- Embassy event article with complete text fields and no registration requirement: the public event can be high confidence when time, venue, and entry policy are explicit.
+- Image-dominant embassy invitation: OCR or vision extraction is required because the useful fields are not in DOM text.
+- Cultural-center article with one main talk and secondary exhibition mentions: the main activity can become an event draft, while secondary mentions need review.
 
 ## Non-Goals For MVP
 
