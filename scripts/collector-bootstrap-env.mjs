@@ -14,9 +14,7 @@ const outputOrder = [
   "COLLECTOR_API_KEY",
   "COLLECTOR_ID",
   "COLLECTOR_INTERVAL_HOURS",
-  "COLLECTOR_BROWSER_PROFILE_DIR",
   "LOCAL_COLLECTOR_PROCESSOR",
-  "COLLECTOR_CAPTURE_ADAPTER",
   "LOCAL_COLLECTOR_QUEUE_FILE",
   "COLLECTOR_CONSOLE_HOST",
   "COLLECTOR_CONSOLE_PORT",
@@ -24,16 +22,11 @@ const outputOrder = [
   "COLLECTOR_POLL_INTERVAL_SECONDS",
   "COLLECTOR_ERROR_BACKOFF_SECONDS",
   "COLLECTOR_CAPABILITIES",
-  "TEXT_INFERENCE_PROVIDER",
-  "TEXT_INFERENCE_API_BASE_URL",
-  "TEXT_INFERENCE_API_KEY",
-  "TEXT_INFERENCE_MODEL",
-  "TEXT_INFERENCE_ENDPOINT_STYLE",
-  "VISION_INFERENCE_PROVIDER",
-  "VISION_INFERENCE_API_BASE_URL",
-  "VISION_INFERENCE_API_KEY",
-  "VISION_INFERENCE_MODEL",
-  "VISION_INFERENCE_ENDPOINT_STYLE",
+  "AGENT_API_BASE_URL",
+  "AGENT_API_KEY",
+  "AGENT_MODEL",
+  "AGENT_TIMEOUT_SECONDS",
+  "AGENT_MAX_ATTEMPTS",
   "EXA_API_KEY",
   "SERPER_API_KEY",
   "FIRECRAWL_API_KEY",
@@ -61,11 +54,7 @@ export function buildCollectorBootstrapEnv({
       value(sourceEnv.COLLECTOR_API_KEY) || "replace-with-collector-api-key",
     COLLECTOR_ID: resolvedCollectorId,
     COLLECTOR_INTERVAL_HOURS: value(sourceEnv.COLLECTOR_INTERVAL_HOURS) || "4",
-    COLLECTOR_BROWSER_PROFILE_DIR:
-      value(sourceEnv.COLLECTOR_BROWSER_PROFILE_DIR) || ".collector-profile",
-    LOCAL_COLLECTOR_PROCESSOR: "extract",
-    COLLECTOR_CAPTURE_ADAPTER:
-      value(sourceEnv.COLLECTOR_CAPTURE_ADAPTER) || "browser",
+    LOCAL_COLLECTOR_PROCESSOR: "agent",
     LOCAL_COLLECTOR_QUEUE_FILE:
       value(sourceEnv.LOCAL_COLLECTOR_QUEUE_FILE) || ".collector-runs.json",
     COLLECTOR_CONSOLE_HOST:
@@ -78,27 +67,15 @@ export function buildCollectorBootstrapEnv({
     COLLECTOR_ERROR_BACKOFF_SECONDS:
       value(sourceEnv.COLLECTOR_ERROR_BACKOFF_SECONDS) || "60",
     COLLECTOR_CAPABILITIES:
-      value(sourceEnv.COLLECTOR_CAPABILITIES)
-      || "wechat_browser,dom_text,image_capture,vision_extraction",
-    TEXT_INFERENCE_PROVIDER:
-      value(sourceEnv.TEXT_INFERENCE_PROVIDER) || "openai-compatible",
-    TEXT_INFERENCE_API_BASE_URL:
-      value(sourceEnv.TEXT_INFERENCE_API_BASE_URL)
-      || "https://your-agent-or-llm-api.example/v1",
-    TEXT_INFERENCE_API_KEY:
-      value(sourceEnv.TEXT_INFERENCE_API_KEY)
-      || "replace-with-text-inference-api-key",
-    TEXT_INFERENCE_MODEL:
-      value(sourceEnv.TEXT_INFERENCE_MODEL) || "provider-model-name",
-    TEXT_INFERENCE_ENDPOINT_STYLE:
-      value(sourceEnv.TEXT_INFERENCE_ENDPOINT_STYLE) || "responses",
-    VISION_INFERENCE_PROVIDER: value(sourceEnv.VISION_INFERENCE_PROVIDER),
-    VISION_INFERENCE_API_BASE_URL:
-      value(sourceEnv.VISION_INFERENCE_API_BASE_URL),
-    VISION_INFERENCE_API_KEY: value(sourceEnv.VISION_INFERENCE_API_KEY),
-    VISION_INFERENCE_MODEL: value(sourceEnv.VISION_INFERENCE_MODEL),
-    VISION_INFERENCE_ENDPOINT_STYLE:
-      value(sourceEnv.VISION_INFERENCE_ENDPOINT_STYLE),
+      value(sourceEnv.COLLECTOR_CAPABILITIES) || "agent_api",
+    AGENT_API_BASE_URL:
+      value(sourceEnv.AGENT_API_BASE_URL)
+      || "https://your-agent-api.example/v1",
+    AGENT_API_KEY:
+      value(sourceEnv.AGENT_API_KEY) || "replace-with-agent-api-key",
+    AGENT_MODEL: value(sourceEnv.AGENT_MODEL),
+    AGENT_TIMEOUT_SECONDS: value(sourceEnv.AGENT_TIMEOUT_SECONDS) || "120",
+    AGENT_MAX_ATTEMPTS: value(sourceEnv.AGENT_MAX_ATTEMPTS) || "3",
     EXA_API_KEY: value(sourceEnv.EXA_API_KEY),
     SERPER_API_KEY: value(sourceEnv.SERPER_API_KEY),
     FIRECRAWL_API_KEY: value(sourceEnv.FIRECRAWL_API_KEY),

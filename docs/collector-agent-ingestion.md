@@ -35,17 +35,17 @@ Example pattern:
 - Article body contains title, date/time, venue, address, organizer, entry or registration status, and source metadata.
 - Images may exist but are not required to understand the event.
 
-Collector behavior:
+Agent/collector behavior:
 
-- Extract article text from stable DOM selectors.
-- Save a bounded article snapshot.
-- Save cover or important images as optional evidence.
-- Produce event drafts from text.
+- Agent API analyzes the source page and returns structured event fields.
+- Collector stores a bounded article snapshot returned by the Agent.
+- Collector uploads cover or important images as optional evidence when returned.
+- Collector validates the Agent response before uploading event drafts.
 
 Default review routing:
 
-- High-confidence drafts may be eligible for normal review.
-- Do not auto-publish in the first MVP review loop unless a later issue explicitly adds that policy.
+- Backend policy computes review and auto-publish eligibility from confidence,
+  required-field completeness, duplicate risk, and blocking signals.
 
 ### `text_with_qr_registration`
 
@@ -59,8 +59,8 @@ Example pattern:
 
 Collector behavior:
 
-- Extract article text.
-- Save QR, poster, or registration image assets.
+- Agent extracts article text and identifies QR, poster, or registration image assets.
+- Collector saves normalized evidence returned by the Agent.
 - Attach evidence asset references to the event draft.
 - Mark the draft with `qr_registration` and `registration_evidence_required`.
 
@@ -427,24 +427,25 @@ Build a local collector command that can process a seed URL and emit normalized 
 Expected output:
 
 - local CLI or script entry point
-- persistent browser profile configuration
+- Agent API configuration through collector-machine `AGENT_*` variables
 - run report upload
-- fixture mode for saved sample pages
+- fixture mode for deterministic smoke data
 
-### Slice 5: Extraction Adapters
+### Slice 5: Agent API Adapter
 
-Implement mode-specific extraction adapters:
+Implement a collector-side Agent API adapter:
 
-- DOM text extraction
-- QR/poster evidence detection
-- image saving
-- OCR or vision extraction provider abstraction
-- failure mapping
+- send seed URL and run context to the Agent API
+- validate structured Agent responses before upload
+- retry invalid Agent responses locally
+- upload structured `agent_response_invalid_schema` failure after retry exhaustion
+- keep collector, admin, Vercel, and Supabase secrets out of Agent requests
+- map Agent success/failure into the normalized collector upload contracts
 
 Expected output:
 
-- deterministic adapter tests using saved fixtures
-- no captcha or login bypass behavior
+- deterministic Agent adapter tests for success, retry success, and retry exhaustion
+- no DOM regex parsing fallback in the production collector processor
 
 ### Slice 6: Admin Review Integration
 
@@ -469,7 +470,7 @@ For future implementation:
 
 - unit-test contracts and schema validation
 - integration-test collector API authentication and idempotency
-- fixture-test all four capture modes
-- test failure mapping for captcha, login, fetch block, image download, OCR, and vision failures
+- fixture-test Agent responses for all four capture modes
+- test failure mapping for captcha, login, fetch block, Agent request failure, and invalid Agent response schema
 - test that collector uploads cannot directly publish canonical events
 - browser-smoke admin review of image evidence and error detail state

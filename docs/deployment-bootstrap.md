@@ -104,7 +104,7 @@ Both the developer machine and collector machine should support:
 - Git
 - Vercel CLI for the machine that manages Vercel project configuration
 - Supabase CLI for schema and local database work
-- Playwright and Chromium browser dependencies for browser-backed collector capture
+- Access to the operator-owned Agent API used for page capture and extraction
 
 The Vercel project should be linked to the GitHub repository so PRs create preview deployments and `main` creates production deployments.
 
@@ -181,23 +181,15 @@ COLLECTOR_BASE_URL=https://your-vercel-app.example
 COLLECTOR_API_KEY=same-long-random-secret-as-vercel
 COLLECTOR_ID=home-192-168-0-16
 COLLECTOR_INTERVAL_HOURS=4
-COLLECTOR_BROWSER_PROFILE_DIR=.collector-profile
-LOCAL_COLLECTOR_PROCESSOR=extract
-COLLECTOR_CAPTURE_ADAPTER=browser
+LOCAL_COLLECTOR_PROCESSOR=agent
+COLLECTOR_CAPABILITIES=agent_api
 LOCAL_COLLECTOR_CONSOLE_TOKEN=optional-local-console-token
 
-TEXT_INFERENCE_PROVIDER=openai-compatible
-TEXT_INFERENCE_API_BASE_URL=https://your-agent-or-llm-api.example/v1
-TEXT_INFERENCE_API_KEY=collector-side-provider-secret
-TEXT_INFERENCE_MODEL=provider-model-name
-TEXT_INFERENCE_ENDPOINT_STYLE=chat-completions
-
-# Optional. If omitted, browser-backed image analysis falls back to TEXT_INFERENCE_*.
-VISION_INFERENCE_PROVIDER=openai-compatible
-VISION_INFERENCE_API_BASE_URL=https://your-vision-or-llm-api.example/v1
-VISION_INFERENCE_API_KEY=collector-side-provider-secret
-VISION_INFERENCE_MODEL=provider-vision-model-name
-VISION_INFERENCE_ENDPOINT_STYLE=responses
+AGENT_API_BASE_URL=https://your-agent-api.example/v1
+AGENT_API_KEY=collector-side-agent-secret
+AGENT_MODEL=optional-agent-model
+AGENT_TIMEOUT_SECONDS=120
+AGENT_MAX_ATTEMPTS=3
 ```
 
 The collector may also use `EXA_API_KEY`, `SERPER_API_KEY`, or `FIRECRAWL_API_KEY` if an implementation slice adopts those providers for search or crawl assistance.
@@ -297,12 +289,10 @@ values, especially:
 - `COLLECTOR_BASE_URL`
 - `COLLECTOR_API_KEY`
 - `COLLECTOR_ID`
-- `COLLECTOR_BROWSER_PROFILE_DIR`
 - `LOCAL_COLLECTOR_PROCESSOR`
-- `COLLECTOR_CAPTURE_ADAPTER`
-- `TEXT_INFERENCE_API_BASE_URL`
-- `TEXT_INFERENCE_API_KEY`
-- `TEXT_INFERENCE_MODEL`
+- `AGENT_API_BASE_URL`
+- `AGENT_API_KEY`
+- `AGENT_MAX_ATTEMPTS`
 
 Current collector commands:
 
@@ -315,11 +305,9 @@ pnpm run collector:console
 The current implementation starts one long-running local service that includes
 the local operator console, JSON-backed local queue, Vercel job polling, and a
 one-at-a-time worker. `LOCAL_COLLECTOR_PROCESSOR=fixture` keeps deterministic
-smoke behavior, while `LOCAL_COLLECTOR_PROCESSOR=extract` enables the first real
-capture plus text-inference extraction processor.
-Set `COLLECTOR_CAPTURE_ADAPTER=browser` on the collector machine to use the
-Playwright-backed persistent-profile capture path for lazy-loaded image pages;
-leave it as `http` only for lightweight debugging.
+smoke behavior, while `LOCAL_COLLECTOR_PROCESSOR=agent` enables the real
+collector path. The collector sends seed URL and run context to the configured
+Agent API; the Agent owns browser automation, OCR, vision, and page reasoning.
 
 The local console should default to localhost. If exposed on the LAN for convenience, it should require `LOCAL_COLLECTOR_CONSOLE_TOKEN`.
 
@@ -328,7 +316,6 @@ Example startup:
 ```bash
 pnpm env:check --target collector --env-file .env
 pnpm collector:console --env-file .env
-COLLECTOR_CAPTURE_ADAPTER=browser LOCAL_COLLECTOR_PROCESSOR=extract pnpm collector:console --env-file .env
 pnpm collector:console --help
 ```
 
@@ -337,18 +324,13 @@ Polling is enabled by default when the collector runtime starts. Use
 is controlled by `COLLECTOR_POLL_INTERVAL_SECONDS`,
 `COLLECTOR_ERROR_BACKOFF_SECONDS`, and `COLLECTOR_CAPABILITIES`.
 
-Extraction mode requires the collector-side `TEXT_INFERENCE_*` variables. If
-they are missing, the local run fails as `agent_config_missing` without printing
-provider secrets. Browser-backed image OCR/vision analysis uses
-`VISION_INFERENCE_*` when present and otherwise reuses `TEXT_INFERENCE_*`.
-Both `responses` and `chat_completions` endpoint styles are supported through
-OpenAI-compatible request shapes. Provider keys stay on the collector machine
-and are never uploaded as collector payload data. Browser-backed capture
-requires Playwright and a Chromium browser installed on the collector machine,
-for example
-`pnpm exec playwright install chromium` after dependencies are available.
-Durable runtime image storage remains a later enhancement; the browser-backed
-path currently uploads normalized image, OCR, and vision evidence metadata.
+Agent mode requires collector-side `AGENT_API_BASE_URL` and `AGENT_API_KEY`.
+If they are missing, the local run fails as `agent_config_missing` without
+printing provider secrets. The collector validates the Agent response schema
+before upload, retries invalid responses up to `AGENT_MAX_ATTEMPTS`, and uploads
+a structured `agent_response_invalid_schema` failure when retries are exhausted.
+Agent and provider keys stay on the collector machine and are never uploaded as
+collector payload data.
 
 ## Runtime Flow
 
@@ -410,7 +392,7 @@ Implementation should make these failures visible and recoverable:
 - Missing `X-Collector-Id`: return `400` or `401` before job mutation.
 - Collector offline: queued jobs remain visible with no heartbeat.
 - Lease expired: job becomes claimable again according to the job queue spec.
-- LLM config missing: local run fails with `agent_config_missing` and uploads or displays a structured failure when possible.
+- Agent config missing: local run fails with `agent_config_missing` and uploads or displays a structured failure when possible.
 - Captcha/login/fetch block: collector reports `captcha_required`, `login_required`, or `fetch_blocked`.
 - Supabase write failure: backend returns a structured error and logs server-side details through Vercel logs.
 - Partial extraction: backend stores available evidence and routes result to review or missing-information state.
@@ -461,15 +443,12 @@ pnpm run collector:console
 
 The current local console command uses Vercel polling and JSON local queue.
 Use `LOCAL_COLLECTOR_PROCESSOR=fixture` for deterministic API connectivity
-checks, or `LOCAL_COLLECTOR_PROCESSOR=extract` with
-`COLLECTOR_CAPTURE_ADAPTER=browser` for persistent-profile browser capture plus
-collector-side text inference:
+checks, or `LOCAL_COLLECTOR_PROCESSOR=agent` for real Agent API extraction:
 
 ```bash
 pnpm collector:bootstrap-env --env-file .env.local --collector-host 192.168.0.16 --output .env
 pnpm env:check --target collector --env-file .env
 pnpm collector:console --env-file .env
-COLLECTOR_CAPTURE_ADAPTER=browser LOCAL_COLLECTOR_PROCESSOR=extract pnpm collector:console --env-file .env
 pnpm collector:fixture --env-file .env --seed-url "https://mp.weixin.qq.com/s/example"
 pnpm collector:fixture --env-file .env --claim-once --fixture ready-event
 ```
@@ -493,6 +472,15 @@ Run it from a machine or network that can resolve and reach the configured
 `APP_BASE_URL`. The command uses the same admin and collector API boundaries as
 the deployed app, publishes the fixture draft, and verifies the resulting public
 event detail page contains the published title.
+
+Fixture and mock runs are allowed for deployment smoke tests, but they must stay
+identifiable before public launch. Fixture collector outputs should keep
+diagnostics or titles that include `fixture`, and operators should remove those
+drafts/events from Supabase after validation if they were created against a
+shared or production project. A later cleanup script can automate deletion by
+matching fixture diagnostics, fixture source URLs, or deterministic fixture
+titles; until then, run fixture smoke tests only against disposable data or
+manually delete generated fixture drafts and canonical events before launch.
 
 ### Slice 6: Operational Handoff
 

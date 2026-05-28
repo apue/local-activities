@@ -23,6 +23,10 @@ class MemoryIngestStore implements CollectorIngestStore {
   evidenceAssets = new Map<string, string>();
   eventDrafts = new Map<string, string>();
   failures = new Map<string, string>();
+  publishedDrafts: Array<{
+    title: string;
+    publishedAt: string;
+  }> = [];
 
   async upsertSourceRun(input: {
     collectorId: string;
@@ -56,6 +60,17 @@ class MemoryIngestStore implements CollectorIngestStore {
     const id = this.eventDrafts.get(key) ?? `draft-${this.eventDrafts.size + 1}`;
     this.eventDrafts.set(key, id);
     return { id };
+  }
+
+  async publishEventDraft(input: {
+    payload: EventDraftUpload;
+    publishedAt: string;
+  }) {
+    this.publishedDrafts.push({
+      title: input.payload.title ?? "",
+      publishedAt: input.publishedAt,
+    });
+    return { id: `event-${this.publishedDrafts.length}` };
   }
 
   async upsertCollectorFailure(input: { failureId: string }) {
@@ -135,9 +150,58 @@ describe("collector ingest service", () => {
       },
     };
 
-    await expect(ingestEventDraft(envelope, store)).resolves.toEqual({
+    await expect(ingestEventDraft(envelope, store)).resolves.toMatchObject({
       id: "draft-1",
+      reviewState: "needs_info",
+      autoPublished: false,
     });
+    expect(store.publishedDrafts).toEqual([]);
+  });
+
+  it("routes low-confidence complete drafts to review instead of auto-publish", async () => {
+    const store = new MemoryIngestStore();
+    const envelope = completeDraftEnvelope({
+      confidence: 0.76,
+    });
+
+    await expect(
+      ingestEventDraft(envelope, store, {
+        autoPublishEnabled: true,
+        autoPublishConfidenceThreshold: 0.9,
+        now: new Date("2026-05-28T08:00:00.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      id: "draft-1",
+      reviewState: "ready_for_review",
+      autoPublished: false,
+    });
+    expect(store.publishedDrafts).toEqual([]);
+  });
+
+  it("auto-publishes high-confidence complete drafts through backend policy", async () => {
+    const store = new MemoryIngestStore();
+    const envelope = completeDraftEnvelope({
+      confidence: 0.96,
+    });
+
+    await expect(
+      ingestEventDraft(envelope, store, {
+        autoPublishEnabled: true,
+        autoPublishConfidenceThreshold: 0.95,
+        now: new Date("2026-05-28T08:00:00.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      id: "draft-1",
+      reviewState: "approved",
+      autoPublished: true,
+      publishedEventId: "event-1",
+    });
+    expect(store.publishedDrafts).toEqual([
+      {
+        title: "Policy Event",
+        publishedAt: "2026-05-28T08:00:00.000Z",
+      },
+    ]);
   });
 
   it("uses deterministic failure identifiers for idempotency", async () => {
@@ -178,3 +242,28 @@ describe("collector ingest service", () => {
     expect(second.id).toBe(first.id);
   });
 });
+
+function completeDraftEnvelope(
+  overrides: Partial<EventDraftUpload> = {},
+): CollectorEnvelope<EventDraftUpload> {
+  return {
+    ...envelopeBase,
+    payload: {
+      articleUrl: "https://mp.weixin.qq.com/s/policy",
+      extractionAttemptId: "attempt-policy",
+      captureMode: "text_complete",
+      title: "Policy Event",
+      organizer: "Official Cultural Center",
+      startsAt: "2026-06-06T06:00:00.000Z",
+      timezone: "Asia/Shanghai",
+      venueName: "Cultural Center Hall",
+      city: "Beijing",
+      reservationStatus: "required",
+      signals: ["ready_for_review"],
+      evidenceAssetIds: [],
+      fieldEvidence: {},
+      confidence: 0.96,
+      ...overrides,
+    },
+  };
+}

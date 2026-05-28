@@ -9,17 +9,14 @@ import {
   createCollectorHeaders,
   runCollectorFixture,
 } from "./collector-fixture-run.mjs";
-import { runCollectorExtract } from "./collector-extract-processor.mjs";
+import { runCollectorAgent } from "./collector-agent-processor.mjs";
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 
 const activeStates = new Set(["capturing", "extracting", "uploading"]);
 const terminalStates = new Set(["uploaded", "failed", "cancelled"]);
 const defaultPort = 4317;
 const defaultCapabilities = [
-  "wechat_browser",
-  "dom_text",
-  "image_capture",
-  "vision_extraction",
+  "agent_api",
 ];
 
 export class JsonRunStore {
@@ -414,7 +411,7 @@ export function readConsoleConfig(env = process.env) {
     60,
   );
 
-  if (!["fixture", "extract"].includes(processor)) {
+  if (!["fixture", "agent"].includes(processor)) {
     throw new Error(`unsupported_local_collector_processor:${processor}`);
   }
   if (!baseUrl) throw new Error("missing_collector_base_url");
@@ -451,13 +448,20 @@ export function formatConsoleHelp() {
 Starts the home-machine collector console and local queue worker.
 
 Processor:
-  LOCAL_COLLECTOR_PROCESSOR=fixture or extract
-  COLLECTOR_CAPTURE_ADAPTER=http or browser when processor=extract
+  LOCAL_COLLECTOR_PROCESSOR=fixture
+  LOCAL_COLLECTOR_PROCESSOR=agent
 
 Required collector environment:
   APP_BASE_URL or COLLECTOR_BASE_URL
   COLLECTOR_API_KEY
   COLLECTOR_ID
+
+Agent processor environment:
+  AGENT_API_BASE_URL
+  AGENT_API_KEY
+  AGENT_MODEL is optional
+  AGENT_TIMEOUT_SECONDS defaults to 120
+  AGENT_MAX_ATTEMPTS defaults to 3
 
 Local console environment:
   COLLECTOR_CONSOLE_HOST defaults to 127.0.0.1
@@ -466,7 +470,7 @@ Local console environment:
   COLLECTOR_POLLING_ENABLED defaults to true
   COLLECTOR_POLL_INTERVAL_SECONDS defaults to 60
   COLLECTOR_ERROR_BACKOFF_SECONDS defaults to 60
-  COLLECTOR_CAPABILITIES defaults to wechat_browser,dom_text,image_capture,vision_extraction
+  COLLECTOR_CAPABILITIES defaults to agent_api
   LOCAL_COLLECTOR_CONSOLE_TOKEN is required when binding outside localhost
 
 Options:
@@ -540,13 +544,14 @@ export function startPollingLoop({ runtime }) {
 }
 
 function createProcessor(config) {
-  if (config.processor === "extract") {
-    return async ({ seedUrl, localRunId }) =>
-      runCollectorExtract({
+  if (config.processor === "agent") {
+    return async ({ seedUrl, localRunId, vercelJobId }) =>
+      runCollectorAgent({
         env: config.env,
         fetchImpl: config.fetchImpl ?? fetch,
         seedUrl,
         runId: localRunId,
+        vercelJobId,
       });
   }
 
@@ -615,11 +620,14 @@ async function reportVercelJob({
 }) {
   if (!run.vercelJob?.jobId || !report) return;
   const uploadedIds = processorResult?.uploadedIds ?? {};
+  const uploadedStructuredFailure =
+    uploadedIds.failureId && !uploadedIds.eventDraftId;
+  const failed = Boolean(failureReason || uploadedStructuredFailure);
 
   await report(removeUndefined({
     jobId: run.vercelJob.jobId,
     localRunId: run.id,
-    status: failureReason ? "failed" : "completed",
+    status: failed ? "failed" : "completed",
     sourceRunId: uploadedIds.sourceRunId,
     articleSnapshotIds: uploadedIds.articleSnapshotId
       ? [uploadedIds.articleSnapshotId]
@@ -629,7 +637,7 @@ async function reportVercelJob({
       : undefined,
     evidenceAssetIds: uploadedIds.evidenceAssetIds,
     failureIds: uploadedIds.failureId ? [uploadedIds.failureId] : undefined,
-    suggestedDisposition: failureReason ? "failed" : "ready_for_review",
+    suggestedDisposition: failed ? "failed" : "ready_for_review",
     message: failureReason,
   }));
 }

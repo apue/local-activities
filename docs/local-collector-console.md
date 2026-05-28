@@ -96,30 +96,23 @@ pnpm collector:fixture --env-file .env --claim-once --fixture failure
 `pnpm collector:bootstrap-env` writes a collector-only dotenv file for the home
 machine. It copies the public app URL and collector token from a trusted source
 env when available, defaults `COLLECTOR_ID` to `home-192-168-0-16`, and leaves
-operator-owned `TEXT_INFERENCE_*` values as editable placeholders when they are
+operator-owned `AGENT_*` values as editable placeholders when they are
 not present.
 
 The local console command starts a local-only web service with Vercel job
 polling, a JSON-backed queue, and one-at-a-time worker. Use
 `LOCAL_COLLECTOR_PROCESSOR=fixture` for deterministic source-run,
 article-snapshot, and draft uploads through the existing collector API boundary.
-Use `LOCAL_COLLECTOR_PROCESSOR=extract` for the first real capture and
-collector-side text-inference extraction path. Set
-`COLLECTOR_CAPTURE_ADAPTER=browser` with extract mode to use the browser-backed
-persistent-profile capture path for lazy-loaded images and poster/QR evidence.
-Browser-backed image OCR/vision analysis uses optional `VISION_INFERENCE_*`
-values when present, or falls back to `TEXT_INFERENCE_*` so a single
-OpenAI-compatible provider can power both image evidence analysis and structured
-event extraction.
+Use `LOCAL_COLLECTOR_PROCESSOR=agent` for the real extraction path. The local
+collector sends seed URL and run context to the configured Agent API, validates
+the structured Agent response, retries invalid responses locally, and uploads
+only normalized collector payloads to Vercel.
 
 Fixture mode is not a real browser or LLM extractor, and it must not be used as
-a substitute for production collection. Extract mode is the first real
-processor. The browser-backed path captures visible text and image metadata,
-attaches OCR/vision evidence text from the provider adapter, and maps image
-download, OCR, and vision failures into collector failures. Durable runtime
-image storage is still a later enhancement. The shared purpose is to prove that
-the collector machine can queue work, authenticate to Vercel, and upload
-normalized objects without direct Supabase access.
+a substitute for production collection. Agent mode is the production collector
+boundary for page understanding, OCR, vision, and LLM reasoning. The shared
+purpose is to prove that the collector machine can queue work, authenticate to
+Vercel, and upload normalized objects without direct Supabase access.
 
 ## Vercel Collector Job Queue
 
@@ -167,6 +160,7 @@ type ClaimJobRequest = {
 };
 
 type CollectorCapability =
+  | "agent_api"
   | "wechat_browser"
   | "dom_text"
   | "image_capture"
@@ -346,9 +340,9 @@ The collector may suggest one disposition per job:
 
 Backend rules:
 
-- Do not treat `ready_for_review` as publishable.
+- Do not let collector or Agent output publish directly.
 - Do not treat `failed` source fetches as event cancellations.
-- Recompute review state from normalized uploads.
+- Recompute review state and auto-publish eligibility from normalized uploads.
 - Preserve collector disposition as diagnostics for admin review.
 
 ## Local Agent API Boundary
@@ -359,13 +353,13 @@ Agent API responses should be converted into normalized collector objects before
 
 Local worker responsibilities:
 
-- prepare bounded page context for the agent
-- pass image evidence or image references when needed
-- request structured extraction
+- send seed URL and run context to the Agent API
+- request structured extraction with bounded retry behavior
 - validate the agent response locally before upload
 - map agent uncertainty to draft signals and suggested disposition
 
-The agent API must not receive collector API secrets unless the provider is explicitly trusted and a later issue documents that boundary.
+The agent API must not receive collector API secrets, admin tokens, Supabase
+secrets, Vercel tokens, or other backend credentials.
 
 ## Implementation Slices
 

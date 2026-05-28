@@ -307,9 +307,9 @@ Environment:
 
 Do not add Sentry, Datadog, New Relic, or OpenTelemetry drains unless a later implementation issue explicitly adopts them.
 
-## Text Inference
+## Agent API Extraction
 
-Use an OpenAI-compatible text inference boundary where possible.
+Use a collector-side Agent API boundary for real extraction.
 
 Planned uses:
 
@@ -317,30 +317,20 @@ Planned uses:
 - extract event drafts
 - summarize event details
 - assist duplicate or update review, without directly mutating canonical state
+- perform browser/page understanding, OCR, vision, and LLM reasoning outside Vercel
 
 Environment:
 
-- `TEXT_INFERENCE_PROVIDER`
-- `TEXT_INFERENCE_API_BASE_URL`
-- `TEXT_INFERENCE_API_KEY`
-- `TEXT_INFERENCE_MODEL`
-- `TEXT_INFERENCE_ENDPOINT_STYLE`
-- `VISION_INFERENCE_PROVIDER`
-- `VISION_INFERENCE_API_BASE_URL`
-- `VISION_INFERENCE_API_KEY`
-- `VISION_INFERENCE_MODEL`
-- `VISION_INFERENCE_ENDPOINT_STYLE`
+- `AGENT_API_BASE_URL`
+- `AGENT_API_KEY`
+- `AGENT_MODEL`
+- `AGENT_TIMEOUT_SECONDS`
+- `AGENT_MAX_ATTEMPTS`
 
-Endpoint style:
-
-- Prefer the OpenAI Responses-style API where available.
-- Support chat-completions-compatible providers, likely including DeepSeek, if Responses API is unavailable.
-
-Browser-backed collector runs use `VISION_INFERENCE_*` for image OCR/vision
-analysis when those values are configured. If they are omitted, the collector
-falls back to `TEXT_INFERENCE_*` so a hobby deployment can start with one
-provider key. These variables are collector-side only and must not be exposed to
-browser code.
+The collector sends seed URL and run context to the Agent API. It must not send
+collector, admin, Supabase, or Vercel secrets to the Agent. The Agent response is
+validated locally before upload, and Vercel validates all uploaded payloads
+again before storage or publication routing.
 
 Persist prompt version, model name, and extraction confidence with outputs for reproducibility.
 

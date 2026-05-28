@@ -13,6 +13,9 @@ export const failureReasonSchema = z.enum([
   "image_download_failed",
   "ocr_failed",
   "vision_failed",
+  "agent_config_missing",
+  "agent_request_failed",
+  "agent_response_invalid_schema",
   "not_activity",
   "unsupported",
 ]);
@@ -160,6 +163,7 @@ export const collectorFailureSchema = z
       "image_capture",
       "ocr",
       "vision_extraction",
+      "agent_extraction",
       "draft_extraction",
       "upload",
     ]),

@@ -25,10 +25,28 @@ export type CollectorIngestStore = {
   ): Promise<StoredCollectorObject>;
   upsertEventDraft(
     input: CollectorEnvelope<EventDraftUpload>,
+    options?: { reviewState: DraftBackendRouting["reviewState"] },
   ): Promise<StoredCollectorObject>;
   upsertCollectorFailure(
     input: CollectorEnvelope<CollectorFailure> & { failureId: string },
   ): Promise<StoredCollectorObject>;
+  publishEventDraft?(
+    input: {
+      payload: EventDraftUpload;
+      publishedAt: string;
+    },
+  ): Promise<StoredCollectorObject>;
+};
+
+export type DraftBackendRouting = {
+  reviewState: "needs_review" | "needs_info" | "ready_for_review" | "approved";
+  autoPublished: boolean;
+};
+
+export type DraftBackendPolicy = {
+  autoPublishEnabled?: boolean;
+  autoPublishConfidenceThreshold?: number;
+  now?: Date;
 };
 
 export async function ingestSourceRun(
@@ -55,8 +73,30 @@ export async function ingestEvidenceAsset(
 export async function ingestEventDraft(
   envelope: CollectorEnvelope<EventDraftUpload>,
   store: CollectorIngestStore,
+  policy: DraftBackendPolicy = {},
 ) {
-  return store.upsertEventDraft(envelope);
+  const routing = computeDraftBackendRouting(envelope.payload, policy);
+  const draft = await store.upsertEventDraft(envelope, {
+    reviewState: routing.reviewState,
+  });
+  if (!routing.autoPublished || !store.publishEventDraft) {
+    return {
+      ...draft,
+      reviewState: routing.reviewState,
+      autoPublished: false,
+    };
+  }
+
+  const event = await store.publishEventDraft({
+    payload: envelope.payload,
+    publishedAt: (policy.now ?? new Date()).toISOString(),
+  });
+  return {
+    ...draft,
+    reviewState: "approved" as const,
+    autoPublished: true,
+    publishedEventId: event.id,
+  };
 }
 
 export async function ingestCollectorFailure(
@@ -99,4 +139,40 @@ export function computeDraftReviewState(payload: EventDraftUpload) {
   }
 
   return "ready_for_review" as const;
+}
+
+export function computeDraftBackendRouting(
+  payload: EventDraftUpload,
+  policy: DraftBackendPolicy = {},
+): DraftBackendRouting {
+  const reviewState = computeDraftReviewState(payload);
+  if (
+    !policy.autoPublishEnabled ||
+    reviewState !== "ready_for_review" ||
+    payload.confidence < (policy.autoPublishConfidenceThreshold ?? 0.95) ||
+    hasBlockingSignal(payload)
+  ) {
+    return {
+      reviewState,
+      autoPublished: false,
+    };
+  }
+
+  return {
+    reviewState: "approved",
+    autoPublished: true,
+  };
+}
+
+function hasBlockingSignal(payload: EventDraftUpload) {
+  return payload.signals.some((signal) =>
+    [
+      "missing_required_public_field",
+      "secondary_mention",
+      "possible_duplicate",
+      "image_dominant",
+      "qr_registration",
+      "registration_evidence_required",
+    ].includes(signal),
+  );
 }

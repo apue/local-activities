@@ -21,8 +21,8 @@ describe("collector bootstrap env generator", () => {
         SUPABASE_SECRET_KEY: "supabase-secret",
         DATABASE_URL: "postgres://secret",
         VERCEL_TOKEN: "vercel-secret",
-        TEXT_INFERENCE_API_BASE_URL: "https://agent.example/v1",
-        TEXT_INFERENCE_MODEL: "gpt-test",
+        AGENT_API_BASE_URL: "https://agent.example/v1",
+        AGENT_MODEL: "agent-test",
       },
       collectorHost: "192.168.0.16",
     });
@@ -32,12 +32,13 @@ describe("collector bootstrap env generator", () => {
       COLLECTOR_BASE_URL: "https://local-activities.vercel.app",
       COLLECTOR_API_KEY: "collector-token",
       COLLECTOR_ID: "home-192-168-0-16",
-      LOCAL_COLLECTOR_PROCESSOR: "extract",
-      COLLECTOR_CAPTURE_ADAPTER: "browser",
-      TEXT_INFERENCE_API_BASE_URL: "https://agent.example/v1",
-      TEXT_INFERENCE_API_KEY: "replace-with-text-inference-api-key",
-      TEXT_INFERENCE_MODEL: "gpt-test",
-      TEXT_INFERENCE_ENDPOINT_STYLE: "responses",
+      LOCAL_COLLECTOR_PROCESSOR: "agent",
+      COLLECTOR_CAPABILITIES: "agent_api",
+      AGENT_API_BASE_URL: "https://agent.example/v1",
+      AGENT_API_KEY: "replace-with-agent-api-key",
+      AGENT_MODEL: "agent-test",
+      AGENT_TIMEOUT_SECONDS: "120",
+      AGENT_MAX_ATTEMPTS: "3",
     });
 
     expect(Object.keys(env)).not.toEqual(
@@ -56,9 +57,9 @@ describe("collector bootstrap env generator", () => {
         sourceEnv: {
           APP_BASE_URL: "https://local-activities.vercel.app",
           COLLECTOR_API_KEY: "collector-token",
-          TEXT_INFERENCE_API_BASE_URL: "https://agent.example/v1",
-          TEXT_INFERENCE_API_KEY: "llm-secret",
-          TEXT_INFERENCE_MODEL: "gpt-test",
+          AGENT_API_BASE_URL: "https://agent.example/v1",
+          AGENT_API_KEY: "agent-secret",
+          AGENT_MODEL: "agent-test",
         },
         collectorHost: "192.168.0.16",
       }),
@@ -73,28 +74,26 @@ describe("collector bootstrap env generator", () => {
     expect(evaluateTarget("collector", parsed)).toMatchObject({ ok: true });
   });
 
-  it("copies optional vision inference overrides without requiring them", () => {
+  it("copies optional agent runtime settings without requiring a model", () => {
     const env = buildCollectorBootstrapEnv({
       sourceEnv: {
         NEXT_PUBLIC_APP_URL: "https://local-activities.vercel.app",
         COLLECTOR_API_KEY: "collector-token",
-        TEXT_INFERENCE_API_BASE_URL: "https://agent.example/v1",
-        TEXT_INFERENCE_API_KEY: "llm-secret",
-        TEXT_INFERENCE_MODEL: "gpt-test",
-        VISION_INFERENCE_API_BASE_URL: "https://vision.example/v1",
-        VISION_INFERENCE_API_KEY: "vision-secret",
-        VISION_INFERENCE_MODEL: "vision-model",
-        VISION_INFERENCE_ENDPOINT_STYLE: "chat-completions",
+        AGENT_API_BASE_URL: "https://agent.example/v1",
+        AGENT_API_KEY: "agent-secret",
+        AGENT_TIMEOUT_SECONDS: "90",
+        AGENT_MAX_ATTEMPTS: "4",
       },
       collectorHost: "192.168.0.16",
     });
 
     expect(env).toMatchObject({
-      VISION_INFERENCE_API_BASE_URL: "https://vision.example/v1",
-      VISION_INFERENCE_API_KEY: "vision-secret",
-      VISION_INFERENCE_MODEL: "vision-model",
-      VISION_INFERENCE_ENDPOINT_STYLE: "chat-completions",
+      AGENT_API_BASE_URL: "https://agent.example/v1",
+      AGENT_API_KEY: "agent-secret",
+      AGENT_TIMEOUT_SECONDS: "90",
+      AGENT_MAX_ATTEMPTS: "4",
     });
+    expect(env).not.toHaveProperty("AGENT_MODEL");
     expect(evaluateTarget("collector", env)).toMatchObject({ ok: true });
   });
 
@@ -113,17 +112,19 @@ describe("collector bootstrap env generator", () => {
     expect(env.COLLECTOR_BASE_URL).toBe("https://local-activities.vercel.app");
   });
 
-  it("defaults to extract mode even when the source env was set to fixture", () => {
+  it("defaults to agent mode even when the source env was set to fixture", () => {
     const env = buildCollectorBootstrapEnv({
       sourceEnv: {
         NEXT_PUBLIC_APP_URL: "https://local-activities.vercel.app",
         COLLECTOR_API_KEY: "collector-token",
         LOCAL_COLLECTOR_PROCESSOR: "fixture",
+        AGENT_API_BASE_URL: "https://agent.example/v1",
+        AGENT_API_KEY: "agent-secret",
       },
       collectorHost: "192.168.0.16",
     });
 
-    expect(env.LOCAL_COLLECTOR_PROCESSOR).toBe("extract");
+    expect(env.LOCAL_COLLECTOR_PROCESSOR).toBe("agent");
   });
 
   it("writes a chmod 600 collector env file through the CLI", async () => {
@@ -141,9 +142,9 @@ describe("collector bootstrap env generator", () => {
         {
           NEXT_PUBLIC_APP_URL: "https://local-activities.vercel.app",
           COLLECTOR_API_KEY: "collector-token",
-          TEXT_INFERENCE_API_BASE_URL: "https://agent.example/v1",
-          TEXT_INFERENCE_API_KEY: "llm-secret",
-          TEXT_INFERENCE_MODEL: "gpt-test",
+          AGENT_API_BASE_URL: "https://agent.example/v1",
+          AGENT_API_KEY: "agent-secret",
+          AGENT_MODEL: "agent-test",
         },
       );
 
@@ -151,7 +152,7 @@ describe("collector bootstrap env generator", () => {
       const text = await readFile(output, "utf8");
       expect(parseEnvText(text)).toMatchObject({
         COLLECTOR_ID: "home-192-168-0-16",
-        LOCAL_COLLECTOR_PROCESSOR: "extract",
+        LOCAL_COLLECTOR_PROCESSOR: "agent",
       });
       expect((await stat(output)).mode & 0o777).toBe(0o600);
     } finally {
@@ -171,7 +172,7 @@ describe("collector bootstrap env generator", () => {
           [
             "NEXT_PUBLIC_APP_URL=https://local-activities.vercel.app",
             "COLLECTOR_API_KEY=collector-token",
-            "TEXT_INFERENCE_API_KEY=replace-with-text-inference-api-key",
+            "AGENT_API_KEY=replace-with-agent-api-key",
             "",
           ].join("\n"),
         ),
@@ -180,15 +181,14 @@ describe("collector bootstrap env generator", () => {
       const code = await runCollectorBootstrapEnvCli(
         ["--env-file", source, "--output", output],
         {
-          TEXT_INFERENCE_API_KEY: "llm-secret",
-          TEXT_INFERENCE_API_BASE_URL: "https://agent.example/v1",
-          TEXT_INFERENCE_MODEL: "gpt-test",
+          AGENT_API_KEY: "agent-secret",
+          AGENT_API_BASE_URL: "https://agent.example/v1",
         },
       );
 
       expect(code).toBe(0);
       expect(parseEnvText(await readFile(output, "utf8"))).toMatchObject({
-        TEXT_INFERENCE_API_KEY: "llm-secret",
+        AGENT_API_KEY: "agent-secret",
       });
     } finally {
       await rm(dir, { recursive: true, force: true });
