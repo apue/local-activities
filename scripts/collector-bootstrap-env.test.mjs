@@ -33,6 +33,7 @@ describe("collector bootstrap env generator", () => {
       COLLECTOR_API_KEY: "collector-token",
       COLLECTOR_ID: "home-192-168-0-16",
       LOCAL_COLLECTOR_PROCESSOR: "extract",
+      COLLECTOR_CAPTURE_ADAPTER: "browser",
       TEXT_INFERENCE_API_BASE_URL: "https://agent.example/v1",
       TEXT_INFERENCE_API_KEY: "replace-with-text-inference-api-key",
       TEXT_INFERENCE_MODEL: "gpt-test",

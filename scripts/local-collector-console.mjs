@@ -452,6 +452,7 @@ Starts the home-machine collector console and local queue worker.
 
 Processor:
   LOCAL_COLLECTOR_PROCESSOR=fixture or extract
+  COLLECTOR_CAPTURE_ADAPTER=http or browser when processor=extract
 
 Required collector environment:
   APP_BASE_URL or COLLECTOR_BASE_URL

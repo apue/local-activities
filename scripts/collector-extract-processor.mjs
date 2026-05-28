@@ -6,6 +6,30 @@ import { createCollectorHeaders } from "./collector-fixture-run.mjs";
 
 const payloadVersion = "2026-05-collector-v1";
 const maxVisibleTextLength = 40_000;
+const failureReasons = new Set([
+  "fetch_blocked",
+  "fetch_timeout",
+  "login_required",
+  "captcha_required",
+  "parser_mismatch",
+  "source_identity_missing",
+  "activity_fields_missing",
+  "image_download_failed",
+  "ocr_failed",
+  "vision_failed",
+  "not_activity",
+  "unsupported",
+]);
+const failureStages = new Set([
+  "source_discovery",
+  "page_fetch",
+  "dom_parse",
+  "image_capture",
+  "ocr",
+  "vision_extraction",
+  "draft_extraction",
+  "upload",
+]);
 
 export async function capturePage({
   seedUrl,
@@ -64,6 +88,68 @@ export async function capturePage({
     captureModeHint,
     contentHash: hash([finalUrl, title, visibleText, JSON.stringify(images)]),
   };
+}
+
+export async function capturePageWithBrowser({
+  seedUrl,
+  browserAdapter,
+  imageAnalyzer,
+  profileDir = ".collector-profile",
+  now = new Date(),
+}) {
+  try {
+    const page = await (browserAdapter ?? defaultBrowserAdapter)({
+      seedUrl,
+      profileDir,
+      now,
+    });
+    const finalUrl = page.finalUrl || seedUrl;
+    const title = page.title || undefined;
+    const visibleText = (page.visibleText ?? "").slice(0, maxVisibleTextLength);
+    const images = normalizeBrowserImages(page.images ?? [], finalUrl);
+    const pageFailure = detectPageFailure(visibleText);
+    if (pageFailure) {
+      return {
+        kind: "failure",
+        seedUrl,
+        finalUrl,
+        stage: "page_fetch",
+        reason: pageFailure.reason,
+        message: pageFailure.message,
+        retryable: true,
+        capturedAt: now.toISOString(),
+      };
+    }
+
+    const analyzed = imageAnalyzer
+      ? await imageAnalyzer({ seedUrl, finalUrl, title, visibleText, images })
+      : {};
+    const evidenceTexts = normalizeEvidenceTexts(
+      analyzed?.evidenceTexts ?? page.evidenceTexts ?? [],
+    );
+
+    return {
+      kind: "captured",
+      seedUrl,
+      finalUrl,
+      title,
+      visibleText,
+      languageHints: inferLanguageHints(visibleText),
+      images,
+      evidenceTexts,
+      capturedAt: now.toISOString(),
+      captureModeHint: classifyCaptureMode({ visibleText, images }),
+      contentHash: hash([
+        finalUrl,
+        title,
+        visibleText,
+        JSON.stringify(images),
+        JSON.stringify(evidenceTexts),
+      ]),
+    };
+  } catch (error) {
+    return captureFailureFromError({ error, seedUrl, now });
+  }
 }
 
 export function mapInferenceToCollectorPayloads({
@@ -224,13 +310,23 @@ export async function runCollectorExtract({
   runId,
   fetchImpl = fetch,
   inference,
+  browserAdapter,
+  imageAnalyzer,
   now = new Date(),
 }) {
   const config = readExtractConfig(env);
   if (!seedUrl) throw new Error("missing_seed_url");
   if (!runId) throw new Error("missing_run_id");
 
-  const capture = await capturePage({ seedUrl, fetchImpl, now });
+  const capture = config.captureAdapter === "browser"
+    ? await capturePageWithBrowser({
+        seedUrl,
+        browserAdapter,
+        imageAnalyzer,
+        profileDir: config.browserProfileDir,
+        now,
+      })
+    : await capturePage({ seedUrl, fetchImpl, now });
   if (capture.kind === "failure") {
     const failure = buildExtractionFailure({
       collectorId: config.collectorId,
@@ -379,6 +475,7 @@ function buildInferencePrompt(capture) {
     `Title: ${capture.title ?? ""}`,
     `Text: ${capture.visibleText ?? ""}`,
     `Images: ${JSON.stringify(capture.images)}`,
+    `Image evidence text: ${JSON.stringify(capture.evidenceTexts ?? [])}`,
   ].join("\n\n");
 }
 
@@ -423,7 +520,7 @@ function buildFailedSourceRun({ collectorId, runId, seedUrl, reason, now }) {
 }
 
 function buildEvidenceAssets({ collectorId, runId, capture }) {
-  return capture.images.map((image, index) =>
+  const imageAssets = capture.images.map((image, index) =>
     envelope({
       collectorId,
       runId,
@@ -441,6 +538,25 @@ function buildEvidenceAssets({ collectorId, runId, capture }) {
       },
     }),
   );
+  const textAssets = (capture.evidenceTexts ?? []).map((evidence, index) =>
+    envelope({
+      collectorId,
+      runId,
+      observedAt: capture.capturedAt,
+      payload: {
+        assetId: `asset-${hash(`${capture.finalUrl}:${evidence.role}:${evidence.textContent}:${index}`).slice(0, 16)}`,
+        articleUrl: capture.finalUrl,
+        role: evidence.role,
+        mediaType: "text",
+        contentHash: hash(evidence.textContent),
+        textContent: evidence.textContent,
+        extractedBy: evidence.extractedBy,
+        confidence: evidence.confidence,
+      },
+    }),
+  );
+
+  return [...imageAssets, ...textAssets];
 }
 
 function envelope({ collectorId, runId, observedAt, payload }) {
@@ -492,7 +608,11 @@ function extractImages(html, baseUrl) {
 function classifyImageRole({ sourceUrl, alt }) {
   const text = `${sourceUrl} ${alt}`.toLowerCase();
   if (text.includes("qr") || text.includes("二维码")) return "qr";
-  if (text.includes("poster") || text.includes("invitation")) return "poster";
+  if (
+    text.includes("poster") ||
+    text.includes("invitation") ||
+    text.includes("海报")
+  ) return "poster";
   return "article_image";
 }
 
@@ -590,8 +710,124 @@ function readExtractConfig(env) {
   return {
     baseUrl,
     collectorId,
+    captureAdapter: normalizeCaptureAdapter(env.COLLECTOR_CAPTURE_ADAPTER),
+    browserProfileDir: env.COLLECTOR_BROWSER_PROFILE_DIR?.trim()
+      || ".collector-profile",
     headers: createCollectorHeaders({ collectorId, collectorApiKey }),
   };
+}
+
+async function defaultBrowserAdapter({ seedUrl, profileDir }) {
+  let context;
+  try {
+    const { chromium } = await import("playwright");
+    context = await chromium.launchPersistentContext(profileDir, {
+      headless: true,
+      viewport: { width: 1280, height: 1600 },
+    });
+    const page = context.pages()[0] ?? await context.newPage();
+    await page.goto(seedUrl, {
+      waitUntil: "networkidle",
+      timeout: 45_000,
+    });
+    await page.evaluate(async () => {
+      await new Promise((resolve) => {
+        window.scrollTo(0, document.body?.scrollHeight ?? 0);
+        setTimeout(resolve, 500);
+      });
+    });
+
+    return page.evaluate(() => ({
+      finalUrl: window.location.href,
+      title: document.title || document.querySelector("h1")?.textContent || "",
+      visibleText: document.body?.innerText || "",
+      images: Array.from(document.images)
+        .map((image) => ({
+          sourceUrl:
+            image.currentSrc ||
+            image.src ||
+            image.dataset.src ||
+            image.dataset.original ||
+            "",
+          alt: image.alt || "",
+          width: image.naturalWidth || image.width || undefined,
+          height: image.naturalHeight || image.height || undefined,
+        }))
+        .filter((image) => image.sourceUrl),
+    }));
+  } catch (error) {
+    if (error?.code === "MODULE_NOT_FOUND" || error?.code === "ERR_MODULE_NOT_FOUND") {
+      throw Object.assign(new Error("Playwright is not installed."), {
+        reason: "unsupported",
+        stage: "page_fetch",
+      });
+    }
+    throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
+      reason: error?.name === "TimeoutError" ? "fetch_timeout" : "fetch_blocked",
+      stage: "page_fetch",
+    });
+  } finally {
+    await context?.close?.();
+  }
+}
+
+function normalizeBrowserImages(images, baseUrl) {
+  return images
+    .map((image, index) => {
+      const source = image.sourceUrl || image.src;
+      if (!source) return undefined;
+      const sourceUrl = new URL(source, baseUrl).toString();
+      const alt = image.alt ?? "";
+      return removeUndefined({
+        sourceUrl,
+        alt,
+        role: image.role ?? classifyImageRole({ sourceUrl, alt, index }),
+        width: toPositiveNumber(image.width),
+        height: toPositiveNumber(image.height),
+        storagePath: image.storagePath,
+      });
+    })
+    .filter(Boolean);
+}
+
+function normalizeEvidenceTexts(evidenceTexts) {
+  return evidenceTexts
+    .map((evidence) =>
+      removeUndefined({
+        role: ["ocr_text", "vision_summary"].includes(evidence.role)
+          ? evidence.role
+          : "vision_summary",
+        textContent: String(evidence.textContent ?? "").slice(0, 20_000),
+        extractedBy: ["ocr", "vision", "dom", "manual"].includes(
+          evidence.extractedBy,
+        )
+          ? evidence.extractedBy
+          : undefined,
+        confidence: clampConfidence(evidence.confidence),
+      }),
+    )
+    .filter((evidence) => evidence.textContent);
+}
+
+function captureFailureFromError({ error, seedUrl, now }) {
+  const reason = failureReasons.has(error?.reason)
+    ? error.reason
+    : "fetch_blocked";
+  const stage = failureStages.has(error?.stage) ? error.stage : "page_fetch";
+  return {
+    kind: "failure",
+    seedUrl,
+    finalUrl: error?.finalUrl || seedUrl,
+    stage,
+    reason,
+    message: error instanceof Error ? error.message : String(error),
+    retryable: error?.retryable ?? true,
+    capturedAt: now.toISOString(),
+  };
+}
+
+function normalizeCaptureAdapter(value) {
+  return value?.trim() === "browser" ? "browser" : "http";
 }
 
 async function postJson({ baseUrl, path, headers, fetchImpl, body }) {
