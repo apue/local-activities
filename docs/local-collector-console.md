@@ -107,11 +107,15 @@ Use `LOCAL_COLLECTOR_PROCESSOR=extract` for the first real capture and
 collector-side text-inference extraction path. Set
 `COLLECTOR_CAPTURE_ADAPTER=browser` with extract mode to use the browser-backed
 persistent-profile capture path for lazy-loaded images and poster/QR evidence.
+Browser-backed image OCR/vision analysis uses optional `VISION_INFERENCE_*`
+values when present, or falls back to `TEXT_INFERENCE_*` so a single
+OpenAI-compatible provider can power both image evidence analysis and structured
+event extraction.
 
 Fixture mode is not a real browser or LLM extractor, and it must not be used as
 a substitute for production collection. Extract mode is the first real
 processor. The browser-backed path captures visible text and image metadata,
-can attach OCR/vision evidence text from a provider adapter, and maps image
+attaches OCR/vision evidence text from the provider adapter, and maps image
 download, OCR, and vision failures into collector failures. Durable runtime
 image storage is still a later enhancement. The shared purpose is to prove that
 the collector machine can queue work, authenticate to Vercel, and upload
@@ -414,7 +418,6 @@ Expected output:
 Remaining work:
 
 - richer browser smoke coverage for the local console page
-- provider-backed OCR/vision implementation beyond the adapter handoff
 - durable runtime image storage for poster and QR assets
 
 ### Slice 5: Polling Worker

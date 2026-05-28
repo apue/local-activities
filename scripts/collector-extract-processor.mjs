@@ -152,6 +152,51 @@ export async function capturePageWithBrowser({
   }
 }
 
+export function createVisionImageAnalyzer({
+  env = process.env,
+  fetchImpl = fetch,
+} = {}) {
+  const config = readVisionAnalyzerConfig(env);
+  if (!config) return undefined;
+
+  return async ({ finalUrl, title, visibleText, images = [] }) => {
+    const imageInputs = images
+      .filter((image) => ["poster", "qr", "article_image"].includes(image.role))
+      .slice(0, 6);
+    if (imageInputs.length === 0) return { evidenceTexts: [] };
+
+    const prompt = buildVisionAnalyzerPrompt({
+      finalUrl,
+      title,
+      visibleText,
+      images: imageInputs,
+    });
+    const response = await fetchImpl(
+      `${config.apiBaseUrl}/${config.endpointStyle === "chat_completions" ? "chat/completions" : "responses"}`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${config.apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(
+          config.endpointStyle === "chat_completions"
+            ? buildVisionChatBody({ config, prompt, imageInputs })
+            : buildVisionResponsesBody({ config, prompt, imageInputs }),
+        ),
+      },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw visionAnalyzerError(`vision_request_failed:${response.status}`);
+    }
+
+    return {
+      evidenceTexts: parseVisionAnalyzerResponse(data),
+    };
+  };
+}
+
 export function mapInferenceToCollectorPayloads({
   collectorId,
   runId,
@@ -322,7 +367,8 @@ export async function runCollectorExtract({
     ? await capturePageWithBrowser({
         seedUrl,
         browserAdapter,
-        imageAnalyzer,
+        imageAnalyzer: imageAnalyzer
+          ?? createVisionImageAnalyzer({ env, fetchImpl }),
         profileDir: config.browserProfileDir,
         now,
       })
@@ -498,6 +544,171 @@ function normalizeEndpointStyle(value) {
   const style = value?.trim() || "responses";
   if (style === "chat-completions") return "chat_completions";
   return style;
+}
+
+function readVisionAnalyzerConfig(env) {
+  const visionConfig = normalizeVisionProviderConfig({
+    apiBaseUrl: env.VISION_INFERENCE_API_BASE_URL,
+    apiKey: env.VISION_INFERENCE_API_KEY,
+    model: env.VISION_INFERENCE_MODEL,
+    endpointStyle: env.VISION_INFERENCE_ENDPOINT_STYLE,
+  });
+  if (visionConfig) return visionConfig;
+
+  const textConfig = normalizeVisionProviderConfig({
+    apiBaseUrl: env.TEXT_INFERENCE_API_BASE_URL,
+    apiKey: env.TEXT_INFERENCE_API_KEY,
+    model: env.TEXT_INFERENCE_MODEL,
+    endpointStyle: env.TEXT_INFERENCE_ENDPOINT_STYLE,
+  });
+  if (textConfig) return textConfig;
+
+  return undefined;
+}
+
+function normalizeVisionProviderConfig({
+  apiBaseUrl: rawApiBaseUrl,
+  apiKey: rawApiKey,
+  model: rawModel,
+  endpointStyle: rawEndpointStyle,
+}) {
+  const apiBaseUrl = (rawApiBaseUrl ?? "").trim().replace(/\/+$/, "");
+  const apiKey = (rawApiKey ?? "").trim();
+  const model = (rawModel ?? "").trim();
+  if (!apiBaseUrl || !apiKey || !model) return undefined;
+  if (
+    isPlaceholder(apiBaseUrl) ||
+    isPlaceholder(apiKey) ||
+    isPlaceholder(model)
+  ) {
+    return undefined;
+  }
+
+  return {
+    apiBaseUrl,
+    apiKey,
+    model,
+    endpointStyle: normalizeEndpointStyle(rawEndpointStyle),
+  };
+}
+
+function buildVisionAnalyzerPrompt({ finalUrl, title, visibleText, images }) {
+  return [
+    "Analyze captured event images for a Beijing cultural activity.",
+    "Return strict JSON with optional keys: ocrText and visionSummary.",
+    "Only summarize visible event facts and registration evidence.",
+    `URL: ${finalUrl}`,
+    `Title: ${title ?? ""}`,
+    `Page text: ${visibleText ?? ""}`,
+    `Images: ${JSON.stringify(images.map((image) => ({
+      sourceUrl: image.sourceUrl,
+      role: image.role,
+      alt: image.alt,
+    })))}`,
+  ].join("\n\n");
+}
+
+function buildVisionResponsesBody({ config, prompt, imageInputs }) {
+  return {
+    model: config.model,
+    input: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: prompt,
+          },
+          ...imageInputs.map((image) => ({
+            type: "input_image",
+            image_url: image.sourceUrl,
+            detail: "auto",
+          })),
+        ],
+      },
+    ],
+  };
+}
+
+function buildVisionChatBody({ config, prompt, imageInputs }) {
+  return {
+    model: config.model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: prompt,
+          },
+          ...imageInputs.map((image) => ({
+            type: "image_url",
+            image_url: {
+              url: image.sourceUrl,
+            },
+          })),
+        ],
+      },
+    ],
+  };
+}
+
+function parseVisionAnalyzerResponse(data) {
+  const text =
+    data.output_text
+    ?? data.choices?.[0]?.message?.content
+    ?? data.output?.[0]?.content?.[0]?.text;
+  if (!text) throw visionAnalyzerError("vision_response_missing_text");
+
+  let parsed;
+  try {
+    parsed = typeof text === "string" ? JSON.parse(text) : text;
+  } catch {
+    throw visionAnalyzerError("vision_response_invalid_json");
+  }
+
+  const evidenceTexts = [];
+  if (Array.isArray(parsed.evidenceTexts)) {
+    evidenceTexts.push(...parsed.evidenceTexts);
+  }
+  if (parsed.ocrText) {
+    evidenceTexts.push({
+      role: "ocr_text",
+      textContent: parsed.ocrText,
+      extractedBy: "ocr",
+      confidence: parsed.ocrConfidence,
+    });
+  }
+  if (parsed.visionSummary) {
+    evidenceTexts.push({
+      role: "vision_summary",
+      textContent: parsed.visionSummary,
+      extractedBy: "vision",
+      confidence: parsed.visionConfidence,
+    });
+  }
+  if (evidenceTexts.length === 0) {
+    throw visionAnalyzerError("vision_response_empty");
+  }
+
+  return evidenceTexts;
+}
+
+function visionAnalyzerError(message) {
+  return Object.assign(new Error(message), {
+    reason: "vision_failed",
+    stage: "vision_extraction",
+    retryable: true,
+  });
+}
+
+function isPlaceholder(value) {
+  return [
+    /^replace-with-/i,
+    /^https:\/\/your-/i,
+    /^provider(?:-[a-z0-9]+)?-model-name$/i,
+    /^collector-side-provider-secret$/i,
+  ].some((pattern) => pattern.test(value));
 }
 
 function buildFailedSourceRun({ collectorId, runId, seedUrl, reason, now }) {

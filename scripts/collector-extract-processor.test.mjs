@@ -14,6 +14,7 @@ import {
   buildExtractionFailure,
   capturePage,
   capturePageWithBrowser,
+  createVisionImageAnalyzer,
   mapInferenceToCollectorPayloads,
   runCollectorExtract,
 } from "./collector-extract-processor.mjs";
@@ -683,6 +684,245 @@ describe("collector extract processor", () => {
     expect(calls.map((call) => call.body.payload?.captureMode)).toContain(
       "image_with_qr_registration",
     );
+  });
+
+  it("builds OCR and vision evidence with an OpenAI-compatible Responses analyzer", async () => {
+    const calls = [];
+    const analyzer = createVisionImageAnalyzer({
+      env: {
+        VISION_INFERENCE_API_BASE_URL: "https://api.openai.com/v1",
+        VISION_INFERENCE_API_KEY: "replace-with-vision-inference-api-key",
+        VISION_INFERENCE_MODEL: "gpt-4.1-mini",
+        TEXT_INFERENCE_API_BASE_URL: "https://llm.example/v1",
+        TEXT_INFERENCE_API_KEY: "vision-secret",
+        TEXT_INFERENCE_MODEL: "vision-model",
+      },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init, body: JSON.parse(init.body) });
+        return jsonResponse({
+          output_text: JSON.stringify({
+            ocrText: "OCR title: Browser Poster Event",
+            visionSummary: "Vision summary: poster event with QR registration.",
+          }),
+        });
+      },
+    });
+
+    const result = await analyzer({
+      finalUrl: "https://mp.weixin.qq.com/s/image",
+      title: "Browser Poster Event",
+      visibleText: "Poster with QR",
+      images: [
+        {
+          sourceUrl: "https://example.org/poster.png",
+          role: "poster",
+        },
+        {
+          sourceUrl: "https://example.org/qr.png",
+          role: "qr",
+        },
+      ],
+    });
+
+    expect(calls[0]).toMatchObject({
+      url: "https://llm.example/v1/responses",
+      body: {
+        model: "vision-model",
+      },
+    });
+    expect(calls[0].body.input[0].content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "input_image",
+          image_url: "https://example.org/poster.png",
+        }),
+        expect.objectContaining({
+          type: "input_image",
+          image_url: "https://example.org/qr.png",
+        }),
+      ]),
+    );
+    expect(result.evidenceTexts).toEqual([
+      expect.objectContaining({ role: "ocr_text", extractedBy: "ocr" }),
+      expect.objectContaining({
+        role: "vision_summary",
+        extractedBy: "vision",
+      }),
+    ]);
+    expect(JSON.stringify(calls[0].body)).not.toContain("vision-secret");
+  });
+
+  it("supports chat-completions image analyzer requests", async () => {
+    const calls = [];
+    const analyzer = createVisionImageAnalyzer({
+      env: {
+        VISION_INFERENCE_API_BASE_URL: "https://vision.example/v1",
+        VISION_INFERENCE_API_KEY: "vision-secret",
+        VISION_INFERENCE_MODEL: "vision-model",
+        VISION_INFERENCE_ENDPOINT_STYLE: "chat-completions",
+      },
+      fetchImpl: async (url, init) => {
+        calls.push({ url, body: JSON.parse(init.body) });
+        return jsonResponse({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  visionSummary: "Vision summary from chat.",
+                }),
+              },
+            },
+          ],
+        });
+      },
+    });
+
+    await analyzer({
+      finalUrl: "https://mp.weixin.qq.com/s/image",
+      images: [
+        {
+          sourceUrl: "https://example.org/poster.png",
+          role: "poster",
+        },
+      ],
+    });
+
+    expect(calls[0]).toMatchObject({
+      url: "https://vision.example/v1/chat/completions",
+      body: {
+        model: "vision-model",
+        messages: [
+          expect.objectContaining({
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                type: "image_url",
+                image_url: { url: "https://example.org/poster.png" },
+              }),
+            ]),
+          }),
+        ],
+      },
+    });
+  });
+
+  it("runs browser extract with the default vision analyzer without leaking keys", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
+      if (url === "https://llm.example/v1/responses") {
+        const inputText = JSON.stringify(calls.at(-1).body.input);
+        if (inputText.includes("Analyze captured event images")) {
+          return jsonResponse({
+            output_text: JSON.stringify({
+              visionSummary: "Vision summary: default analyzer event.",
+            }),
+          });
+        }
+        return jsonResponse({
+          output_text: JSON.stringify({
+            disposition: "needs_review",
+            captureMode: "image_dominant",
+            title: "Default Analyzer Event",
+            city: "Beijing",
+            timezone: "Asia/Shanghai",
+            fieldEvidence: { title: ["vision_summary"] },
+            confidence: 0.76,
+          }),
+        });
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorExtract({
+      env: {
+        COLLECTOR_BASE_URL: "https://local-activities.example",
+        COLLECTOR_API_KEY: "collector-secret",
+        COLLECTOR_ID: "home-1",
+        COLLECTOR_CAPTURE_ADAPTER: "browser",
+        TEXT_INFERENCE_API_KEY: "llm-secret",
+        TEXT_INFERENCE_API_BASE_URL: "https://llm.example/v1",
+        TEXT_INFERENCE_MODEL: "vision-model",
+      },
+      seedUrl: "https://mp.weixin.qq.com/s/image",
+      runId: "vision-run",
+      fetchImpl,
+      browserAdapter: async () => ({
+        finalUrl: "https://mp.weixin.qq.com/s/image",
+        title: "Default Analyzer Event",
+        visibleText: "Poster only",
+        images: [
+          {
+            sourceUrl: "https://example.org/poster.png",
+            alt: "poster",
+          },
+        ],
+      }),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(result.uploadedIds).toMatchObject({
+      evidenceAssetIds: ["id-4", "id-5"],
+      eventDraftId: "id-7",
+    });
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://llm.example/v1/responses",
+      "https://llm.example/v1/responses",
+      "https://local-activities.example/api/collector/source-run",
+      "https://local-activities.example/api/collector/evidence-asset",
+      "https://local-activities.example/api/collector/evidence-asset",
+      "https://local-activities.example/api/collector/article-snapshot",
+      "https://local-activities.example/api/collector/event-draft",
+    ]);
+    expect(JSON.stringify(calls.map((call) => call.body))).not.toContain(
+      "llm-secret",
+    );
+  });
+
+  it("uploads a structured vision failure when analyzer output is malformed", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
+      if (url === "https://llm.example/v1/responses") {
+        return jsonResponse({ output_text: "not json" });
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorExtract({
+      env: {
+        COLLECTOR_BASE_URL: "https://local-activities.example",
+        COLLECTOR_API_KEY: "collector-secret",
+        COLLECTOR_ID: "home-1",
+        COLLECTOR_CAPTURE_ADAPTER: "browser",
+        TEXT_INFERENCE_API_KEY: "llm-secret",
+        TEXT_INFERENCE_API_BASE_URL: "https://llm.example/v1",
+        TEXT_INFERENCE_MODEL: "vision-model",
+      },
+      seedUrl: "https://mp.weixin.qq.com/s/image",
+      runId: "vision-failure",
+      fetchImpl,
+      browserAdapter: async () => ({
+        finalUrl: "https://mp.weixin.qq.com/s/image",
+        title: "Bad Vision Event",
+        visibleText: "Poster only",
+        images: [
+          {
+            sourceUrl: "https://example.org/poster.png",
+            alt: "poster",
+          },
+        ],
+      }),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(result.uploadedIds).toMatchObject({
+      sourceRunId: "id-2",
+      failureId: "id-3",
+    });
+    expect(calls[2].body.payload).toMatchObject({
+      stage: "vision_extraction",
+      reason: "vision_failed",
+    });
   });
 
   it("returns agent_config_missing when extract processor is missing inference config", async () => {

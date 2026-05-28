@@ -191,6 +191,13 @@ TEXT_INFERENCE_API_BASE_URL=https://your-agent-or-llm-api.example/v1
 TEXT_INFERENCE_API_KEY=collector-side-provider-secret
 TEXT_INFERENCE_MODEL=provider-model-name
 TEXT_INFERENCE_ENDPOINT_STYLE=chat-completions
+
+# Optional. If omitted, browser-backed image analysis falls back to TEXT_INFERENCE_*.
+VISION_INFERENCE_PROVIDER=openai-compatible
+VISION_INFERENCE_API_BASE_URL=https://your-vision-or-llm-api.example/v1
+VISION_INFERENCE_API_KEY=collector-side-provider-secret
+VISION_INFERENCE_MODEL=provider-vision-model-name
+VISION_INFERENCE_ENDPOINT_STYLE=responses
 ```
 
 The collector may also use `EXA_API_KEY`, `SERPER_API_KEY`, or `FIRECRAWL_API_KEY` if an implementation slice adopts those providers for search or crawl assistance.
@@ -332,8 +339,13 @@ is controlled by `COLLECTOR_POLL_INTERVAL_SECONDS`,
 
 Extraction mode requires the collector-side `TEXT_INFERENCE_*` variables. If
 they are missing, the local run fails as `agent_config_missing` without printing
-provider secrets. Browser-backed capture requires Playwright and a Chromium
-browser installed on the collector machine, for example
+provider secrets. Browser-backed image OCR/vision analysis uses
+`VISION_INFERENCE_*` when present and otherwise reuses `TEXT_INFERENCE_*`.
+Both `responses` and `chat_completions` endpoint styles are supported through
+OpenAI-compatible request shapes. Provider keys stay on the collector machine
+and are never uploaded as collector payload data. Browser-backed capture
+requires Playwright and a Chromium browser installed on the collector machine,
+for example
 `pnpm exec playwright install chromium` after dependencies are available.
 Durable runtime image storage remains a later enhancement; the browser-backed
 path currently uploads normalized image, OCR, and vision evidence metadata.
