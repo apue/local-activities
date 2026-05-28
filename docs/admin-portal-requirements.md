@@ -162,6 +162,8 @@ The MVP focus is quality control, not historical reporting.
 
 The add-seed flow accepts an official WeChat article URL or official webpage URL and an optional operator note. It queues backend validation and collection work. The portal must not assume a pasted URL is a valid source, a valid activity, or safe to publish.
 
+Production seed URL collection should create Vercel collector jobs for the home-machine collector to claim, as defined in [Local Collector Console And Job Queue Spec](local-collector-console.md).
+
 ## Data And State Rules
 
 - Event drafts are not canonical events.
