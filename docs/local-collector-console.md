@@ -81,6 +81,21 @@ Recommended local behavior:
 - Local run artifacts are retained long enough for debugging.
 - A failed run can be retried with the same seed URL and a new run ID.
 
+Before the browser-based collector lands, the repository includes a fixture
+smoke command that exercises the same Vercel collector API boundary:
+
+```bash
+pnpm collector:fixture --env-file .env --seed-url "https://mp.weixin.qq.com/s/example"
+pnpm collector:fixture --env-file .env --claim-once --fixture ready-event
+pnpm collector:fixture --env-file .env --claim-once --fixture failure
+```
+
+The command uploads deterministic source-run, article-snapshot, draft, or
+failure payloads. It is not a real browser or LLM extractor, and it must not be
+used as a substitute for production collection. Its purpose is to prove that the
+collector machine can authenticate to Vercel, upload normalized objects, and
+report a claimed job without direct Supabase access.
+
 ## Vercel Collector Job Queue
 
 The Vercel app stores collector jobs created by the admin portal or backend workflows. The home collector polls Vercel to claim jobs.

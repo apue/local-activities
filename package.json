@@ -12,6 +12,7 @@
     "build": "next build",
     "start": "next start",
     "env:check": "node scripts/env-inventory.mjs",
+    "collector:fixture": "node scripts/collector-fixture-run.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
