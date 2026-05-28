@@ -18,8 +18,10 @@ The prototype is intentionally isolated from the production Next.js app. It focu
 
 - small overview of what needs attention
 - event draft inbox
+- event draft review modal with editable publish fields
 - source health list
 - recent collector runs
+- source and run error detail modal
 - published event sanity list
 
 It does not implement production admin routes, authentication, analytics, collector APIs, or database integration.

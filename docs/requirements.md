@@ -31,6 +31,8 @@ The primary user checks the product on Thursday or Friday to decide what to do o
 
 ## Admin Requirements
 
+Detailed admin portal behavior is defined in [Admin Portal Requirements](admin-portal-requirements.md).
+
 - Add a seed URL from an official WeChat article or official webpage.
 - Parse the seed article into a candidate activity and candidate source.
 - Track source health using a small state model:
