@@ -92,16 +92,18 @@ pnpm collector:fixture --env-file .env --claim-once --fixture failure
 ```
 
 The local console command starts a local-only web service with Vercel job
-polling, a JSON-backed queue, and one-at-a-time worker. In the current skeleton
-it uses `LOCAL_COLLECTOR_PROCESSOR=fixture`, which uploads deterministic
-source-run, article-snapshot, and draft payloads through the existing collector
-API boundary, then reports claimed Vercel jobs. The fixture commands can still
-be used for direct API checks.
+polling, a JSON-backed queue, and one-at-a-time worker. Use
+`LOCAL_COLLECTOR_PROCESSOR=fixture` for deterministic source-run,
+article-snapshot, and draft uploads through the existing collector API boundary.
+Use `LOCAL_COLLECTOR_PROCESSOR=extract` for the first real HTTP/HTML capture and
+collector-side text-inference extraction path.
 
 Fixture mode is not a real browser or LLM extractor, and it must not be used as
-a substitute for production collection. Its purpose is to prove that the
-collector machine can queue work, authenticate to Vercel, and upload normalized
-objects without direct Supabase access.
+a substitute for production collection. Extract mode is the first real
+processor, but browser-heavy WeChat scrolling and durable image storage are
+still later enhancements. The shared purpose is to prove that the collector
+machine can queue work, authenticate to Vercel, and upload normalized objects
+without direct Supabase access.
 
 ## Vercel Collector Job Queue
 
@@ -400,7 +402,8 @@ Expected output:
 Remaining work:
 
 - richer browser smoke coverage for the local console page
-- real browser/LLM extraction processor to replace fixture mode
+- browser-backed capture for lazy-loaded WeChat images
+- durable runtime image storage for poster and QR assets
 
 ### Slice 5: Polling Worker
 
@@ -418,7 +421,7 @@ Expected output:
 Remaining work:
 
 - richer lease recovery behavior after interrupted local processes
-- real browser/LLM extraction processor to replace fixture mode
+- browser-backed capture for lazy-loaded WeChat pages
 
 ### Slice 6: Admin Portal Job Visibility
 

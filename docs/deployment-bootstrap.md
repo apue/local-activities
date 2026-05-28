@@ -291,8 +291,9 @@ pnpm run collector:console
 
 The current implementation starts one long-running local service that includes
 the local operator console, JSON-backed local queue, Vercel job polling, and a
-one-at-a-time worker. It uses `LOCAL_COLLECTOR_PROCESSOR=fixture` as the
-temporary processor until the real browser/LLM extractor lands.
+one-at-a-time worker. `LOCAL_COLLECTOR_PROCESSOR=fixture` keeps deterministic
+smoke behavior, while `LOCAL_COLLECTOR_PROCESSOR=extract` enables the first real
+HTTP/HTML capture plus text-inference extraction processor.
 
 The local console should default to localhost. If exposed on the LAN for convenience, it should require `LOCAL_COLLECTOR_CONSOLE_TOKEN`.
 
@@ -307,6 +308,12 @@ Polling is enabled by default when the collector runtime starts. Use
 `COLLECTOR_POLLING_ENABLED=false` for local console-only debugging. Poll cadence
 is controlled by `COLLECTOR_POLL_INTERVAL_SECONDS`,
 `COLLECTOR_ERROR_BACKOFF_SECONDS`, and `COLLECTOR_CAPABILITIES`.
+
+Extraction mode requires the collector-side `TEXT_INFERENCE_*` variables. If
+they are missing, the local run fails as `agent_config_missing` without printing
+provider secrets. Browser-heavy WeChat scrolling and durable runtime image
+storage remain later extractor enhancements; the first extract processor uses
+HTTP/HTML capture and retained image metadata.
 
 ## Runtime Flow
 
@@ -417,13 +424,14 @@ pnpm run collector
 pnpm run collector:console
 ```
 
-The current local console command uses Vercel polling, the fixture processor,
-and JSON local queue. Until the real browser/LLM collector lands, use it or the
-fixture smoke command to prove collector API connectivity from the target
-machine:
+The current local console command uses Vercel polling and JSON local queue.
+Use `LOCAL_COLLECTOR_PROCESSOR=fixture` for deterministic API connectivity
+checks, or `LOCAL_COLLECTOR_PROCESSOR=extract` for HTTP/HTML capture plus
+collector-side text inference:
 
 ```bash
 pnpm collector:console --env-file .env
+LOCAL_COLLECTOR_PROCESSOR=extract pnpm collector:console --env-file .env
 pnpm collector:fixture --env-file .env --seed-url "https://mp.weixin.qq.com/s/example"
 pnpm collector:fixture --env-file .env --claim-once --fixture ready-event
 ```
