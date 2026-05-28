@@ -103,15 +103,19 @@ The local console command starts a local-only web service with Vercel job
 polling, a JSON-backed queue, and one-at-a-time worker. Use
 `LOCAL_COLLECTOR_PROCESSOR=fixture` for deterministic source-run,
 article-snapshot, and draft uploads through the existing collector API boundary.
-Use `LOCAL_COLLECTOR_PROCESSOR=extract` for the first real HTTP/HTML capture and
-collector-side text-inference extraction path.
+Use `LOCAL_COLLECTOR_PROCESSOR=extract` for the first real capture and
+collector-side text-inference extraction path. Set
+`COLLECTOR_CAPTURE_ADAPTER=browser` with extract mode to use the browser-backed
+persistent-profile capture path for lazy-loaded images and poster/QR evidence.
 
 Fixture mode is not a real browser or LLM extractor, and it must not be used as
 a substitute for production collection. Extract mode is the first real
-processor, but browser-heavy WeChat scrolling and durable image storage are
-still later enhancements. The shared purpose is to prove that the collector
-machine can queue work, authenticate to Vercel, and upload normalized objects
-without direct Supabase access.
+processor. The browser-backed path captures visible text and image metadata,
+can attach OCR/vision evidence text from a provider adapter, and maps image
+download, OCR, and vision failures into collector failures. Durable runtime
+image storage is still a later enhancement. The shared purpose is to prove that
+the collector machine can queue work, authenticate to Vercel, and upload
+normalized objects without direct Supabase access.
 
 ## Vercel Collector Job Queue
 
@@ -410,7 +414,7 @@ Expected output:
 Remaining work:
 
 - richer browser smoke coverage for the local console page
-- browser-backed capture for lazy-loaded WeChat images
+- provider-backed OCR/vision implementation beyond the adapter handoff
 - durable runtime image storage for poster and QR assets
 
 ### Slice 5: Polling Worker
@@ -429,7 +433,7 @@ Expected output:
 Remaining work:
 
 - richer lease recovery behavior after interrupted local processes
-- browser-backed capture for lazy-loaded WeChat pages
+- real-machine browser smoke for lazy-loaded WeChat pages
 
 ### Slice 6: Admin Portal Job Visibility
 

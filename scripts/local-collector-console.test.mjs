@@ -726,6 +726,7 @@ describe("local collector console runtime", () => {
 
     expect(help).toContain("pnpm collector:console");
     expect(help).toContain("LOCAL_COLLECTOR_PROCESSOR=fixture");
+    expect(help).toContain("COLLECTOR_CAPTURE_ADAPTER=http or browser");
     expect(help).toContain("COLLECTOR_POLLING_ENABLED");
     expect(help).toContain("COLLECTOR_POLL_INTERVAL_SECONDS");
     expect(help).toContain("COLLECTOR_CAPABILITIES");

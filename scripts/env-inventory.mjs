@@ -87,6 +87,7 @@ export const targets = {
       "EXA_API_KEY",
       "SERPER_API_KEY",
       "FIRECRAWL_API_KEY",
+      "COLLECTOR_CAPTURE_ADAPTER",
     ],
   },
 };

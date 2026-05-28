@@ -104,7 +104,7 @@ Both the developer machine and collector machine should support:
 - Git
 - Vercel CLI for the machine that manages Vercel project configuration
 - Supabase CLI for schema and local database work
-- Playwright browser dependencies after the collector implementation lands
+- Playwright and Chromium browser dependencies for browser-backed collector capture
 
 The Vercel project should be linked to the GitHub repository so PRs create preview deployments and `main` creates production deployments.
 
@@ -182,6 +182,8 @@ COLLECTOR_API_KEY=same-long-random-secret-as-vercel
 COLLECTOR_ID=home-192-168-0-16
 COLLECTOR_INTERVAL_HOURS=4
 COLLECTOR_BROWSER_PROFILE_DIR=.collector-profile
+LOCAL_COLLECTOR_PROCESSOR=extract
+COLLECTOR_CAPTURE_ADAPTER=browser
 LOCAL_COLLECTOR_CONSOLE_TOKEN=optional-local-console-token
 
 TEXT_INFERENCE_PROVIDER=openai-compatible
@@ -289,6 +291,8 @@ values, especially:
 - `COLLECTOR_API_KEY`
 - `COLLECTOR_ID`
 - `COLLECTOR_BROWSER_PROFILE_DIR`
+- `LOCAL_COLLECTOR_PROCESSOR`
+- `COLLECTOR_CAPTURE_ADAPTER`
 - `TEXT_INFERENCE_API_BASE_URL`
 - `TEXT_INFERENCE_API_KEY`
 - `TEXT_INFERENCE_MODEL`
@@ -305,7 +309,10 @@ The current implementation starts one long-running local service that includes
 the local operator console, JSON-backed local queue, Vercel job polling, and a
 one-at-a-time worker. `LOCAL_COLLECTOR_PROCESSOR=fixture` keeps deterministic
 smoke behavior, while `LOCAL_COLLECTOR_PROCESSOR=extract` enables the first real
-HTTP/HTML capture plus text-inference extraction processor.
+capture plus text-inference extraction processor.
+Set `COLLECTOR_CAPTURE_ADAPTER=browser` on the collector machine to use the
+Playwright-backed persistent-profile capture path for lazy-loaded image pages;
+leave it as `http` only for lightweight debugging.
 
 The local console should default to localhost. If exposed on the LAN for convenience, it should require `LOCAL_COLLECTOR_CONSOLE_TOKEN`.
 
@@ -314,7 +321,7 @@ Example startup:
 ```bash
 pnpm env:check --target collector --env-file .env
 pnpm collector:console --env-file .env
-LOCAL_COLLECTOR_PROCESSOR=extract pnpm collector:console --env-file .env
+COLLECTOR_CAPTURE_ADAPTER=browser LOCAL_COLLECTOR_PROCESSOR=extract pnpm collector:console --env-file .env
 pnpm collector:console --help
 ```
 
@@ -325,9 +332,11 @@ is controlled by `COLLECTOR_POLL_INTERVAL_SECONDS`,
 
 Extraction mode requires the collector-side `TEXT_INFERENCE_*` variables. If
 they are missing, the local run fails as `agent_config_missing` without printing
-provider secrets. Browser-heavy WeChat scrolling and durable runtime image
-storage remain later extractor enhancements; the first extract processor uses
-HTTP/HTML capture and retained image metadata.
+provider secrets. Browser-backed capture requires Playwright and a Chromium
+browser installed on the collector machine, for example
+`pnpm exec playwright install chromium` after dependencies are available.
+Durable runtime image storage remains a later enhancement; the browser-backed
+path currently uploads normalized image, OCR, and vision evidence metadata.
 
 ## Runtime Flow
 
@@ -440,14 +449,15 @@ pnpm run collector:console
 
 The current local console command uses Vercel polling and JSON local queue.
 Use `LOCAL_COLLECTOR_PROCESSOR=fixture` for deterministic API connectivity
-checks, or `LOCAL_COLLECTOR_PROCESSOR=extract` for HTTP/HTML capture plus
+checks, or `LOCAL_COLLECTOR_PROCESSOR=extract` with
+`COLLECTOR_CAPTURE_ADAPTER=browser` for persistent-profile browser capture plus
 collector-side text inference:
 
 ```bash
 pnpm collector:bootstrap-env --env-file .env.local --collector-host 192.168.0.16 --output .env
 pnpm env:check --target collector --env-file .env
 pnpm collector:console --env-file .env
-LOCAL_COLLECTOR_PROCESSOR=extract pnpm collector:console --env-file .env
+COLLECTOR_CAPTURE_ADAPTER=browser LOCAL_COLLECTOR_PROCESSOR=extract pnpm collector:console --env-file .env
 pnpm collector:fixture --env-file .env --seed-url "https://mp.weixin.qq.com/s/example"
 pnpm collector:fixture --env-file .env --claim-once --fixture ready-event
 ```

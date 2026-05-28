@@ -13,6 +13,7 @@ import {
 import {
   buildExtractionFailure,
   capturePage,
+  capturePageWithBrowser,
   mapInferenceToCollectorPayloads,
   runCollectorExtract,
 } from "./collector-extract-processor.mjs";
@@ -73,6 +74,163 @@ describe("collector extract processor", () => {
     expect(imageQr.captureModeHint).toBe("image_with_qr_registration");
   });
 
+  it("captures the four source patterns through a browser-backed adapter", async () => {
+    const pages = {
+      text: {
+        title: "Browser Text Event",
+        visibleText: "Browser Text Event at Fixture Hall",
+        images: [],
+      },
+      qr: {
+        title: "Browser QR Event",
+        visibleText:
+          "Browser QR Event register using this QR code. The page includes date, venue, organizer, and public registration instructions in text.",
+        images: [
+          {
+            sourceUrl: "https://example.org/register-qr.png",
+            alt: "registration QR",
+            width: 240,
+            height: 240,
+          },
+        ],
+      },
+      image: {
+        title: "Browser Poster Event",
+        visibleText: "Poster only",
+        images: [
+          {
+            sourceUrl: "https://example.org/event-poster.png",
+            alt: "invitation poster",
+            width: 900,
+            height: 1200,
+          },
+        ],
+      },
+      imageQr: {
+        title: "Browser Poster QR Event",
+        visibleText: "Poster with QR",
+        images: [
+          {
+            sourceUrl: "https://example.org/invitation-poster.png",
+            alt: "invitation poster",
+            width: 900,
+            height: 1200,
+          },
+          {
+            sourceUrl: "https://example.org/register-qr.png",
+            alt: "registration QR",
+            width: 240,
+            height: 240,
+          },
+        ],
+      },
+    };
+    const browserAdapter = vi.fn(async ({ seedUrl }) => {
+      const key = seedUrl.split("/").pop();
+      return {
+        finalUrl: seedUrl,
+        ...pages[key],
+      };
+    });
+
+    const captures = await Promise.all(
+      ["text", "qr", "image", "imageQr"].map((key) =>
+        capturePageWithBrowser({
+          seedUrl: `https://mp.weixin.qq.com/s/${key}`,
+          browserAdapter,
+          profileDir: ".collector-profile",
+          now: new Date("2026-05-28T10:00:00.000Z"),
+        }),
+      ),
+    );
+
+    expect(captures.map((capture) => capture.captureModeHint)).toEqual([
+      "text_complete",
+      "text_with_qr_registration",
+      "image_dominant",
+      "image_with_qr_registration",
+    ]);
+    expect(browserAdapter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        seedUrl: "https://mp.weixin.qq.com/s/text",
+        profileDir: ".collector-profile",
+      }),
+    );
+    expect(captures[3].images).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: "poster" }),
+        expect.objectContaining({ role: "qr" }),
+      ]),
+    );
+  });
+
+  it("maps browser OCR and vision evidence into collector evidence assets", async () => {
+    const capture = await capturePageWithBrowser({
+      seedUrl: "https://mp.weixin.qq.com/s/image",
+      browserAdapter: async () => ({
+        finalUrl: "https://mp.weixin.qq.com/s/image",
+        title: "Poster Event",
+        visibleText: "Poster only",
+        images: [
+          {
+            sourceUrl: "https://example.org/event-poster.png",
+            alt: "invitation poster",
+            width: 900,
+            height: 1200,
+          },
+        ],
+      }),
+      imageAnalyzer: async () => ({
+        evidenceTexts: [
+          {
+            role: "ocr_text",
+            textContent: "OCR title: Poster Event",
+            extractedBy: "ocr",
+            confidence: 0.7,
+          },
+          {
+            role: "vision_summary",
+            textContent: "Vision summary: poster event in Beijing.",
+            extractedBy: "vision",
+            confidence: 0.82,
+          },
+        ],
+      }),
+      profileDir: ".collector-profile",
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+    const payloads = mapInferenceToCollectorPayloads({
+      collectorId: "home-1",
+      runId: "browser-evidence",
+      now: new Date("2026-05-28T10:00:00.000Z"),
+      capture,
+      inference: {
+        disposition: "needs_review",
+        captureMode: "image_dominant",
+        title: "Poster Event",
+        city: "Beijing",
+        timezone: "Asia/Shanghai",
+        fieldEvidence: { title: ["ocr_text", "vision_summary"] },
+        confidence: 0.72,
+      },
+    });
+
+    expect(payloads.evidenceAssets.map((asset) => asset.payload.role)).toEqual([
+      "poster",
+      "ocr_text",
+      "vision_summary",
+    ]);
+    for (const asset of payloads.evidenceAssets) {
+      expect(() =>
+        collectorEnvelopeSchema(evidenceAssetSchema).parse(asset),
+      ).not.toThrow();
+    }
+    expect(payloads.eventDraft?.payload).toMatchObject({
+      signals: ["image_dominant"],
+      fieldEvidence: { title: ["ocr_text", "vision_summary"] },
+    });
+  });
+
   it("maps blocked, timeout, login, and captcha capture failures", async () => {
     const blocked = await capturePage({
       seedUrl: "https://mp.weixin.qq.com/s/blocked",
@@ -102,6 +260,76 @@ describe("collector extract processor", () => {
       kind: "failure",
       reason: "captcha_required",
     });
+  });
+
+  it("maps browser, image download, OCR, and vision failures to structured capture failures", async () => {
+    const cases = [
+      {
+        error: Object.assign(new Error("browser unavailable"), {
+          reason: "unsupported",
+          stage: "page_fetch",
+        }),
+        expected: { reason: "unsupported", stage: "page_fetch" },
+      },
+      {
+        error: Object.assign(new Error("image failed"), {
+          reason: "image_download_failed",
+          stage: "image_capture",
+        }),
+        expected: { reason: "image_download_failed", stage: "image_capture" },
+        fromAnalyzer: true,
+      },
+      {
+        error: Object.assign(new Error("ocr failed"), {
+          reason: "ocr_failed",
+          stage: "ocr",
+        }),
+        expected: { reason: "ocr_failed", stage: "ocr" },
+        fromAnalyzer: true,
+      },
+      {
+        error: Object.assign(new Error("vision failed"), {
+          reason: "vision_failed",
+          stage: "vision_extraction",
+        }),
+        expected: { reason: "vision_failed", stage: "vision_extraction" },
+        fromAnalyzer: true,
+      },
+    ];
+
+    for (const item of cases) {
+      const capture = await capturePageWithBrowser({
+        seedUrl: "https://mp.weixin.qq.com/s/failure",
+        browserAdapter: item.fromAnalyzer
+          ? async () => ({
+              finalUrl: "https://mp.weixin.qq.com/s/failure",
+              title: "Failure",
+              visibleText: "Failure",
+              images: [
+                {
+                  sourceUrl: "https://example.org/poster.png",
+                  alt: "poster",
+                },
+              ],
+            })
+          : async () => {
+              throw item.error;
+            },
+        imageAnalyzer: item.fromAnalyzer
+          ? async () => {
+              throw item.error;
+            }
+          : undefined,
+        profileDir: ".collector-profile",
+        now: new Date("2026-05-28T10:00:00.000Z"),
+      });
+
+      expect(capture).toMatchObject({
+        kind: "failure",
+        ...item.expected,
+        retryable: true,
+      });
+    }
   });
 
   it("maps inferred text event drafts into normalized collector payloads", () => {
@@ -366,6 +594,95 @@ describe("collector extract processor", () => {
       .not.toContain("llm-secret");
     expect(JSON.stringify({ bodies: calls.map((call) => call.body), result }))
       .not.toContain("collector-secret");
+  });
+
+  it("runs the browser-backed extract path through upload APIs", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
+      if (url === "https://llm.example/v1/responses") {
+        return jsonResponse({
+          output_text: JSON.stringify({
+            disposition: "needs_review",
+            captureMode: "image_with_qr_registration",
+            title: "Browser Poster QR Event",
+            city: "Beijing",
+            timezone: "Asia/Shanghai",
+            fieldEvidence: { title: ["vision_summary"] },
+            confidence: 0.7,
+          }),
+        });
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorExtract({
+      env: {
+        COLLECTOR_BASE_URL: "https://local-activities.example",
+        COLLECTOR_API_KEY: "collector-secret",
+        COLLECTOR_ID: "home-1",
+        COLLECTOR_CAPTURE_ADAPTER: "browser",
+        COLLECTOR_BROWSER_PROFILE_DIR: ".collector-profile",
+        TEXT_INFERENCE_API_KEY: "llm-secret",
+        TEXT_INFERENCE_API_BASE_URL: "https://llm.example/v1",
+        TEXT_INFERENCE_MODEL: "fixture-model",
+      },
+      seedUrl: "https://mp.weixin.qq.com/s/image-qr",
+      runId: "browser-run",
+      fetchImpl,
+      browserAdapter: async () => ({
+        finalUrl: "https://mp.weixin.qq.com/s/image-qr",
+        title: "Browser Poster QR Event",
+        visibleText: "Poster with QR",
+        images: [
+          {
+            sourceUrl: "https://example.org/invitation-poster.png",
+            alt: "poster",
+            width: 900,
+            height: 1200,
+          },
+          {
+            sourceUrl: "https://example.org/register-qr.png",
+            alt: "QR",
+            width: 240,
+            height: 240,
+          },
+        ],
+      }),
+      imageAnalyzer: async () => ({
+        evidenceTexts: [
+          {
+            role: "vision_summary",
+            textContent: "Poster QR event in Beijing.",
+            extractedBy: "vision",
+            confidence: 0.8,
+          },
+        ],
+      }),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(result).toMatchObject({
+      kind: "uploaded",
+      uploadedIds: {
+        sourceRunId: "id-2",
+        evidenceAssetIds: ["id-3", "id-4", "id-5"],
+        articleSnapshotId: "id-6",
+        eventDraftId: "id-7",
+      },
+    });
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://llm.example/v1/responses",
+      "https://local-activities.example/api/collector/source-run",
+      "https://local-activities.example/api/collector/evidence-asset",
+      "https://local-activities.example/api/collector/evidence-asset",
+      "https://local-activities.example/api/collector/evidence-asset",
+      "https://local-activities.example/api/collector/article-snapshot",
+      "https://local-activities.example/api/collector/event-draft",
+    ]);
+    expect(calls.map((call) => call.body.payload?.captureMode)).toContain(
+      "image_with_qr_registration",
+    );
   });
 
   it("returns agent_config_missing when extract processor is missing inference config", async () => {
