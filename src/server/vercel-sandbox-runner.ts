@@ -19,10 +19,14 @@ export type SandboxAgentRunnerPayload = {
     token: string;
     model?: string;
   };
+  repository: {
+    url: string;
+    gitRef?: string;
+  };
 };
 
 export type SandboxAgentCommand = {
-  command: "node";
+  command: "bash";
   args: string[];
   cwd: string;
   env: Record<string, string>;
@@ -34,15 +38,13 @@ export type VercelSandboxClient = {
     tags: Record<string, string>;
   }): Promise<{
     sandboxId: string;
-    runCommand(
-      command: string,
-      args: string[],
-      options: {
-        cwd: string;
-        env: Record<string, string>;
-        wait: boolean;
-      },
-    ): Promise<{ exitCode?: number | null }>;
+    runCommand(params: {
+      cmd: string;
+      args: string[];
+      cwd: string;
+      env: Record<string, string>;
+      detached: boolean;
+    }): Promise<{ exitCode?: number | null; cmdId?: string }>;
   }>;
 };
 
@@ -60,6 +62,8 @@ export function buildSandboxAgentRunnerPayload(input: {
   agentBaseUrl: string;
   agentApiKey: string;
   agentModel?: string;
+  repositoryUrl?: string;
+  gitRef?: string;
   collectorId: string;
   scopedIngestToken: string;
   scopedIngestTokenExpiresAt: string;
@@ -84,26 +88,44 @@ export function buildSandboxAgentRunnerPayload(input: {
       token: input.agentApiKey,
       model: input.agentModel,
     },
+    repository: {
+      url:
+        input.repositoryUrl?.trim() ||
+        "https://github.com/apue/local-activities.git",
+      gitRef: input.gitRef?.trim() || undefined,
+    },
   };
 }
 
 export function buildSandboxAgentCommand(
   payload: SandboxAgentRunnerPayload,
 ): SandboxAgentCommand {
-  const code = [
-    "import { runCollectorAgent } from './scripts/collector-agent-processor.mjs';",
-    "await runCollectorAgent({",
-    "  seedUrl: process.env.COLLECTOR_SEED_URL,",
-    "  runId: process.env.COLLECTOR_RUN_ID,",
-    "  vercelJobId: process.env.COLLECTOR_JOB_ID,",
-    "});",
+  const code = `import { runCollectorAgent } from './scripts/collector-agent-processor.mjs';
+await runCollectorAgent({
+  seedUrl: process.env.COLLECTOR_SEED_URL,
+  runId: process.env.COLLECTOR_RUN_ID,
+  vercelJobId: process.env.COLLECTOR_JOB_ID,
+});`;
+  const script = [
+    "set -euo pipefail",
+    "rm -rf local-activities",
+    'git clone --depth 1 "$COLLECTOR_REPOSITORY_URL" local-activities',
+    "cd local-activities",
+    'if [ -n "${COLLECTOR_GIT_REF:-}" ]; then git fetch --depth 1 origin "$COLLECTOR_GIT_REF" && git checkout FETCH_HEAD; fi',
+    "corepack enable",
+    "pnpm install --frozen-lockfile",
+    `node --input-type=module -e ${shellQuote(code)}`,
   ].join("\n");
 
   return {
-    command: "node",
-    args: ["--input-type=module", "-e", code],
+    command: "bash",
+    args: ["-lc", script],
     cwd: "/home/vercel-sandbox",
     env: {
+      COLLECTOR_REPOSITORY_URL: payload.repository.url,
+      ...(payload.repository.gitRef
+        ? { COLLECTOR_GIT_REF: payload.repository.gitRef }
+        : {}),
       COLLECTOR_BASE_URL: payload.ingest.baseUrl,
       COLLECTOR_ID: payload.ingest.collectorId,
       COLLECTOR_API_KEY: payload.ingest.token,
@@ -139,18 +161,25 @@ export async function runVercelSandboxAgentJob(input: {
   });
 
   const command = buildSandboxAgentCommand(input.payload);
-  const result = await sandbox.runCommand(command.command, command.args, {
+  const result = await sandbox.runCommand({
+    cmd: command.command,
+    args: command.args,
     cwd: command.cwd,
     env: command.env,
-    wait: true,
+    detached: true,
   });
 
   return {
     sandboxId: sandbox.sandboxId,
     exitCode: result.exitCode ?? null,
+    commandId: result.cmdId,
   };
 }
 
 function normalizeBaseUrl(value: string) {
   return value.trim().replace(/\/+$/, "");
+}
+
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }

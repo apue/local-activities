@@ -78,7 +78,12 @@ describe("vercel sandbox runner", () => {
       AGENT_API_BASE_URL: "https://agent.example/v1",
       AGENT_API_KEY: "sandbox-agent-key",
       AGENT_MODEL: "agent-model",
+      COLLECTOR_REPOSITORY_URL: "https://github.com/apue/local-activities.git",
+      COLLECTOR_GIT_REF: "abc123",
     });
+    expect(command.command).toBe("bash");
+    expect(command.args.join(" ")).toContain("git clone");
+    expect(command.args.join(" ")).toContain("pnpm install");
     expect(JSON.stringify(command)).not.toContain(
       "long-lived-collector-secret",
     );
@@ -91,8 +96,8 @@ describe("vercel sandbox runner", () => {
         calls.push({ kind: "create", input });
         return {
           sandboxId: "sb_123",
-          async runCommand(command, args, options) {
-            calls.push({ kind: "runCommand", command, args, options });
+          async runCommand(params) {
+            calls.push({ kind: "runCommand", params });
             return { exitCode: 0 };
           },
         };
@@ -141,7 +146,10 @@ describe("vercel sandbox runner", () => {
       },
       expect.objectContaining({
         kind: "runCommand",
-        command: "node",
+        params: expect.objectContaining({
+          cmd: "bash",
+          detached: true,
+        }),
       }),
     ]);
   });
@@ -154,6 +162,8 @@ function buildPayload() {
     agentBaseUrl: "https://agent.example/v1",
     agentApiKey: "sandbox-agent-key",
     agentModel: "agent-model",
+    repositoryUrl: "https://github.com/apue/local-activities.git",
+    gitRef: "abc123",
     collectorId: "sandbox-job-1",
     scopedIngestToken: "scoped-ingest-token",
     scopedIngestTokenExpiresAt: "2026-05-28T08:20:00.000Z",

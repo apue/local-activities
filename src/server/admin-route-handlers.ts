@@ -11,11 +11,31 @@ import {
   rejectAdminEventDraft,
   type AdminStore,
 } from "./admin-service";
+import type { CollectorJobRecord } from "./collector-job-service";
 
 type AdminEnv = {
   [key: string]: string | undefined;
   ADMIN_ACCESS_TOKEN?: string;
 };
+
+export type SandboxStartResult =
+  | {
+      status: "started";
+      sandboxId: string;
+    }
+  | {
+      status: "skipped";
+      reason: "local_collector_preferred" | "sandbox_starter_not_configured";
+    }
+  | {
+      status: "failed";
+      reason: string;
+      message: string;
+    };
+
+export type SandboxJobStarter = (
+  job: CollectorJobRecord,
+) => Promise<SandboxStartResult>;
 
 const createCollectorJobSchema = z
   .object({
@@ -31,6 +51,7 @@ export async function handleAdminCreateCollectorJob(
   store: AdminStore,
   env: AdminEnv,
   now = new Date(),
+  startSandboxJob?: SandboxJobStarter,
 ) {
   const auth = authenticateAdminRequest(request, env);
   if (!auth.ok) return authErrorResponse(auth);
@@ -40,12 +61,43 @@ export async function handleAdminCreateCollectorJob(
 
   try {
     const job = await createAdminCollectorJob(parsed.data, store, now);
+    const sandboxStart = await maybeStartSandboxJob(job, startSandboxJob);
     return Response.json({
       ok: true,
       job,
+      sandboxStart,
     });
   } catch (error) {
     return serviceErrorResponse(error);
+  }
+}
+
+async function maybeStartSandboxJob(
+  job: CollectorJobRecord,
+  startSandboxJob?: SandboxJobStarter,
+): Promise<SandboxStartResult> {
+  if (job.preferredRunner === "local_collector") {
+    return {
+      status: "skipped",
+      reason: "local_collector_preferred",
+    };
+  }
+
+  if (!startSandboxJob) {
+    return {
+      status: "skipped",
+      reason: "sandbox_starter_not_configured",
+    };
+  }
+
+  try {
+    return await startSandboxJob(job);
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: "sandbox_start_failed",
+      message: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
