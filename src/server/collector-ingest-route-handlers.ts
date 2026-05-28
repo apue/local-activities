@@ -81,7 +81,8 @@ export function handleEventDraftIngest(
     store,
     env,
     eventDraftUploadSchema,
-    ingestEventDraft,
+    (envelope, ingestStore) =>
+      ingestEventDraft(envelope, ingestStore, readDraftBackendPolicy(env)),
   );
 }
 
@@ -139,8 +140,20 @@ async function handleCollectorIngest<Payload extends IngestPayload>(
   const result = await ingest(parsed.data, store);
   return Response.json({
     ok: true,
-    id: result.id,
+    ...result,
   });
+}
+
+function readDraftBackendPolicy(env: CollectorEnv) {
+  const threshold = Number.parseFloat(
+    env.BACKEND_AUTO_PUBLISH_CONFIDENCE_THRESHOLD ?? "",
+  );
+  return {
+    autoPublishEnabled: env.BACKEND_AUTO_PUBLISH_ENABLED === "true",
+    autoPublishConfidenceThreshold: Number.isFinite(threshold)
+      ? threshold
+      : undefined,
+  };
 }
 
 async function parseJson(request: Request) {

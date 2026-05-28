@@ -11,6 +11,7 @@ import type {
 import {
   computeDraftReviewState,
   createStableCollectorObjectId,
+  type DraftBackendRouting,
   type CollectorIngestStore,
 } from "./collector-ingest-service";
 import { getSupabaseAdminClient } from "./supabase-admin";
@@ -116,7 +117,10 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
     return { id: String(row.id) };
   }
 
-  async upsertEventDraft(envelope: CollectorEnvelope<EventDraftUpload>) {
+  async upsertEventDraft(
+    envelope: CollectorEnvelope<EventDraftUpload>,
+    options?: { reviewState: DraftBackendRouting["reviewState"] },
+  ) {
     const payload = envelope.payload;
     const sourceRunId = await this.findSourceRunId(envelope);
     const row = await this.writeOne<{ id: number }>(
@@ -151,7 +155,7 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
             evidence_asset_ids: payload.evidenceAssetIds,
             field_evidence: payload.fieldEvidence,
             confidence: payload.confidence,
-            review_state: computeDraftReviewState(payload),
+            review_state: options?.reviewState ?? computeDraftReviewState(payload),
           },
           { onConflict: "article_url,extraction_attempt_id" },
         )
@@ -160,6 +164,48 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
     );
 
     return { id: String(row.id) };
+  }
+
+  async publishEventDraft(input: {
+    payload: EventDraftUpload;
+    publishedAt: string;
+  }) {
+    const payload = input.payload;
+    const eventId = createStableCollectorObjectId("event", [
+      payload.articleUrl,
+      payload.extractionAttemptId,
+    ]);
+    const row = await this.writeOne<{ event_id: string }>(
+      this.client
+        .from("canonical_events")
+        .upsert(
+          {
+            event_id: eventId,
+            title: payload.title,
+            organizer: payload.organizer,
+            starts_at: payload.startsAt,
+            ends_at: payload.endsAt ?? null,
+            timezone: payload.timezone,
+            city: payload.city,
+            venue_name: payload.venueName ?? null,
+            venue_address: payload.venueAddress ?? null,
+            reservation_status: payload.reservationStatus,
+            registration_action: payload.registrationAction ?? null,
+            registration_url: payload.registrationUrl ?? null,
+            source_url: payload.articleUrl,
+            summary: payload.summary ?? null,
+            entry_notes: payload.entryNotes ?? null,
+            status: "published",
+            review_state: "approved",
+            published_at: input.publishedAt,
+            updated_at: input.publishedAt,
+          },
+          { onConflict: "event_id" },
+        )
+        .select("event_id")
+        .single(),
+    );
+    return { id: row.event_id };
   }
 
   async upsertCollectorFailure(

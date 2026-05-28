@@ -149,9 +149,11 @@ describe("collector ingest route handlers", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
+    await expect(response.json()).resolves.toMatchObject({
       ok: true,
       id: "draft-1",
+      reviewState: "needs_info",
+      autoPublished: false,
     });
   });
 
@@ -180,6 +182,51 @@ describe("collector ingest route handlers", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: false,
       error: "invalid_request",
+    });
+  });
+
+  it("returns backend routing metadata for auto-published drafts", async () => {
+    class PublishingStore extends RouteIngestStore {
+      async publishEventDraft() {
+        return { id: "event-1" };
+      }
+    }
+
+    const response = await handleEventDraftIngest(
+      post({
+        ...envelopeBase,
+        payload: {
+          articleUrl: "https://mp.weixin.qq.com/s/example",
+          extractionAttemptId: "attempt-001",
+          captureMode: "text_complete",
+          title: "Auto Publish Event",
+          organizer: "Official Cultural Center",
+          startsAt: "2026-06-06T06:00:00.000Z",
+          timezone: "Asia/Shanghai",
+          venueName: "Cultural Center Hall",
+          city: "Beijing",
+          reservationStatus: "required",
+          signals: ["ready_for_review"],
+          evidenceAssetIds: [],
+          fieldEvidence: {},
+          confidence: 0.98,
+        },
+      }),
+      new PublishingStore(),
+      {
+        COLLECTOR_API_KEY: "collector-secret",
+        BACKEND_AUTO_PUBLISH_ENABLED: "true",
+        BACKEND_AUTO_PUBLISH_CONFIDENCE_THRESHOLD: "0.95",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      id: "draft-1",
+      reviewState: "approved",
+      autoPublished: true,
+      publishedEventId: "event-1",
     });
   });
 });

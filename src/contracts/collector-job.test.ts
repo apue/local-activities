@@ -10,7 +10,7 @@ describe("collector job contracts", () => {
   it("accepts a single-job claim request with collector capabilities", () => {
     const result = claimJobRequestSchema.parse({
       collectorId: "home-192-168-0-16",
-      capabilities: ["wechat_browser", "dom_text", "image_capture"],
+      capabilities: ["agent_api", "wechat_browser", "image_capture"],
       maxJobs: 1,
     });
 

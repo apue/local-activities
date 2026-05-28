@@ -31,15 +31,11 @@ describe("env inventory", () => {
       COLLECTOR_API_KEY: "replace-with-random-collector-api-key",
       COLLECTOR_ID: "home-192-168-0-16",
       COLLECTOR_INTERVAL_HOURS: "4",
-      COLLECTOR_BROWSER_PROFILE_DIR: ".collector-profile",
-      TEXT_INFERENCE_PROVIDER: "openai-compatible",
-      TEXT_INFERENCE_API_BASE_URL: "https://agent.example/v1",
-      TEXT_INFERENCE_API_KEY: "sk-real-secret",
-      TEXT_INFERENCE_MODEL: "gpt-4.1-mini",
-      TEXT_INFERENCE_ENDPOINT_STYLE: "responses",
+      AGENT_API_BASE_URL: "https://agent.example/v1",
+      AGENT_API_KEY: "sk-real-secret",
     });
 
-    expect(result.present).toContain("TEXT_INFERENCE_API_KEY");
+    expect(result.present).toContain("AGENT_API_KEY");
     expect(result.placeholders).toContain("COLLECTOR_API_KEY");
     expect(result.missing).not.toContain("COLLECTOR_API_KEY");
     expect(result.ok).toBe(false);

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   captureModeSchema,
+  collectorFailureSchema,
   collectorEnvelopeSchema,
+  failureReasonSchema,
   eventDraftUploadSchema,
 } from "./collector";
 
@@ -82,5 +84,23 @@ describe("collector contracts", () => {
       "not_activity",
       "unsupported",
     ]);
+  });
+
+  it("accepts structured Agent processor failures", () => {
+    expect(failureReasonSchema.parse("agent_response_invalid_schema")).toBe(
+      "agent_response_invalid_schema",
+    );
+    expect(
+      collectorFailureSchema.parse({
+        articleUrl: "https://mp.weixin.qq.com/s/bad-agent",
+        stage: "agent_extraction",
+        reason: "agent_response_invalid_schema",
+        message: "Agent response did not match schema.",
+        retryable: true,
+      }),
+    ).toMatchObject({
+      stage: "agent_extraction",
+      reason: "agent_response_invalid_schema",
+    });
   });
 });

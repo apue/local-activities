@@ -54,7 +54,7 @@ create table if not exists public.source_runs (
   draft_count integer not null default 0 check (draft_count >= 0),
   failure_count integer not null default 0 check (failure_count >= 0),
   failure_reason text
-    check (failure_reason is null or failure_reason in ('fetch_blocked', 'fetch_timeout', 'login_required', 'captcha_required', 'parser_mismatch', 'source_identity_missing', 'activity_fields_missing', 'image_download_failed', 'ocr_failed', 'vision_failed', 'not_activity', 'unsupported')),
+    check (failure_reason is null or failure_reason in ('fetch_blocked', 'fetch_timeout', 'login_required', 'captcha_required', 'parser_mismatch', 'source_identity_missing', 'activity_fields_missing', 'image_download_failed', 'ocr_failed', 'vision_failed', 'agent_config_missing', 'agent_request_failed', 'agent_response_invalid_schema', 'not_activity', 'unsupported')),
   diagnostics jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   unique (collector_id, run_id)
@@ -210,9 +210,9 @@ create table if not exists public.collector_failures (
   source_run_id bigint references public.source_runs(id) on delete set null,
   article_url text,
   stage text not null
-    check (stage in ('source_discovery', 'page_fetch', 'dom_parse', 'image_capture', 'ocr', 'vision_extraction', 'draft_extraction', 'upload')),
+    check (stage in ('source_discovery', 'page_fetch', 'dom_parse', 'image_capture', 'ocr', 'vision_extraction', 'agent_extraction', 'draft_extraction', 'upload')),
   reason text not null
-    check (reason in ('fetch_blocked', 'fetch_timeout', 'login_required', 'captcha_required', 'parser_mismatch', 'source_identity_missing', 'activity_fields_missing', 'image_download_failed', 'ocr_failed', 'vision_failed', 'not_activity', 'unsupported')),
+    check (reason in ('fetch_blocked', 'fetch_timeout', 'login_required', 'captcha_required', 'parser_mismatch', 'source_identity_missing', 'activity_fields_missing', 'image_download_failed', 'ocr_failed', 'vision_failed', 'agent_config_missing', 'agent_request_failed', 'agent_response_invalid_schema', 'not_activity', 'unsupported')),
   message text not null,
   retryable boolean not null,
   screenshot_asset_id text,

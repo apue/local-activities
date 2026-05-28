@@ -105,8 +105,7 @@ Server-side secrets:
 
 Collector-machine-only secrets:
 
-- `TEXT_INFERENCE_API_KEY`
-- `VISION_INFERENCE_API_KEY`
+- `AGENT_API_KEY`
 - agent API keys or local agent credentials
 - `LOCAL_COLLECTOR_CONSOLE_TOKEN`
 

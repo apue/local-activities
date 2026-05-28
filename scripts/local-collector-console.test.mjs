@@ -288,7 +288,48 @@ describe("local collector console runtime", () => {
     );
   });
 
-  it("runs the extract processor from local runtime configuration", async () => {
+  it("reports uploaded structured failures as failed Vercel jobs", async () => {
+    const store = new JsonRunStore({ filePath: await tempRunFile() });
+    const run = await store.enqueueVercelJob({
+      job: {
+        jobId: "job-1",
+        seedUrl: "https://mp.weixin.qq.com/s/job",
+        requestedAt: "2026-05-28T10:00:00.000Z",
+        leaseExpiresAt: "2026-05-28T10:10:00.000Z",
+        attemptNumber: 1,
+      },
+      now: new Date("2026-05-28T10:01:00.000Z"),
+    });
+    const report = vi.fn(async () => ({ ok: true }));
+
+    const result = await processNextRun({
+      store,
+      processor: async () => ({
+        kind: "uploaded",
+        runId: run.id,
+        uploadedIds: {
+          sourceRunId: "source-1",
+          failureId: "failure-1",
+        },
+      }),
+      heartbeat: async () => ({ ok: true }),
+      report,
+      now: new Date("2026-05-28T10:02:00.000Z"),
+    });
+
+    expect(result).toMatchObject({ id: run.id, state: "uploaded" });
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job-1",
+        localRunId: run.id,
+        status: "failed",
+        failureIds: ["failure-1"],
+        suggestedDisposition: "failed",
+      }),
+    );
+  });
+
+  it("runs the agent processor from local runtime configuration", async () => {
     const store = new JsonRunStore({ filePath: await tempRunFile() });
     await store.enqueue({
       seedUrl: "https://mp.weixin.qq.com/s/text",
@@ -296,29 +337,37 @@ describe("local collector console runtime", () => {
     });
     const calls = [];
     const fetchImpl = async (url, init) => {
-      if (url === "https://mp.weixin.qq.com/s/text") {
-        return {
-          ok: true,
-          status: 200,
-          url,
-          async text() {
-            return "<title>Extract Runtime Event</title><p>Official event text.</p>";
-          },
-        };
-      }
       calls.push({ url, init, body: JSON.parse(init.body) });
-      if (url === "https://llm.example/v1/responses") {
+      if (url === "https://agent.example/v1/extract") {
         return jsonResponse({
-          output_text: JSON.stringify({
+          status: "success",
+          disposition: "ready_for_review",
+          confidence: 0.9,
+          articleSnapshot: {
+            canonicalUrl: "https://mp.weixin.qq.com/s/text",
+            finalUrl: "https://mp.weixin.qq.com/s/text",
+            capturedAt: "2026-05-28T10:00:00.000Z",
+            languageHints: ["zh-CN"],
+            captureMode: "text_complete",
+            evidenceAssetIds: [],
+            contentHash: "hash-agent",
+          },
+          eventDraft: {
+            articleUrl: "https://mp.weixin.qq.com/s/text",
+            extractionAttemptId: "agent-runtime-agent",
             disposition: "ready_for_review",
             captureMode: "text_complete",
-            title: "Extract Runtime Event",
+            title: "Agent Runtime Event",
+            organizer: "Official Cultural Center",
             startsAt: "2026-06-06T06:00:00.000Z",
             timezone: "Asia/Shanghai",
             city: "Beijing",
+            reservationStatus: "unknown",
+            signals: ["ready_for_review"],
+            evidenceAssetIds: [],
             fieldEvidence: { title: ["visibleText"] },
-            confidence: 0.88,
-          }),
+            confidence: 0.9,
+          },
         });
       }
       return jsonResponse({ ok: true, id: `id-${calls.length}` });
@@ -329,10 +378,10 @@ describe("local collector console runtime", () => {
         COLLECTOR_BASE_URL: "https://local-activities.example",
         COLLECTOR_ID: "home-1",
         COLLECTOR_API_KEY: "collector-secret",
-        LOCAL_COLLECTOR_PROCESSOR: "extract",
-        TEXT_INFERENCE_API_BASE_URL: "https://llm.example/v1",
-        TEXT_INFERENCE_API_KEY: "llm-secret",
-        TEXT_INFERENCE_MODEL: "fixture-model",
+        LOCAL_COLLECTOR_PROCESSOR: "agent",
+        AGENT_API_BASE_URL: "https://agent.example/v1",
+        AGENT_API_KEY: "agent-secret",
+        AGENT_MODEL: "agent-model",
       }),
     });
     runtime.config.fetchImpl = fetchImpl;
@@ -341,9 +390,9 @@ describe("local collector console runtime", () => {
       COLLECTOR_BASE_URL: "https://local-activities.example",
       COLLECTOR_ID: "home-1",
       COLLECTOR_API_KEY: "collector-secret",
-      TEXT_INFERENCE_API_BASE_URL: "https://llm.example/v1",
-      TEXT_INFERENCE_API_KEY: "llm-secret",
-      TEXT_INFERENCE_MODEL: "fixture-model",
+      AGENT_API_BASE_URL: "https://agent.example/v1",
+      AGENT_API_KEY: "agent-secret",
+      AGENT_MODEL: "agent-model",
     };
 
     const result = await processNextRun({
@@ -360,14 +409,25 @@ describe("local collector console runtime", () => {
       },
     });
     expect(calls.map((call) => call.url)).toEqual([
-      "https://llm.example/v1/responses",
+      "https://agent.example/v1/extract",
       "https://local-activities.example/api/collector/source-run",
       "https://local-activities.example/api/collector/article-snapshot",
       "https://local-activities.example/api/collector/event-draft",
     ]);
     expect(JSON.stringify(calls.map((call) => call.body))).not.toContain(
-      "llm-secret",
+      "agent-secret",
     );
+  });
+
+  it("rejects the superseded extract processor as a production local path", () => {
+    expect(() =>
+      readConsoleConfig({
+        COLLECTOR_BASE_URL: "https://local-activities.example",
+        COLLECTOR_ID: "home-1",
+        COLLECTOR_API_KEY: "collector-secret",
+        LOCAL_COLLECTOR_PROCESSOR: "extract",
+      }),
+    ).toThrow("unsupported_local_collector_processor:extract");
   });
 
   it("records no-job and network poll status without exposing secrets", async () => {
@@ -726,7 +786,8 @@ describe("local collector console runtime", () => {
 
     expect(help).toContain("pnpm collector:console");
     expect(help).toContain("LOCAL_COLLECTOR_PROCESSOR=fixture");
-    expect(help).toContain("COLLECTOR_CAPTURE_ADAPTER=http or browser");
+    expect(help).toContain("LOCAL_COLLECTOR_PROCESSOR=agent");
+    expect(help).toContain("AGENT_API_BASE_URL");
     expect(help).toContain("COLLECTOR_POLLING_ENABLED");
     expect(help).toContain("COLLECTOR_POLL_INTERVAL_SECONDS");
     expect(help).toContain("COLLECTOR_CAPABILITIES");
@@ -759,7 +820,7 @@ function createRuntime({ store, fetchImpl }) {
       collectorId: "home-1",
       collectorApiKey: "collector-secret",
       consoleToken: undefined,
-      capabilities: ["wechat_browser", "dom_text"],
+      capabilities: ["agent_api"],
       fetchImpl,
       polling: {
         enabled: true,

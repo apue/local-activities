@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const collectorCapabilitySchema = z.enum([
+  "agent_api",
   "wechat_browser",
   "dom_text",
   "image_capture",
