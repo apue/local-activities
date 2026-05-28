@@ -9,6 +9,7 @@ import {
   createCollectorHeaders,
   runCollectorFixture,
 } from "./collector-fixture-run.mjs";
+import { runCollectorExtract } from "./collector-extract-processor.mjs";
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 
 const activeStates = new Set(["capturing", "extracting", "uploading"]);
@@ -413,7 +414,7 @@ export function readConsoleConfig(env = process.env) {
     60,
   );
 
-  if (processor !== "fixture") {
+  if (!["fixture", "extract"].includes(processor)) {
     throw new Error(`unsupported_local_collector_processor:${processor}`);
   }
   if (!baseUrl) throw new Error("missing_collector_base_url");
@@ -449,8 +450,8 @@ export function formatConsoleHelp() {
 
 Starts the home-machine collector console and local queue worker.
 
-Current processor:
-  LOCAL_COLLECTOR_PROCESSOR=fixture
+Processor:
+  LOCAL_COLLECTOR_PROCESSOR=fixture or extract
 
 Required collector environment:
   APP_BASE_URL or COLLECTOR_BASE_URL
@@ -538,6 +539,16 @@ export function startPollingLoop({ runtime }) {
 }
 
 function createProcessor(config) {
+  if (config.processor === "extract") {
+    return async ({ seedUrl, localRunId }) =>
+      runCollectorExtract({
+        env: config.env,
+        fetchImpl: config.fetchImpl ?? fetch,
+        seedUrl,
+        runId: localRunId,
+      });
+  }
+
   return async ({ seedUrl, localRunId }) =>
     runCollectorFixture({
       env: config.env,
@@ -615,6 +626,7 @@ async function reportVercelJob({
     eventDraftIds: uploadedIds.eventDraftId
       ? [uploadedIds.eventDraftId]
       : undefined,
+    evidenceAssetIds: uploadedIds.evidenceAssetIds,
     failureIds: uploadedIds.failureId ? [uploadedIds.failureId] : undefined,
     suggestedDisposition: failureReason ? "failed" : "ready_for_review",
     message: failureReason,
@@ -629,6 +641,7 @@ function buildJobReport({
   sourceRunId,
   articleSnapshotIds,
   eventDraftIds,
+  evidenceAssetIds,
   failureIds,
   suggestedDisposition,
   message,
@@ -640,6 +653,7 @@ function buildJobReport({
     sourceRunId,
     articleSnapshotIds,
     eventDraftIds,
+    evidenceAssetIds,
     failureIds,
     suggestedDisposition,
     message,

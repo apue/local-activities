@@ -288,6 +288,88 @@ describe("local collector console runtime", () => {
     );
   });
 
+  it("runs the extract processor from local runtime configuration", async () => {
+    const store = new JsonRunStore({ filePath: await tempRunFile() });
+    await store.enqueue({
+      seedUrl: "https://mp.weixin.qq.com/s/text",
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      if (url === "https://mp.weixin.qq.com/s/text") {
+        return {
+          ok: true,
+          status: 200,
+          url,
+          async text() {
+            return "<title>Extract Runtime Event</title><p>Official event text.</p>";
+          },
+        };
+      }
+      calls.push({ url, init, body: JSON.parse(init.body) });
+      if (url === "https://llm.example/v1/responses") {
+        return jsonResponse({
+          output_text: JSON.stringify({
+            disposition: "ready_for_review",
+            captureMode: "text_complete",
+            title: "Extract Runtime Event",
+            startsAt: "2026-06-06T06:00:00.000Z",
+            timezone: "Asia/Shanghai",
+            city: "Beijing",
+            fieldEvidence: { title: ["visibleText"] },
+            confidence: 0.88,
+          }),
+        });
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+    const runtime = createLocalCollectorRuntime({
+      store,
+      config: readConsoleConfig({
+        COLLECTOR_BASE_URL: "https://local-activities.example",
+        COLLECTOR_ID: "home-1",
+        COLLECTOR_API_KEY: "collector-secret",
+        LOCAL_COLLECTOR_PROCESSOR: "extract",
+        TEXT_INFERENCE_API_BASE_URL: "https://llm.example/v1",
+        TEXT_INFERENCE_API_KEY: "llm-secret",
+        TEXT_INFERENCE_MODEL: "fixture-model",
+      }),
+    });
+    runtime.config.fetchImpl = fetchImpl;
+    runtime.config.env = {
+      ...runtime.config.env,
+      COLLECTOR_BASE_URL: "https://local-activities.example",
+      COLLECTOR_ID: "home-1",
+      COLLECTOR_API_KEY: "collector-secret",
+      TEXT_INFERENCE_API_BASE_URL: "https://llm.example/v1",
+      TEXT_INFERENCE_API_KEY: "llm-secret",
+      TEXT_INFERENCE_MODEL: "fixture-model",
+    };
+
+    const result = await processNextRun({
+      ...runtime,
+      now: new Date("2026-05-28T10:01:00.000Z"),
+    });
+
+    expect(result).toMatchObject({
+      state: "uploaded",
+      uploadedIds: {
+        sourceRunId: "id-2",
+        articleSnapshotId: "id-3",
+        eventDraftId: "id-4",
+      },
+    });
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://llm.example/v1/responses",
+      "https://local-activities.example/api/collector/source-run",
+      "https://local-activities.example/api/collector/article-snapshot",
+      "https://local-activities.example/api/collector/event-draft",
+    ]);
+    expect(JSON.stringify(calls.map((call) => call.body))).not.toContain(
+      "llm-secret",
+    );
+  });
+
   it("records no-job and network poll status without exposing secrets", async () => {
     const store = new JsonRunStore({ filePath: await tempRunFile() });
     const runtime = createRuntime({
