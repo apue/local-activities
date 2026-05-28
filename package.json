@@ -13,6 +13,7 @@
     "start": "next start",
     "env:check": "node scripts/env-inventory.mjs",
     "collector:fixture": "node scripts/collector-fixture-run.mjs",
+    "smoke:e2e-fixture": "node scripts/e2e-fixture-smoke.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

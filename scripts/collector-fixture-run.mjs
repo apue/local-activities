@@ -139,6 +139,7 @@ export async function runCollectorFixture({
   now = new Date(),
   seedUrl,
   claimOnce = false,
+  expectedJobId,
   fixture = "ready-event",
   runId = createRunId(now),
 }) {
@@ -165,6 +166,10 @@ export async function runCollectorFixture({
         kind: "no-job",
         retryAfterSeconds: claimResponse.retryAfterSeconds,
       };
+    }
+
+    if (expectedJobId && job.jobId !== expectedJobId) {
+      throw new Error(`claimed_unexpected_job:${job.jobId}`);
     }
 
     effectiveSeedUrl = job.seedUrl;
@@ -258,6 +263,7 @@ export async function runCollectorFixture({
   return {
     kind: "uploaded",
     runId,
+    jobId: job?.jobId,
     uploadedIds,
   };
 }
@@ -271,7 +277,9 @@ export function formatFixtureSummary(result) {
     .map(([key, value]) => `${key}=${value}`)
     .join(" ");
 
-  return `Uploaded collector fixture runId=${result.runId} ${ids}`;
+  const job = result.jobId ? ` jobId=${result.jobId}` : "";
+
+  return `Uploaded collector fixture runId=${result.runId}${job} ${ids}`;
 }
 
 function buildJobReport({ collectorId, runId, fixture, uploadedIds }) {
