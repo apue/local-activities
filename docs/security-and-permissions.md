@@ -39,6 +39,7 @@ Required:
 Allowed:
 
 - request assigned source tasks when that endpoint exists
+- claim collector jobs and send heartbeats when the job queue endpoint exists
 - upload source run reports
 - upload article indexes and snapshots
 - upload event drafts and failure reports
@@ -53,6 +54,7 @@ Not allowed:
 Required:
 
 - collector API key
+- collector ID for job claim, heartbeat, and diagnostics
 - idempotent uploads by URL and content hash
 - structured failure reasons
 
@@ -98,8 +100,14 @@ Server-side secrets:
 - `DATABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `COLLECTOR_API_KEY`
-- `LLM_API_KEY`
+- `SUPABASE_SECRET_KEY`
 - map provider credentials
+
+Collector-machine-only secrets:
+
+- `TEXT_INFERENCE_API_KEY`
+- agent API keys or local agent credentials
+- `LOCAL_COLLECTOR_CONSOLE_TOKEN`
 
 Rules:
 
@@ -107,6 +115,7 @@ Rules:
 - never commit `.env` files
 - keep collector credentials out of public frontend bundles
 - rotate `COLLECTOR_API_KEY` if a collector machine is lost or shared
+- do not send Supabase, Vercel, admin, or collector secrets to the LLM or agent API
 
 ## Collector Safety
 

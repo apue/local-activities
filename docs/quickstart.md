@@ -28,6 +28,8 @@ direnv allow
 
 Fill `.env.local` with real values only on your machine. Do not commit secrets.
 
+For the full Vercel plus home-machine collector setup target, see [Deployment Bootstrap Spec](deployment-bootstrap.md). This quickstart is for local scaffolding; the deployment bootstrap spec is the source of truth for production Vercel env setup and the `192.168.0.16` collector machine.
+
 Minimum groups to prepare:
 
 - app/admin secrets: `ADMIN_ACCESS_TOKEN`, `COLLECTOR_API_KEY`, `INTERNAL_API_SECRET`
@@ -87,6 +89,8 @@ If the Vercel project already exists, link it from the repo:
 vercel link
 vercel env pull .env.local
 ```
+
+Use [Deployment Bootstrap Spec](deployment-bootstrap.md) when adding production or preview variables with `vercel env add`; it separates Vercel-side secrets from collector-machine-only LLM and agent secrets.
 
 For local development, prefer the framework dev command after env is loaded:
 
