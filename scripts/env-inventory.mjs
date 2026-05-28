@@ -49,13 +49,15 @@ export const targets = {
       "SUPABASE_SECRET_KEY",
       "DATABASE_URL",
       "CRON_SECRET",
-      "NEXT_PUBLIC_AMAP_JS_API_KEY",
-      "AMAP_WEB_SERVICE_API_KEY",
       "OBSERVABILITY_PROVIDER",
       "VERCEL_WEB_ANALYTICS_ENABLED",
       "VERCEL_SPEED_INSIGHTS_ENABLED",
     ],
-    optional: [],
+    optional: [
+      "NEXT_PUBLIC_AMAP_JS_API_KEY",
+      "AMAP_WEB_SERVICE_API_KEY",
+      "AMAP_SECURITY_JS_CODE",
+    ],
   },
   collector: {
     description: "Home collector machine or VM that polls Vercel and uploads runs",

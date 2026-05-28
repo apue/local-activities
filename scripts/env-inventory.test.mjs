@@ -67,6 +67,29 @@ describe("env inventory", () => {
     expect(localResult.present).toContain("NEXT_PUBLIC_APP_URL");
   });
 
+  it("does not require map provider keys before map features are implemented", () => {
+    const result = evaluateTarget("vercel", {
+      NEXT_PUBLIC_APP_URL: "https://local-activities.vercel.app",
+      ADMIN_ACCESS_TOKEN: "admin-secret",
+      COLLECTOR_API_KEY: "collector-secret",
+      INTERNAL_API_SECRET: "internal-secret",
+      NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_value",
+      SUPABASE_SECRET_KEY: "sb_secret_value",
+      DATABASE_URL: "postgresql://postgres:real@db.project.supabase.co/postgres",
+      CRON_SECRET: "cron-secret",
+      OBSERVABILITY_PROVIDER: "vercel",
+      VERCEL_WEB_ANALYTICS_ENABLED: "true",
+      VERCEL_SPEED_INSIGHTS_ENABLED: "true",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.required).not.toContain("NEXT_PUBLIC_AMAP_JS_API_KEY");
+    expect(result.required).not.toContain("AMAP_WEB_SERVICE_API_KEY");
+    expect(result.optional).toContain("NEXT_PUBLIC_AMAP_JS_API_KEY");
+    expect(result.optional).toContain("AMAP_WEB_SERVICE_API_KEY");
+  });
+
   it("formats reports with variable names but without secret values", () => {
     const result = evaluateTarget("local-app", {
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
