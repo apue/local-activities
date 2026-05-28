@@ -66,6 +66,7 @@ export async function listPublicUpcomingEvents(now = new Date()) {
     .from("canonical_events")
     .select(publicEventColumns)
     .eq("status", "published")
+    .or(buildUpcomingEventFilter(now))
     .order("starts_at", { ascending: true })
     .limit(100);
 
@@ -104,6 +105,11 @@ export function filterUpcomingPublishedEvents(
       return Date.parse(relevantEnd) >= now.getTime();
     })
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+}
+
+export function buildUpcomingEventFilter(now = new Date()) {
+  const nowIso = now.toISOString();
+  return `starts_at.gte.${nowIso},ends_at.gte.${nowIso}`;
 }
 
 export function shapePublicEvent(row: CanonicalEventRow): PublicEvent {

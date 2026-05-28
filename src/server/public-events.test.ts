@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildUpcomingEventFilter,
   filterUpcomingPublishedEvents,
   formatPublicEventTime,
   shapePublicEvent,
@@ -58,6 +59,14 @@ describe("public event helpers", () => {
         (event) => event.event_id,
       ),
     ).toEqual(["event-1"]);
+  });
+
+  it("builds the database-side upcoming filter before applying result limits", () => {
+    expect(
+      buildUpcomingEventFilter(new Date("2026-06-01T00:00:00.000Z")),
+    ).toBe(
+      "starts_at.gte.2026-06-01T00:00:00.000Z,ends_at.gte.2026-06-01T00:00:00.000Z",
+    );
   });
 
   it("shapes public events without draft or admin-only fields", () => {
