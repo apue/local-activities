@@ -54,6 +54,8 @@ Initial implementation target:
 
 The collector must implement normalized output contracts so future implementations can use browser extensions, Computer Use, AgentBrowser, or an agent editor.
 
+See [Collector Agent Ingestion Spec](collector-agent-ingestion.md) for the collector/agent upload contract, observed page capture modes, and implementation slices.
+
 ## API Validation
 
 Use schema validation for all collector-facing endpoints. Zod is the default candidate because it works well with TypeScript and Next.js.

@@ -174,6 +174,8 @@ Expected normalized outputs:
 
 Do not bypass login walls, captchas, or platform protections. Report structured failures such as `captcha_required`, `login_required`, or `fetch_blocked`.
 
+The detailed collector/agent upload contract and page-capture modes are defined in [Collector Agent Ingestion Spec](collector-agent-ingestion.md).
+
 ## Vercel
 
 Vercel remains the expected app platform.
