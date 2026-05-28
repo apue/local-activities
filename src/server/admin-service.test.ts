@@ -24,6 +24,7 @@ class MemoryAdminStore implements AdminStore {
   async createCollectorJob(input: {
     seedUrl: string;
     requestedAt: string;
+    preferredRunner: CollectorJobRecord["preferredRunner"];
   }): Promise<CollectorJobRecord> {
     const job: CollectorJobRecord = {
       id: this.jobs.length + 1,
@@ -32,6 +33,12 @@ class MemoryAdminStore implements AdminStore {
       state: "queued",
       requestedAt: input.requestedAt,
       attemptNumber: 0,
+      preferredRunner: input.preferredRunner,
+      runnerState:
+        input.preferredRunner === "local_collector"
+          ? "local_pending"
+          : "sandbox_pending",
+      fallbackEligible: false,
     };
     this.jobs.push(job);
     return job;
@@ -109,6 +116,9 @@ describe("admin service", () => {
       jobId: "job-1",
       state: "queued",
       seedUrl: "https://mp.weixin.qq.com/s/example",
+      preferredRunner: "vercel_sandbox",
+      runnerState: "sandbox_pending",
+      fallbackEligible: false,
     });
   });
 

@@ -5,6 +5,8 @@ export const collectorPayloadVersion = "2026-05-collector-v1" as const;
 export const failureReasonSchema = z.enum([
   "fetch_blocked",
   "fetch_timeout",
+  "region_network_failed",
+  "sandbox_runtime_timeout",
   "login_required",
   "captcha_required",
   "parser_mismatch",

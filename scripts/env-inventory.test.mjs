@@ -46,6 +46,7 @@ describe("env inventory", () => {
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       ADMIN_ACCESS_TOKEN: "admin-secret",
       COLLECTOR_API_KEY: "collector-secret",
+      COLLECTOR_SCOPED_TOKEN_SECRET: "scoped-secret",
       NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_value",
       SUPABASE_SECRET_KEY: "sb_secret_value",
@@ -68,7 +69,10 @@ describe("env inventory", () => {
       NEXT_PUBLIC_APP_URL: "https://local-activities.vercel.app",
       ADMIN_ACCESS_TOKEN: "admin-secret",
       COLLECTOR_API_KEY: "collector-secret",
+      COLLECTOR_SCOPED_TOKEN_SECRET: "scoped-secret",
       INTERNAL_API_SECRET: "internal-secret",
+      AGENT_API_BASE_URL: "https://agent.example/v1",
+      AGENT_API_KEY: "agent-secret",
       NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_value",
       SUPABASE_SECRET_KEY: "sb_secret_value",
@@ -77,6 +81,8 @@ describe("env inventory", () => {
       OBSERVABILITY_PROVIDER: "vercel",
       VERCEL_WEB_ANALYTICS_ENABLED: "true",
       VERCEL_SPEED_INSIGHTS_ENABLED: "true",
+      VERCEL_SANDBOX_ENABLED: "true",
+      VERCEL_SANDBOX_API_KEY: "sandbox-api-key",
     });
 
     expect(result.ok).toBe(true);

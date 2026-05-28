@@ -19,6 +19,12 @@ type CollectorJob = {
   lastHeartbeatAt?: string;
   lastHeartbeatStage?: string;
   resultMessage?: string;
+  preferredRunner: string;
+  actualRunner?: string;
+  runnerState: string;
+  fallbackEligible: boolean;
+  fallbackReason?: string;
+  attemptNumber: number;
 };
 
 type EventDraft = {
@@ -354,10 +360,13 @@ export function AdminPortal() {
           <div className={styles.jobList}>
             {jobs.map((job) => (
               <div key={job.jobId} className={styles.jobRow}>
-                <strong>{job.state}</strong>
+                <strong>{job.runnerState}</strong>
                 <span>{job.seedUrl}</span>
                 <small>
-                  {job.collectorId ?? "unclaimed"} ·{" "}
+                  {job.actualRunner ?? job.preferredRunner} · attempt{" "}
+                  {job.attemptNumber}
+                  <br />
+                  {job.fallbackReason ?? job.collectorId ?? "no failure"} ·{" "}
                   {job.lastHeartbeatAt
                     ? formatDateTime(job.lastHeartbeatAt)
                     : "no heartbeat"}

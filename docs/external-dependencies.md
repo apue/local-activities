@@ -9,15 +9,17 @@ Purpose:
 - Host the Next.js web app.
 - Serve public event pages and admin pages.
 - Expose collector ingest API routes.
+- Run bounded hosted Agent attempts through Vercel Sandbox.
 
 Notes:
 
 - Vercel is appropriate for the MVP web surface and lightweight API handling.
 - Vercel Cron can trigger lightweight scheduled callbacks.
-- Vercel Workflow is the likely durable serverless execution option for bounded orchestration work.
-- Vercel Sandbox and Queue are candidate services for exceptional extraction or queueing cases.
+- Vercel Sandbox is the default hosted Agent runner for normal admin-created collection jobs.
+- Vercel Workflow is the likely durable serverless execution option for bounded orchestration work around Sandbox attempts.
+- Vercel Queue remains a candidate service for future queueing needs.
 - Long-running browser automation should not run inside ordinary Vercel request/response functions.
-- Scheduled collection should be handled by the local collector or a worker runtime unless a later PR adopts a bounded Vercel-native orchestration pattern.
+- Local collection remains the fallback path for captcha, login, fetch blocks, network/region issues, and operator-controlled reruns.
 
 ## Supabase
 

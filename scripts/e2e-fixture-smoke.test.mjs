@@ -83,6 +83,7 @@ describe("e2e fixture smoke", () => {
     ]);
     expect(calls[0].body).toEqual({
       seedUrl: "https://mp.weixin.qq.com/s/e2e-fixture",
+      preferredRunner: "local_collector",
     });
     expect(calls[0].init.headers.authorization).toBe("Bearer admin-secret");
     expect(calls[1].init.headers.authorization).toBe("Bearer collector-secret");

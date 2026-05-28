@@ -310,7 +310,7 @@
 
 .jobRow {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) 180px;
+  grid-template-columns: 180px minmax(0, 1fr) 220px;
   gap: 10px;
   align-items: center;
   padding: 10px;

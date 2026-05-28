@@ -20,18 +20,34 @@ class RouteMemoryStore implements CollectorJobStore {
     collectorId: string;
     claimedAt: string;
     leaseExpiresAt: string;
+    runner: CollectorJobRecord["actualRunner"];
   }) {
     if (!this.job || this.job.state !== "queued") return null;
+    if (
+      input.runner === "local_collector" &&
+      this.job.preferredRunner !== "local_collector" &&
+      this.job.fallbackEligible !== true
+    ) {
+      return null;
+    }
     this.job.state = "claimed";
     this.job.collectorId = input.collectorId;
     this.job.claimedAt = input.claimedAt;
     this.job.leaseExpiresAt = input.leaseExpiresAt;
     this.job.attemptNumber += 1;
+    this.job.actualRunner = input.runner;
+    this.job.runnerState = this.job.fallbackEligible
+      ? "fallback_claimed"
+      : "local_claimed";
     return this.job;
   }
 
   async findByJobId(jobId: string) {
     return this.job?.jobId === jobId ? this.job : null;
+  }
+
+  async updateSandboxStarted() {
+    return null;
   }
 
   async updateHeartbeat(input: {
@@ -41,6 +57,7 @@ class RouteMemoryStore implements CollectorJobStore {
     stage: "capturing" | "extracting" | "uploading";
     heartbeatAt: string;
     leaseExpiresAt: string;
+    runnerState: CollectorJobRecord["runnerState"];
   }) {
     if (!this.job || this.job.jobId !== input.jobId) return null;
     this.job.state = "running";
@@ -49,6 +66,8 @@ class RouteMemoryStore implements CollectorJobStore {
     this.job.lastHeartbeatAt = input.heartbeatAt;
     this.job.lastHeartbeatStage = input.stage;
     this.job.leaseExpiresAt = input.leaseExpiresAt;
+    this.job.actualRunner = "local_collector";
+    this.job.runnerState = input.runnerState;
     return this.job;
   }
 
@@ -64,7 +83,12 @@ class RouteMemoryStore implements CollectorJobStore {
     this.job.collectorId = input.collectorId;
     this.job.localRunId = input.localRunId;
     this.job.finishedAt = input.reportedAt;
+    this.job.runnerState = input.status === "failed" ? "failed" : "completed";
     return this.job;
+  }
+
+  async updateSandboxFailure() {
+    return null;
   }
 }
 
@@ -133,6 +157,9 @@ describe("collector job route handlers", () => {
         state: "queued",
         requestedAt: "2026-05-28T07:00:00.000Z",
         attemptNumber: 0,
+        preferredRunner: "local_collector",
+        runnerState: "local_pending",
+        fallbackEligible: false,
       }),
       { COLLECTOR_API_KEY: "collector-secret" },
       new Date("2026-05-28T08:00:00.000Z"),
@@ -144,6 +171,10 @@ describe("collector job route handlers", () => {
         jobId: "job-1",
         seedUrl: "https://example.com/a",
         attemptNumber: 1,
+        preferredRunner: "local_collector",
+        actualRunner: "local_collector",
+        runnerState: "local_claimed",
+        fallbackEligible: false,
       },
     });
   });
@@ -170,6 +201,10 @@ describe("collector job route handlers", () => {
         leaseExpiresAt: "2026-05-28T08:05:00.000Z",
         collectorId: "home-1",
         attemptNumber: 1,
+        preferredRunner: "local_collector",
+        actualRunner: "local_collector",
+        runnerState: "local_claimed",
+        fallbackEligible: false,
       }),
       { COLLECTOR_API_KEY: "collector-secret" },
       new Date("2026-05-28T08:00:00.000Z"),
@@ -202,6 +237,10 @@ describe("collector job route handlers", () => {
         collectorId: "home-1",
         localRunId: "local-1",
         attemptNumber: 1,
+        preferredRunner: "local_collector",
+        actualRunner: "local_collector",
+        runnerState: "local_running",
+        fallbackEligible: false,
       }),
       { COLLECTOR_API_KEY: "collector-secret" },
       new Date("2026-05-28T08:00:00.000Z"),

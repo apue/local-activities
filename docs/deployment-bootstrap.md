@@ -7,9 +7,10 @@ This document defines the MVP bootstrap target for running the product end to en
 ```text
 GitHub repository
 -> Vercel web app and API
+-> Vercel Sandbox hosted Agent runner for default jobs
 -> Supabase Postgres
--> home-machine collector at 192.168.0.16
--> external LLM or agent API used only by the collector runtime
+-> home-machine collector at 192.168.0.16 for fallback and operator-controlled reruns
+-> external LLM or agent API used by the sandbox or local collector runtime
 ```
 
 The intended reader is a future coding agent implementing deployment scripts, environment validation, local collector startup, or end-to-end smoke tests. Treat this as an execution spec. It defines the required operating shape, secret boundaries, commands that implementation should support, and acceptance criteria.
@@ -18,13 +19,14 @@ The intended reader is a future coding agent implementing deployment scripts, en
 
 - A fresh clone can be bootstrapped into a working Vercel app/API deployment.
 - Required Vercel environment variables can be added or checked with Vercel CLI.
-- A second machine, initially `192.168.0.16`, can clone the same repository, configure local collector secrets, and run the collector without direct Supabase access.
-- The local collector can poll Vercel, claim jobs, call a local/external LLM or agent API, upload normalized results, and surface reviewable state in the admin portal.
+- New admin-created jobs default to the hosted `vercel_sandbox` runner.
+- A second machine, initially `192.168.0.16`, can clone the same repository, configure local collector secrets, and run the collector as fallback without direct Supabase access.
+- The local collector can poll Vercel, claim local-eligible or fallback jobs, call a local/external LLM or agent API, upload normalized results, and surface reviewable state in the admin portal.
 - The backend remains the authority for validation, deduplication, review state, and publication.
 
 ## Non-Goals
 
-- Do not make Vercel run unbounded browser automation.
+- Do not make ordinary Vercel request/response functions run unbounded browser automation.
 - Do not deploy a dynamic per-URL agent environment.
 - Do not let the collector write directly to Supabase.
 - Do not put LLM provider keys into browser-visible code.
@@ -42,14 +44,14 @@ Vercel hosts:
 - admin portal
 - collector ingest endpoints
 - collector job claim, heartbeat, and report endpoints
+- internal sandbox failure-report endpoint
 - lightweight health endpoints
-- optional Vercel Cron or Workflow entry points after concrete implementation issues adopt them
+- optional Vercel Cron or Workflow entry points for bounded orchestration
 
 Vercel does not host:
 
-- persistent browser profiles
-- long-running Playwright sessions
-- the external LLM or agent runtime for browser-heavy extraction
+- persistent browser profiles outside isolated Sandbox attempts
+- unbounded Playwright sessions inside ordinary request/response functions
 
 ### Supabase
 
@@ -84,15 +86,33 @@ The collector machine runs:
 
 The collector authenticates to Vercel using `COLLECTOR_API_KEY` and identifies itself with `COLLECTOR_ID`. It does not need inbound access from Vercel.
 
+### Vercel Sandbox Runner
+
+Vercel Sandbox is the default hosted Agent runner for admin-created collector
+jobs. A backend or Workflow step starts a sandbox attempt, marks the job
+`sandbox_running`, and sends only job-scoped context plus a short-lived
+collector ingest token to the sandbox runtime.
+
+Sandbox attempts use the same Agent response contract and normalized collector
+uploads as the local collector. The sandbox must not receive Supabase secrets,
+admin tokens, Vercel management tokens, or the long-lived home-machine
+`COLLECTOR_API_KEY`. If Sandbox fails with `captcha_required`,
+`login_required`, `fetch_blocked`, `fetch_timeout`, `region_network_failed`, or
+`sandbox_runtime_timeout`, the backend records the structured reason and makes
+the job eligible for the local collector fallback.
+
 ### External LLM Or Agent API
 
-The LLM or agent API is a collector-side dependency for classification, OCR/vision interpretation, and structured extraction.
+The LLM or agent API is the extraction dependency for classification,
+OCR/vision interpretation, and structured extraction. It may be called by the
+hosted sandbox runner or by the local fallback collector.
 
 Rules:
 
 - The collector converts provider responses into the normalized collector contracts before upload.
 - Vercel APIs must not depend on provider-specific response shapes.
-- Provider API keys can live only on the collector machine unless a later issue moves a bounded extraction step into Vercel.
+- Provider API keys can live in Vercel only for the bounded sandbox runner and
+  must remain server-side.
 - The agent API must not receive `COLLECTOR_API_KEY`, Supabase secrets, Vercel tokens, or admin tokens.
 
 ## Prerequisites
@@ -169,7 +189,9 @@ SUPA_ANON_KEY
 SUPA_SERVICE_KEY
 ```
 
-Do not add collector-only LLM keys to Vercel for the MVP unless a later implementation issue explicitly runs extraction inside Vercel.
+Vercel stores only the Agent credentials required for bounded Sandbox attempts.
+Provider keys used exclusively by the local fallback collector stay on the
+collector machine.
 
 ### Collector Machine Variables
 
@@ -217,7 +239,10 @@ Add missing production variables interactively:
 ```bash
 vercel env add ADMIN_ACCESS_TOKEN production
 vercel env add COLLECTOR_API_KEY production
+vercel env add COLLECTOR_SCOPED_TOKEN_SECRET production
 vercel env add INTERNAL_API_SECRET production
+vercel env add AGENT_API_BASE_URL production
+vercel env add AGENT_API_KEY production
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY production
 vercel env add SUPABASE_SECRET_KEY production
@@ -227,6 +252,8 @@ vercel env add NEXT_PUBLIC_APP_URL production
 vercel env add OBSERVABILITY_PROVIDER production
 vercel env add VERCEL_WEB_ANALYTICS_ENABLED production
 vercel env add VERCEL_SPEED_INSIGHTS_ENABLED production
+vercel env add VERCEL_SANDBOX_ENABLED production
+vercel env add VERCEL_SANDBOX_API_KEY production
 ```
 
 Add preview variables the same way:
@@ -234,7 +261,10 @@ Add preview variables the same way:
 ```bash
 vercel env add ADMIN_ACCESS_TOKEN preview
 vercel env add COLLECTOR_API_KEY preview
+vercel env add COLLECTOR_SCOPED_TOKEN_SECRET preview
 vercel env add INTERNAL_API_SECRET preview
+vercel env add AGENT_API_BASE_URL preview
+vercel env add AGENT_API_KEY preview
 vercel env add NEXT_PUBLIC_SUPABASE_URL preview
 vercel env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY preview
 vercel env add SUPABASE_SECRET_KEY preview
@@ -244,6 +274,8 @@ vercel env add NEXT_PUBLIC_APP_URL preview
 vercel env add OBSERVABILITY_PROVIDER preview
 vercel env add VERCEL_WEB_ANALYTICS_ENABLED preview
 vercel env add VERCEL_SPEED_INSIGHTS_ENABLED preview
+vercel env add VERCEL_SANDBOX_ENABLED preview
+vercel env add VERCEL_SANDBOX_API_KEY preview
 ```
 
 After variables are set, local development can pull a local file:
@@ -324,13 +356,15 @@ Polling is enabled by default when the collector runtime starts. Use
 is controlled by `COLLECTOR_POLL_INTERVAL_SECONDS`,
 `COLLECTOR_ERROR_BACKOFF_SECONDS`, and `COLLECTOR_CAPABILITIES`.
 
-Agent mode requires collector-side `AGENT_API_BASE_URL` and `AGENT_API_KEY`.
+Local fallback Agent mode requires collector-side `AGENT_API_BASE_URL` and
+`AGENT_API_KEY`.
 If they are missing, the local run fails as `agent_config_missing` without
 printing provider secrets. The collector validates the Agent response schema
 before upload, retries invalid responses up to `AGENT_MAX_ATTEMPTS`, and uploads
 a structured `agent_response_invalid_schema` failure when retries are exhausted.
-Agent and provider keys stay on the collector machine and are never uploaded as
-collector payload data.
+Local fallback Agent and provider keys stay on the collector machine. Hosted
+Sandbox Agent credentials stay in server-side Vercel environment variables.
+Neither path uploads provider secrets as collector payload data.
 
 ## Runtime Flow
 
@@ -338,14 +372,21 @@ collector payload data.
 
 1. Admin opens the Vercel admin portal.
 2. Admin pastes a source or article URL.
-3. Backend validates the URL and creates a queued collector job.
-4. Collector polls Vercel and claims the job.
-5. The local collector persists the claimed job into its local queue.
-6. Collector sends heartbeats while running.
-7. Collector captures the page, classifies the capture mode, calls the LLM or agent API if needed, and uploads normalized results.
-8. Collector reports completion or failure back to the Vercel job endpoint.
-9. Vercel validates uploads, stores state in Supabase, computes review state, and links results to the job.
-10. Admin reviews the draft, failure, or missing-information state.
+3. Backend validates the URL and creates a queued collector job with
+   `preferredRunner=vercel_sandbox`.
+4. Backend or Workflow starts a Vercel Sandbox attempt and marks the job
+   `sandbox_running`.
+5. Sandbox calls the Agent API, validates the response through the shared
+   collector contract, and uploads normalized payloads to Vercel using a
+   short-lived scoped ingest token.
+6. If Sandbox reports a fallback-eligible failure, the job returns to `queued`
+   with `fallbackEligible=true` for the local collector.
+7. For fallback jobs, the local collector polls Vercel, claims the job,
+   persists it into the local queue, sends heartbeats, and uploads normalized
+   results through the same collector API boundary.
+8. Vercel validates uploads, stores state in Supabase, computes review state,
+   and links results to the job.
+9. Admin reviews the draft, failure, or missing-information state.
 
 ### Local Console Job
 
@@ -362,7 +403,8 @@ Implementation should provide health checks that can be used manually and by smo
 - app/API health endpoint returns build and environment summary without secrets
 - database health endpoint confirms server-side Supabase/Postgres connectivity
 - collector authenticated ping confirms `COLLECTOR_API_KEY` and `COLLECTOR_ID`
-- collector job claim endpoint returns either a claimed job or a no-job response
+- collector job claim endpoint returns a claimed local/fallback job or a no-job response
+- internal sandbox failure endpoint records runner state and fallback reason
 - local collector health endpoint reports queue depth, active job, last poll, and last upload result
 - admin portal shows job state, heartbeat age, result links, and failure reason
 
@@ -376,9 +418,9 @@ A complete MVP deployment is considered runnable when this scenario passes:
 4. The collector machine at `192.168.0.16` has the repository cloned and dependencies installed.
 5. Collector `.env` has `APP_BASE_URL`, `COLLECTOR_API_KEY`, `COLLECTOR_ID`, and LLM or agent API settings.
 6. Admin creates a collector job from a known test URL.
-7. Collector claims the job within the configured polling window.
-8. Collector heartbeats are visible in admin job state.
-9. Collector uploads at least one source run and either an event draft or a structured failure.
+7. The default Sandbox path uploads at least one source run and either an event draft or a structured failure.
+8. For a forced fallback failure, the local collector claims the job within the configured polling window.
+9. Collector or Sandbox runner state, attempt number, heartbeat/failure reason, and result IDs are visible in admin job state.
 10. Admin portal displays the result as `ready_for_review`, `needs_review`, `needs_info`, `failed`, or `not_activity`.
 11. If a draft is publishable, admin can publish it and the public event page displays it.
 12. Expired events are not shown in the default public upcoming list.

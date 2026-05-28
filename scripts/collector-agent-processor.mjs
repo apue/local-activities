@@ -21,6 +21,8 @@ const dispositions = new Set([
 const failureReasons = new Set([
   "fetch_blocked",
   "fetch_timeout",
+  "region_network_failed",
+  "sandbox_runtime_timeout",
   "login_required",
   "captcha_required",
   "parser_mismatch",
@@ -615,7 +617,11 @@ function readAgentConfig(env) {
     baseUrl,
     collectorId,
     collectorApiKey,
-    headers: createCollectorHeaders({ collectorId, collectorApiKey }),
+    headers: createCollectorHeaders({
+      collectorId,
+      collectorApiKey,
+      collectorJobId: env.COLLECTOR_JOB_ID?.trim() || undefined,
+    }),
     agentBaseUrl,
     agentApiKey,
     agentModel: env.AGENT_MODEL?.trim() || undefined,

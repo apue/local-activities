@@ -20,6 +20,9 @@ type AdminEnv = {
 const createCollectorJobSchema = z
   .object({
     seedUrl: z.string().url(),
+    preferredRunner: z
+      .enum(["vercel_sandbox", "local_collector"])
+      .optional(),
   })
   .strict();
 

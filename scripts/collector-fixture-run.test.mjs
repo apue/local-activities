@@ -98,6 +98,13 @@ describe("collector fixture runner", () => {
 
     expect(headers.authorization).toBe("Bearer collector-secret-value");
     expect(headers["x-collector-id"]).toBe("home-1");
+    expect(
+      createCollectorHeaders({
+        collectorId: "sandbox-job-1",
+        collectorApiKey: "scoped-token",
+        collectorJobId: "job-1",
+      })["x-collector-job-id"],
+    ).toBe("job-1");
     expect(summary).toContain("fixture-001");
     expect(summary).toContain("draft-1");
     expect(summary).not.toContain("collector-secret-value");

@@ -28,6 +28,7 @@ class RouteAdminStore implements AdminStore {
   async createCollectorJob(input: {
     seedUrl: string;
     requestedAt: string;
+    preferredRunner: CollectorJobRecord["preferredRunner"];
   }): Promise<CollectorJobRecord> {
     return {
       id: 1,
@@ -36,6 +37,12 @@ class RouteAdminStore implements AdminStore {
       state: "queued",
       requestedAt: input.requestedAt,
       attemptNumber: 0,
+      preferredRunner: input.preferredRunner,
+      runnerState:
+        input.preferredRunner === "local_collector"
+          ? "local_pending"
+          : "sandbox_pending",
+      fallbackEligible: false,
     };
   }
 
@@ -115,6 +122,9 @@ describe("admin route handlers", () => {
       job: {
         jobId: "job-1",
         state: "queued",
+        preferredRunner: "vercel_sandbox",
+        runnerState: "sandbox_pending",
+        fallbackEligible: false,
       },
     });
   });
