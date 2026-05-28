@@ -85,11 +85,19 @@ Before the browser-based collector lands, the repository includes a fixture
 smoke command that exercises the same Vercel collector API boundary:
 
 ```bash
+pnpm collector:bootstrap-env --env-file .env.local --collector-host 192.168.0.16 --output .env
+pnpm env:check --target collector --env-file .env
 pnpm collector:console --env-file .env
 pnpm collector:fixture --env-file .env --seed-url "https://mp.weixin.qq.com/s/example"
 pnpm collector:fixture --env-file .env --claim-once --fixture ready-event
 pnpm collector:fixture --env-file .env --claim-once --fixture failure
 ```
+
+`pnpm collector:bootstrap-env` writes a collector-only dotenv file for the home
+machine. It copies the public app URL and collector token from a trusted source
+env when available, defaults `COLLECTOR_ID` to `home-192-168-0-16`, and leaves
+operator-owned `TEXT_INFERENCE_*` values as editable placeholders when they are
+not present.
 
 The local console command starts a local-only web service with Vercel job
 polling, a JSON-backed queue, and one-at-a-time worker. Use
