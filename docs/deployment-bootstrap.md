@@ -267,10 +267,22 @@ The collector machine setup should be possible with a clean clone:
 git clone git@github.com:apue/local-activities.git
 cd local-activities
 pnpm install
-cp .env.example .env
 ```
 
-The operator then edits `.env` with collector-machine values, especially:
+If the operator already has a Vercel/app env file on a trusted machine, generate
+a collector-only env file instead of copying the whole app environment:
+
+```bash
+pnpm collector:bootstrap-env \
+  --env-file .env.local \
+  --collector-host 192.168.0.16 \
+  --output .env
+chmod 600 .env
+```
+
+The generated file intentionally excludes admin, Supabase, database, and Vercel
+management secrets. The operator then edits `.env` with collector-machine
+values, especially:
 
 - `APP_BASE_URL`
 - `COLLECTOR_BASE_URL`
@@ -300,7 +312,9 @@ The local console should default to localhost. If exposed on the LAN for conveni
 Example startup:
 
 ```bash
+pnpm env:check --target collector --env-file .env
 pnpm collector:console --env-file .env
+LOCAL_COLLECTOR_PROCESSOR=extract pnpm collector:console --env-file .env
 pnpm collector:console --help
 ```
 
@@ -430,6 +444,8 @@ checks, or `LOCAL_COLLECTOR_PROCESSOR=extract` for HTTP/HTML capture plus
 collector-side text inference:
 
 ```bash
+pnpm collector:bootstrap-env --env-file .env.local --collector-host 192.168.0.16 --output .env
+pnpm env:check --target collector --env-file .env
 pnpm collector:console --env-file .env
 LOCAL_COLLECTOR_PROCESSOR=extract pnpm collector:console --env-file .env
 pnpm collector:fixture --env-file .env --seed-url "https://mp.weixin.qq.com/s/example"
