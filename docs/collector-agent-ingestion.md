@@ -117,6 +117,8 @@ Default review routing:
 
 The collector should process sources on a low-frequency schedule, initially every 4 hours, or through an admin-triggered seed URL run.
 
+Admin-triggered seed URL runs should use the job-claim flow defined in [Local Collector Console And Job Queue Spec](local-collector-console.md).
+
 Required flow:
 
 1. Start a source run with collector identity, source or seed URL, and started time.
