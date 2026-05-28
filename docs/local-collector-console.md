@@ -85,16 +85,22 @@ Before the browser-based collector lands, the repository includes a fixture
 smoke command that exercises the same Vercel collector API boundary:
 
 ```bash
+pnpm collector:console --env-file .env
 pnpm collector:fixture --env-file .env --seed-url "https://mp.weixin.qq.com/s/example"
 pnpm collector:fixture --env-file .env --claim-once --fixture ready-event
 pnpm collector:fixture --env-file .env --claim-once --fixture failure
 ```
 
-The command uploads deterministic source-run, article-snapshot, draft, or
-failure payloads. It is not a real browser or LLM extractor, and it must not be
-used as a substitute for production collection. Its purpose is to prove that the
-collector machine can authenticate to Vercel, upload normalized objects, and
-report a claimed job without direct Supabase access.
+The local console command starts a local-only web service with a JSON-backed
+queue and one-at-a-time worker. In the current skeleton it uses
+`LOCAL_COLLECTOR_PROCESSOR=fixture`, which uploads deterministic source-run,
+article-snapshot, and draft payloads through the existing collector API
+boundary. The fixture commands can still be used for direct API checks.
+
+Fixture mode is not a real browser or LLM extractor, and it must not be used as
+a substitute for production collection. Its purpose is to prove that the
+collector machine can queue work, authenticate to Vercel, and upload normalized
+objects without direct Supabase access.
 
 ## Vercel Collector Job Queue
 
@@ -384,11 +390,16 @@ Implement the local operator page and local queue.
 
 Expected output:
 
-- local-only web service
-- seed URL form
-- run list and run detail page
-- local queue worker
-- local run persistence
+- local-only web service: implemented by `pnpm collector:console`
+- seed URL form: implemented in the local console HTML/API
+- run list and run detail API: implemented
+- local queue worker: implemented for one-at-a-time fixture processing
+- local run persistence: implemented through `LOCAL_COLLECTOR_QUEUE_FILE`
+
+Remaining work:
+
+- richer browser smoke coverage for the local console page
+- real browser/LLM extraction processor to replace fixture mode
 
 ### Slice 5: Polling Worker
 

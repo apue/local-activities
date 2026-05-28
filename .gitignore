@@ -26,6 +26,7 @@ yarn-debug.log*
 
 # collector/browser state
 .collector-profile/
+.collector-runs.json
 playwright-report/
 test-results/
 .vercel
