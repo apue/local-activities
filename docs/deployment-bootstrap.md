@@ -405,6 +405,14 @@ pnpm run collector
 pnpm run collector:console
 ```
 
+Until the real browser/LLM collector lands, use the fixture smoke command to
+prove collector API connectivity from the target machine:
+
+```bash
+pnpm collector:fixture --env-file .env --seed-url "https://mp.weixin.qq.com/s/example"
+pnpm collector:fixture --env-file .env --claim-once --fixture ready-event
+```
+
 ### Slice 5: End-To-End Smoke Test
 
 Add a smoke test or checklist command that proves:
