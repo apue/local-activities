@@ -11,6 +11,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "env:check": "node scripts/env-inventory.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
