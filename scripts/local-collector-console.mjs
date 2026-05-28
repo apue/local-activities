@@ -5,12 +5,21 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runCollectorFixture } from "./collector-fixture-run.mjs";
+import {
+  createCollectorHeaders,
+  runCollectorFixture,
+} from "./collector-fixture-run.mjs";
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 
 const activeStates = new Set(["capturing", "extracting", "uploading"]);
 const terminalStates = new Set(["uploaded", "failed", "cancelled"]);
 const defaultPort = 4317;
+const defaultCapabilities = [
+  "wechat_browser",
+  "dom_text",
+  "image_capture",
+  "vision_extraction",
+];
 
 export class JsonRunStore {
   constructor({ filePath }) {
@@ -28,6 +37,40 @@ export class JsonRunStore {
       attemptNumber: 1,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
+      history: [{ state: "queued", at: now.toISOString() }],
+    };
+
+    data.runs.push(run);
+    await this.#writeData(data);
+    return run;
+  }
+
+  async enqueueVercelJob({ job, now = new Date() }) {
+    assertHttpUrl(job.seedUrl);
+    const data = await this.#readData();
+    const existing = data.runs.find(
+      (entry) => entry.vercelJob?.jobId === job.jobId,
+    );
+    if (existing) {
+      return { ...existing, duplicate: true };
+    }
+
+    const sequence = data.runs.length + 1;
+    const run = {
+      id: createLocalRunId(now, sequence),
+      source: "vercel_job",
+      seedUrl: job.seedUrl,
+      state: "queued",
+      attemptNumber: job.attemptNumber ?? 1,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      vercelJob: removeUndefined({
+        jobId: job.jobId,
+        requestedAt: job.requestedAt,
+        leaseExpiresAt: job.leaseExpiresAt,
+        attemptNumber: job.attemptNumber,
+        requestedMode: job.requestedMode,
+      }),
       history: [{ state: "queued", at: now.toISOString() }],
     };
 
@@ -130,16 +173,25 @@ export class JsonRunStore {
 }
 
 export function createLocalCollectorRuntime({ store, config, processor }) {
-  return {
+  const runtime = {
     store,
     config,
+    polling: createPollingState(),
     processor: processor ?? createProcessor(config),
+  };
+
+  return {
+    ...runtime,
+    heartbeat: createHeartbeatClient(config),
+    report: createReportClient(config),
   };
 }
 
 export async function processNextRun({
   store,
   processor,
+  heartbeat,
+  report,
   now = new Date(),
 }) {
   const activeRun = await store.activeRun();
@@ -152,11 +204,15 @@ export async function processNextRun({
 
   try {
     await store.transition(queued.id, "capturing", { now });
+    await heartbeatVercelJob({ run: queued, stage: "capturing", heartbeat });
     await store.transition(queued.id, "extracting", { now });
+    await heartbeatVercelJob({ run: queued, stage: "extracting", heartbeat });
     await store.transition(queued.id, "uploading", { now });
+    await heartbeatVercelJob({ run: queued, stage: "uploading", heartbeat });
     const processorResult = await processor({
       seedUrl: queued.seedUrl,
       localRunId: queued.id,
+      vercelJobId: queued.vercelJob?.jobId,
     });
     const uploaded = await store.transition(queued.id, "uploaded", {
       now,
@@ -165,15 +221,105 @@ export async function processNextRun({
         processorResult: sanitizeProcessorResult(processorResult),
       },
     });
+    await reportVercelJob({
+      run: uploaded,
+      processorResult,
+      report,
+    });
     return sanitizeRun(uploaded);
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     const failed = await store.transition(queued.id, "failed", {
       now,
       patch: {
-        failureReason: error instanceof Error ? error.message : String(error),
+        failureReason: message,
       },
     });
+    await reportVercelJob({
+      run: failed,
+      failureReason: message,
+      report,
+    });
     return sanitizeRun(failed);
+  }
+}
+
+export async function pollVercelJobOnce({ runtime, now = new Date() }) {
+  const activeRun = await runtime.store.activeRun();
+  if (activeRun) {
+    const result = {
+      kind: "local-busy",
+      reason: "active",
+      runId: activeRun.id,
+      nextDelayMs: runtime.config.polling.idlePollMs,
+    };
+    updatePollingState(runtime.polling, result, now);
+    return result;
+  }
+
+  const queuedRun = await runtime.store.firstQueued();
+  if (queuedRun) {
+    const result = {
+      kind: "local-busy",
+      reason: "queued",
+      runId: queuedRun.id,
+      nextDelayMs: runtime.config.polling.idlePollMs,
+    };
+    updatePollingState(runtime.polling, result, now);
+    return result;
+  }
+
+  try {
+    const data = await postJson({
+      baseUrl: runtime.config.baseUrl,
+      path: "/api/collector/jobs/claim",
+      headers: collectorHeaders(runtime.config),
+      fetchImpl: runtime.config.fetchImpl ?? fetch,
+      body: {
+        collectorId: runtime.config.collectorId,
+        capabilities: runtime.config.capabilities,
+        maxJobs: 1,
+      },
+    });
+
+    if (!data.job) {
+      const retryAfterSeconds =
+        data.retryAfterSeconds
+        ?? computeNoJobDelayMs(runtime.polling, runtime.config.polling) / 1000;
+      const result = {
+        kind: "no-job",
+        retryAfterSeconds,
+        nextDelayMs: retryAfterSeconds * 1000,
+      };
+      updatePollingState(runtime.polling, result, now);
+      return result;
+    }
+
+    const run = await runtime.store.enqueueVercelJob({ job: data.job, now });
+    const result = run.duplicate
+      ? {
+          kind: "duplicate",
+          jobId: data.job.jobId,
+          runId: run.id,
+          nextDelayMs: runtime.config.polling.idlePollMs,
+        }
+      : {
+          kind: "claimed",
+          jobId: data.job.jobId,
+          runId: run.id,
+          nextDelayMs: 0,
+        };
+    updatePollingState(runtime.polling, result, now);
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const result = {
+      kind: "error",
+      error: message,
+      nextDelayMs: computeErrorDelayMs(runtime.polling, runtime.config.polling),
+    };
+    updatePollingState(runtime.polling, result, now);
+    return result;
   }
 }
 
@@ -196,6 +342,7 @@ export async function handleConsoleRequest(request, runtime) {
         host: runtime.config.host,
         port: runtime.config.port,
         processor: runtime.config.processor,
+        polling: sanitizePollingState(runtime.polling),
         ...(await runtime.store.status()),
       });
     }
@@ -260,6 +407,11 @@ export function readConsoleConfig(env = process.env) {
   const collectorId = env.COLLECTOR_ID?.trim();
   const collectorApiKey = env.COLLECTOR_API_KEY?.trim();
   const consoleToken = env.LOCAL_COLLECTOR_CONSOLE_TOKEN?.trim();
+  const idlePollMs = parseDurationMs(env.COLLECTOR_POLL_INTERVAL_SECONDS, 60);
+  const errorPollMs = parseDurationMs(
+    env.COLLECTOR_ERROR_BACKOFF_SECONDS,
+    60,
+  );
 
   if (processor !== "fixture") {
     throw new Error(`unsupported_local_collector_processor:${processor}`);
@@ -279,6 +431,13 @@ export function readConsoleConfig(env = process.env) {
     collectorId,
     collectorApiKey,
     consoleToken,
+    capabilities: parseCapabilities(env.COLLECTOR_CAPABILITIES),
+    polling: {
+      enabled: env.COLLECTOR_POLLING_ENABLED !== "false",
+      idlePollMs,
+      errorPollMs,
+    },
+    fetchImpl: fetch,
     queueFile: env.LOCAL_COLLECTOR_QUEUE_FILE?.trim()
       || ".collector-runs.json",
     env,
@@ -302,6 +461,10 @@ Local console environment:
   COLLECTOR_CONSOLE_HOST defaults to 127.0.0.1
   COLLECTOR_CONSOLE_PORT defaults to 4317
   LOCAL_COLLECTOR_QUEUE_FILE defaults to .collector-runs.json
+  COLLECTOR_POLLING_ENABLED defaults to true
+  COLLECTOR_POLL_INTERVAL_SECONDS defaults to 60
+  COLLECTOR_ERROR_BACKOFF_SECONDS defaults to 60
+  COLLECTOR_CAPABILITIES defaults to wechat_browser,dom_text,image_capture,vision_extraction
   LOCAL_COLLECTOR_CONSOLE_TOKEN is required when binding outside localhost
 
 Options:
@@ -329,6 +492,7 @@ export async function runCli(argv = process.argv.slice(2), baseEnv = process.env
   const runtime = createLocalCollectorRuntime({ store, config });
   const server = await startConsoleServer({ runtime, config });
   startWorkerLoop({ runtime });
+  if (config.polling.enabled) startPollingLoop({ runtime });
 
   console.log(
     `Local collector console listening on http://${config.host}:${config.port}`,
@@ -365,14 +529,164 @@ export function startWorkerLoop({ runtime, intervalMs = 5_000 }) {
   return timer;
 }
 
+export function startPollingLoop({ runtime }) {
+  const tick = async () => {
+    const result = await pollVercelJobOnce({ runtime });
+    setTimeout(tick, result.nextDelayMs).unref?.();
+  };
+  tick();
+}
+
 function createProcessor(config) {
   return async ({ seedUrl, localRunId }) =>
     runCollectorFixture({
       env: config.env,
+      fetchImpl: config.fetchImpl ?? fetch,
       seedUrl,
       runId: localRunId,
       fixture: "ready-event",
     });
+}
+
+function createHeartbeatClient(config) {
+  return async ({ jobId, localRunId, stage }) =>
+    postJson({
+      baseUrl: config.baseUrl,
+      path: `/api/collector/jobs/${jobId}/heartbeat`,
+      headers: collectorHeaders(config),
+      fetchImpl: config.fetchImpl ?? fetch,
+      body: {
+        collectorId: config.collectorId,
+        localRunId,
+        stage,
+        message: `Local collector ${stage}`,
+        extendLeaseSeconds: 300,
+      },
+    });
+}
+
+function createReportClient(config) {
+  return async (input) =>
+    postJson({
+      baseUrl: config.baseUrl,
+      path: `/api/collector/jobs/${input.jobId}/report`,
+      headers: collectorHeaders(config),
+      fetchImpl: config.fetchImpl ?? fetch,
+      body: buildJobReport({
+        collectorId: config.collectorId,
+        ...input,
+      }),
+    });
+}
+
+function collectorHeaders(config) {
+  return createCollectorHeaders({
+    collectorId: config.collectorId,
+    collectorApiKey: config.collectorApiKey,
+  });
+}
+
+async function heartbeatVercelJob({ run, stage, heartbeat }) {
+  if (!run.vercelJob?.jobId || !heartbeat) return;
+  await heartbeat({
+    jobId: run.vercelJob.jobId,
+    localRunId: run.id,
+    stage,
+  });
+}
+
+async function reportVercelJob({
+  run,
+  processorResult,
+  failureReason,
+  report,
+}) {
+  if (!run.vercelJob?.jobId || !report) return;
+  const uploadedIds = processorResult?.uploadedIds ?? {};
+
+  await report(removeUndefined({
+    jobId: run.vercelJob.jobId,
+    localRunId: run.id,
+    status: failureReason ? "failed" : "completed",
+    sourceRunId: uploadedIds.sourceRunId,
+    articleSnapshotIds: uploadedIds.articleSnapshotId
+      ? [uploadedIds.articleSnapshotId]
+      : undefined,
+    eventDraftIds: uploadedIds.eventDraftId
+      ? [uploadedIds.eventDraftId]
+      : undefined,
+    failureIds: uploadedIds.failureId ? [uploadedIds.failureId] : undefined,
+    suggestedDisposition: failureReason ? "failed" : "ready_for_review",
+    message: failureReason,
+  }));
+}
+
+function buildJobReport({
+  collectorId,
+  jobId: _jobId,
+  localRunId,
+  status,
+  sourceRunId,
+  articleSnapshotIds,
+  eventDraftIds,
+  failureIds,
+  suggestedDisposition,
+  message,
+}) {
+  return removeUndefined({
+    collectorId,
+    localRunId,
+    status,
+    sourceRunId,
+    articleSnapshotIds,
+    eventDraftIds,
+    failureIds,
+    suggestedDisposition,
+    message,
+  });
+}
+
+async function postJson({ baseUrl, path, headers, fetchImpl, body }) {
+  const response = await fetchImpl(`${baseUrl}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(
+      `collector_request_failed:${path}:${response.status}:${data.error ?? "unknown"}`,
+    );
+  }
+  return data;
+}
+
+function createPollingState() {
+  return {
+    lastKind: "never",
+    lastPollAt: null,
+    lastJobId: null,
+    lastRunId: null,
+    lastError: null,
+    nextDelayMs: null,
+    consecutiveNoJob: 0,
+    consecutiveErrors: 0,
+  };
+}
+
+function updatePollingState(state, result, now) {
+  state.consecutiveNoJob = result.kind === "no-job"
+    ? state.consecutiveNoJob + 1
+    : 0;
+  state.consecutiveErrors = result.kind === "error"
+    ? state.consecutiveErrors + 1
+    : 0;
+  state.lastKind = result.kind;
+  state.lastPollAt = now.toISOString();
+  state.lastJobId = result.jobId ?? state.lastJobId;
+  state.lastRunId = result.runId ?? state.lastRunId;
+  state.lastError = result.error ?? null;
+  state.nextDelayMs = result.nextDelayMs;
 }
 
 function isAuthorized(request, config) {
@@ -500,15 +814,30 @@ async function toFetchRequest(req) {
 function sanitizeRun(run) {
   return removeUndefined({
     id: run.id,
+    source: run.source,
     seedUrl: run.seedUrl,
     state: run.state,
     attemptNumber: run.attemptNumber,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     failureReason: run.failureReason,
+    vercelJob: run.vercelJob,
     uploadedIds: run.uploadedIds,
     processorResult: run.processorResult,
     history: run.history,
+  });
+}
+
+function sanitizePollingState(state) {
+  return removeUndefined({
+    lastKind: state.lastKind,
+    lastPollAt: state.lastPollAt,
+    lastJobId: state.lastJobId,
+    lastRunId: state.lastRunId,
+    lastError: state.lastError,
+    nextDelayMs: state.nextDelayMs,
+    consecutiveNoJob: state.consecutiveNoJob,
+    consecutiveErrors: state.consecutiveErrors,
   });
 }
 
@@ -545,6 +874,31 @@ function isLocalHost(host) {
 
 function normalizeBaseUrl(value) {
   return value.trim().replace(/\/+$/, "");
+}
+
+function parseCapabilities(value) {
+  if (!value?.trim()) return defaultCapabilities;
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function parseDurationMs(value, defaultSeconds) {
+  const seconds = Number.parseInt(value ?? "", 10);
+  return (Number.isFinite(seconds) && seconds > 0 ? seconds : defaultSeconds)
+    * 1000;
+}
+
+function computeNoJobDelayMs(state, polling) {
+  if (state.consecutiveNoJob < 10) return polling.idlePollMs;
+  return Math.min(300_000, Math.max(120_000, polling.idlePollMs * 2));
+}
+
+function computeErrorDelayMs(state, polling) {
+  const multipliers = [1, 2, 5, 10];
+  const index = Math.min(state.consecutiveErrors, multipliers.length - 1);
+  return Math.min(600_000, polling.errorPollMs * multipliers[index]);
 }
 
 function escapeHtml(value) {

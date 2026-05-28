@@ -9,6 +9,7 @@ import {
   createLocalCollectorRuntime,
   formatConsoleHelp,
   handleConsoleRequest,
+  pollVercelJobOnce,
   processNextRun,
   readConsoleConfig,
 } from "./local-collector-console.mjs";
@@ -31,6 +32,300 @@ describe("local collector console runtime", () => {
     });
     expect((await reloaded.list()).map((entry) => entry.id)).toEqual([run.id]);
     expect(await readFile(filePath, "utf8")).not.toContain("collector-secret");
+  });
+
+  it("claims a Vercel job into the local queue without duplicating it", async () => {
+    const store = new JsonRunStore({ filePath: await tempRunFile() });
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init, body: JSON.parse(init.body) });
+      return jsonResponse({
+        job: {
+          jobId: "job-1",
+          seedUrl: "https://mp.weixin.qq.com/s/job",
+          requestedAt: "2026-05-28T10:00:00.000Z",
+          leaseExpiresAt: "2026-05-28T10:10:00.000Z",
+          attemptNumber: 1,
+        },
+      });
+    };
+    const runtime = createRuntime({ store, fetchImpl });
+
+    const first = await pollVercelJobOnce({
+      runtime,
+      now: new Date("2026-05-28T10:01:00.000Z"),
+    });
+    const second = await pollVercelJobOnce({
+      runtime,
+      now: new Date("2026-05-28T10:02:00.000Z"),
+    });
+    const runs = await store.list();
+
+    expect(first).toMatchObject({
+      kind: "claimed",
+      jobId: "job-1",
+      runId: runs[0].id,
+      nextDelayMs: 0,
+    });
+    expect(second).toMatchObject({
+      kind: "local-busy",
+      reason: "queued",
+      runId: runs[0].id,
+    });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      source: "vercel_job",
+      seedUrl: "https://mp.weixin.qq.com/s/job",
+      state: "queued",
+      vercelJob: {
+        jobId: "job-1",
+        attemptNumber: 1,
+      },
+    });
+    expect(calls[0]).toMatchObject({
+      url: "https://local-activities.example/api/collector/jobs/claim",
+      body: {
+        collectorId: "home-1",
+        maxJobs: 1,
+      },
+    });
+    expect(calls[0].init.headers.authorization).toBe("Bearer collector-secret");
+    expect(await readFile(store.filePath, "utf8")).not.toContain(
+      "collector-secret",
+    );
+  });
+
+  it("does not claim Vercel jobs while local work is queued or active", async () => {
+    const queuedStore = new JsonRunStore({ filePath: await tempRunFile() });
+    await queuedStore.enqueue({
+      seedUrl: "https://mp.weixin.qq.com/s/local",
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+    const activeStore = new JsonRunStore({ filePath: await tempRunFile() });
+    const active = await activeStore.enqueue({
+      seedUrl: "https://mp.weixin.qq.com/s/active",
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+    await activeStore.transition(active.id, "uploading", {
+      now: new Date("2026-05-28T10:01:00.000Z"),
+    });
+    const fetchImpl = vi.fn(async () => jsonResponse({ job: null }));
+
+    const queuedResult = await pollVercelJobOnce({
+      runtime: createRuntime({ store: queuedStore, fetchImpl }),
+      now: new Date("2026-05-28T10:02:00.000Z"),
+    });
+    const activeResult = await pollVercelJobOnce({
+      runtime: createRuntime({ store: activeStore, fetchImpl }),
+      now: new Date("2026-05-28T10:02:00.000Z"),
+    });
+
+    expect(queuedResult).toMatchObject({
+      kind: "local-busy",
+      reason: "queued",
+      nextDelayMs: 60000,
+    });
+    expect(activeResult).toMatchObject({
+      kind: "local-busy",
+      reason: "active",
+      nextDelayMs: 60000,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("heartbeats and reports a claimed Vercel job after fixture processing", async () => {
+    const store = new JsonRunStore({ filePath: await tempRunFile() });
+    const run = await store.enqueueVercelJob({
+      job: {
+        jobId: "job-1",
+        seedUrl: "https://mp.weixin.qq.com/s/job",
+        requestedAt: "2026-05-28T10:00:00.000Z",
+        leaseExpiresAt: "2026-05-28T10:10:00.000Z",
+        attemptNumber: 1,
+      },
+      now: new Date("2026-05-28T10:01:00.000Z"),
+    });
+    const heartbeat = vi.fn(async () => ({ ok: true }));
+    const report = vi.fn(async () => ({ ok: true }));
+    const processor = vi.fn(async () => ({
+      kind: "uploaded",
+      runId: run.id,
+      uploadedIds: {
+        sourceRunId: "source-1",
+        articleSnapshotId: "article-1",
+        eventDraftId: "draft-1",
+      },
+    }));
+
+    const result = await processNextRun({
+      store,
+      processor,
+      heartbeat,
+      report,
+      now: new Date("2026-05-28T10:02:00.000Z"),
+    });
+
+    expect(result).toMatchObject({ id: run.id, state: "uploaded" });
+    expect(heartbeat.mock.calls.map(([input]) => input)).toMatchObject([
+      { jobId: "job-1", localRunId: run.id, stage: "capturing" },
+      { jobId: "job-1", localRunId: run.id, stage: "extracting" },
+      { jobId: "job-1", localRunId: run.id, stage: "uploading" },
+    ]);
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job-1",
+        localRunId: run.id,
+        status: "completed",
+        sourceRunId: "source-1",
+        articleSnapshotIds: ["article-1"],
+        eventDraftIds: ["draft-1"],
+        suggestedDisposition: "ready_for_review",
+      }),
+    );
+    expect(processor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        seedUrl: "https://mp.weixin.qq.com/s/job",
+        localRunId: run.id,
+        vercelJobId: "job-1",
+      }),
+    );
+  });
+
+  it("runs claim, heartbeat, fixture upload, and report through mocked Vercel APIs", async () => {
+    const store = new JsonRunStore({ filePath: await tempRunFile() });
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init, body: JSON.parse(init.body) });
+      if (url.endsWith("/api/collector/jobs/claim")) {
+        return jsonResponse({
+          job: {
+            jobId: "job-1",
+            seedUrl: "https://mp.weixin.qq.com/s/job",
+            requestedAt: "2026-05-28T10:00:00.000Z",
+            leaseExpiresAt: "2026-05-28T10:10:00.000Z",
+            attemptNumber: 1,
+          },
+        });
+      }
+      if (url.endsWith("/heartbeat") || url.endsWith("/report")) {
+        return jsonResponse({ ok: true });
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+    const runtime = createRuntime({ store, fetchImpl });
+
+    await pollVercelJobOnce({
+      runtime,
+      now: new Date("2026-05-28T10:01:00.000Z"),
+    });
+    const processed = await processNextRun({
+      ...runtime,
+      now: new Date("2026-05-28T10:02:00.000Z"),
+    });
+
+    expect(processed).toMatchObject({ state: "uploaded" });
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://local-activities.example/api/collector/jobs/claim",
+      "https://local-activities.example/api/collector/jobs/job-1/heartbeat",
+      "https://local-activities.example/api/collector/jobs/job-1/heartbeat",
+      "https://local-activities.example/api/collector/jobs/job-1/heartbeat",
+      "https://local-activities.example/api/collector/source-run",
+      "https://local-activities.example/api/collector/article-snapshot",
+      "https://local-activities.example/api/collector/event-draft",
+      "https://local-activities.example/api/collector/jobs/job-1/report",
+    ]);
+    expect(calls.at(-1).body).toMatchObject({
+      collectorId: "home-1",
+      localRunId: processed.id,
+      status: "completed",
+      sourceRunId: "id-5",
+      articleSnapshotIds: ["id-6"],
+      eventDraftIds: ["id-7"],
+      suggestedDisposition: "ready_for_review",
+    });
+    expect(JSON.stringify(calls.map((call) => call.body))).not.toContain(
+      "collector-secret",
+    );
+  });
+
+  it("reports Vercel job failure when processing fails", async () => {
+    const store = new JsonRunStore({ filePath: await tempRunFile() });
+    const run = await store.enqueueVercelJob({
+      job: {
+        jobId: "job-1",
+        seedUrl: "https://mp.weixin.qq.com/s/job",
+        requestedAt: "2026-05-28T10:00:00.000Z",
+        leaseExpiresAt: "2026-05-28T10:10:00.000Z",
+        attemptNumber: 1,
+      },
+      now: new Date("2026-05-28T10:01:00.000Z"),
+    });
+    const report = vi.fn(async () => ({ ok: true }));
+
+    const result = await processNextRun({
+      store,
+      processor: async () => {
+        throw new Error("agent_config_missing");
+      },
+      heartbeat: async () => ({ ok: true }),
+      report,
+      now: new Date("2026-05-28T10:02:00.000Z"),
+    });
+
+    expect(result).toMatchObject({
+      id: run.id,
+      state: "failed",
+      failureReason: "agent_config_missing",
+    });
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job-1",
+        localRunId: run.id,
+        status: "failed",
+        suggestedDisposition: "failed",
+        message: "agent_config_missing",
+      }),
+    );
+  });
+
+  it("records no-job and network poll status without exposing secrets", async () => {
+    const store = new JsonRunStore({ filePath: await tempRunFile() });
+    const runtime = createRuntime({
+      store,
+      fetchImpl: async () => jsonResponse({ job: null, retryAfterSeconds: 120 }),
+    });
+
+    const noJob = await pollVercelJobOnce({
+      runtime,
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+    runtime.config.fetchImpl = async () => {
+      throw new Error("network_down");
+    };
+    const error = await pollVercelJobOnce({
+      runtime,
+      now: new Date("2026-05-28T10:01:00.000Z"),
+    });
+    const health = await requestJson(
+      runtime,
+      new Request("http://127.0.0.1:4317/health"),
+    );
+
+    expect(noJob).toMatchObject({
+      kind: "no-job",
+      retryAfterSeconds: 120,
+      nextDelayMs: 120000,
+    });
+    expect(error).toMatchObject({
+      kind: "error",
+      error: "network_down",
+      nextDelayMs: 60000,
+    });
+    expect(health.body.polling).toMatchObject({
+      lastKind: "error",
+      lastError: "network_down",
+    });
+    expect(JSON.stringify(health.body)).not.toContain("collector-secret");
   });
 
   it("processes one queued run through fixture upload states", async () => {
@@ -349,6 +644,9 @@ describe("local collector console runtime", () => {
 
     expect(help).toContain("pnpm collector:console");
     expect(help).toContain("LOCAL_COLLECTOR_PROCESSOR=fixture");
+    expect(help).toContain("COLLECTOR_POLLING_ENABLED");
+    expect(help).toContain("COLLECTOR_POLL_INTERVAL_SECONDS");
+    expect(help).toContain("COLLECTOR_CAPABILITIES");
     expect(help).toContain("LOCAL_COLLECTOR_CONSOLE_TOKEN");
     expect(help).toContain("127.0.0.1");
   });
@@ -364,5 +662,42 @@ async function requestJson(runtime, request) {
   return {
     status: response.status,
     body: await response.json(),
+  };
+}
+
+function createRuntime({ store, fetchImpl }) {
+  return createLocalCollectorRuntime({
+    store,
+    config: {
+      host: "127.0.0.1",
+      port: 4317,
+      processor: "fixture",
+      baseUrl: "https://local-activities.example",
+      collectorId: "home-1",
+      collectorApiKey: "collector-secret",
+      consoleToken: undefined,
+      capabilities: ["wechat_browser", "dom_text"],
+      fetchImpl,
+      polling: {
+        enabled: true,
+        idlePollMs: 60000,
+        errorPollMs: 60000,
+      },
+      env: {
+        COLLECTOR_BASE_URL: "https://local-activities.example",
+        COLLECTOR_API_KEY: "collector-secret",
+        COLLECTOR_ID: "home-1",
+      },
+    },
+  });
+}
+
+function jsonResponse(body, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async json() {
+      return body;
+    },
   };
 }
