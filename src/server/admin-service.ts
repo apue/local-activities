@@ -42,6 +42,7 @@ export type AdminStore = {
   createCollectorJob(input: {
     seedUrl: string;
     requestedAt: string;
+    preferredRunner: CollectorJobRecord["preferredRunner"];
   }): Promise<CollectorJobRecord>;
   listCollectorJobs(): Promise<CollectorJobRecord[]>;
   listEventDrafts(input: {
@@ -59,7 +60,10 @@ export type AdminStore = {
 };
 
 export async function createAdminCollectorJob(
-  input: { seedUrl: string },
+  input: {
+    seedUrl: string;
+    preferredRunner?: CollectorJobRecord["preferredRunner"];
+  },
   store: AdminStore,
   now = new Date(),
 ) {
@@ -77,6 +81,7 @@ export async function createAdminCollectorJob(
   return store.createCollectorJob({
     seedUrl: seedUrl.toString(),
     requestedAt: now.toISOString(),
+    preferredRunner: input.preferredRunner ?? "vercel_sandbox",
   });
 }
 

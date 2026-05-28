@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   claimJobRequestSchema,
+  claimJobResponseSchema,
   heartbeatRequestSchema,
   jobReportRequestSchema,
 } from "./collector-job";
@@ -25,6 +26,25 @@ describe("collector job contracts", () => {
         maxJobs: 2,
       }),
     ).toThrow();
+  });
+
+  it("accepts claim responses with runner and fallback state", () => {
+    const result = claimJobResponseSchema.parse({
+      job: {
+        jobId: "job-1",
+        seedUrl: "https://example.com/a",
+        requestedAt: "2026-05-28T08:00:00.000Z",
+        leaseExpiresAt: "2026-05-28T08:10:00.000Z",
+        attemptNumber: 2,
+        preferredRunner: "vercel_sandbox",
+        actualRunner: "local_collector",
+        runnerState: "fallback_claimed",
+        fallbackEligible: true,
+        fallbackReason: "captcha_required",
+      },
+    });
+
+    expect(result.job?.runnerState).toBe("fallback_claimed");
   });
 
   it("accepts heartbeat progress without leaking raw page dumps", () => {

@@ -231,15 +231,15 @@ Planned use:
 - Preview deployments for PR review
 - Production deployment for the public app
 - Vercel Cron for lightweight scheduled triggers
-- Vercel Workflow as the likely durable serverless execution option for bounded multi-step backend tasks
-- Vercel Sandbox as a candidate for exceptional scraping or extraction cases that cannot be handled by Firecrawl, as long as runtime and policy constraints are respected
+- Vercel Sandbox as the default hosted Agent runner for bounded collection attempts
+- Vercel Workflow as the likely durable serverless execution option for bounded multi-step backend tasks, including Sandbox orchestration
 - Vercel Queue is TBD
 
 Important boundary:
 
 - Use Workflow for durable orchestration and resumable backend steps, not as a place to hide unbounded browser sessions.
 - Do not make long-running browser automation depend on ordinary Vercel request/response functions.
-- Keep the collector runtime replaceable and allow local/VM execution for browser-heavy work.
+- Keep the collector runtime replaceable and preserve local/VM execution for fallback, captcha/login/manual recovery, and operator-controlled reruns.
 
 Environment:
 
@@ -251,7 +251,10 @@ Environment:
 - `VERCEL_WORKFLOW_ENABLED`
 - `VERCEL_QUEUE_ENABLED`
 - `VERCEL_SANDBOX_ENABLED`
-- `VERCEL_SANDBOX_API_KEY` if that product path is adopted
+- `VERCEL_SANDBOX_API_KEY`
+- `COLLECTOR_SCOPED_TOKEN_SECRET`
+- `AGENT_API_BASE_URL`
+- `AGENT_API_KEY`
 
 ## Supabase
 

@@ -4,7 +4,9 @@ import {
   claimCollectorJob,
   createQueuedCollectorJob,
   heartbeatCollectorJob,
+  routeSandboxCollectorJobFailure,
   reportCollectorJob,
+  startSandboxCollectorJob,
   type CollectorJobRecord,
   type CollectorJobStore,
 } from "./collector-job-service";
@@ -19,6 +21,7 @@ class MemoryCollectorJobStore implements CollectorJobStore {
     sourceId?: string;
     requestedMode?: CollectorJobRecord["requestedMode"];
     requestedAt: string;
+    preferredRunner?: CollectorJobRecord["preferredRunner"];
   }) {
     const job: CollectorJobRecord = {
       id: this.nextId++,
@@ -29,6 +32,12 @@ class MemoryCollectorJobStore implements CollectorJobStore {
       requestedAt: input.requestedAt,
       attemptNumber: 0,
       requestedMode: input.requestedMode,
+      preferredRunner: input.preferredRunner ?? "vercel_sandbox",
+      runnerState:
+        input.preferredRunner === "local_collector"
+          ? "local_pending"
+          : "sandbox_pending",
+      fallbackEligible: false,
     };
     this.jobs.push(job);
     return job;
@@ -44,12 +53,17 @@ class MemoryCollectorJobStore implements CollectorJobStore {
       ) {
         if (job.attemptNumber >= maxAttempts) {
           job.state = "expired";
+          job.runnerState = "failed";
         } else {
           job.state = "queued";
           job.collectorId = undefined;
           job.localRunId = undefined;
           job.claimedAt = undefined;
           job.leaseExpiresAt = undefined;
+          job.runnerState = job.fallbackEligible
+            ? "sandbox_failed_fallback_eligible"
+            : "local_pending";
+          if (!job.fallbackEligible) job.actualRunner = undefined;
         }
       }
     }
@@ -59,9 +73,17 @@ class MemoryCollectorJobStore implements CollectorJobStore {
     collectorId: string;
     claimedAt: string;
     leaseExpiresAt: string;
+    runner: CollectorJobRecord["actualRunner"];
   }) {
     const job = this.jobs
-      .filter((candidate) => candidate.state === "queued")
+      .filter((candidate) => {
+        if (candidate.state !== "queued") return false;
+        if (input.runner !== "local_collector") return false;
+        return (
+          candidate.preferredRunner === "local_collector" ||
+          candidate.fallbackEligible === true
+        );
+      })
       .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0];
 
     if (!job) return null;
@@ -71,11 +93,31 @@ class MemoryCollectorJobStore implements CollectorJobStore {
     job.claimedAt = input.claimedAt;
     job.leaseExpiresAt = input.leaseExpiresAt;
     job.attemptNumber += 1;
+    job.actualRunner = input.runner;
+    job.runnerState = job.fallbackEligible
+      ? "fallback_claimed"
+      : "local_claimed";
     return job;
   }
 
   async findByJobId(jobId: string) {
     return this.jobs.find((job) => job.jobId === jobId) ?? null;
+  }
+
+  async updateSandboxStarted(input: {
+    jobId: string;
+    sandboxRunId: string;
+    startedAt: string;
+  }) {
+    const job = await this.findByJobId(input.jobId);
+    if (!job || job.state !== "queued") return null;
+    job.state = "running";
+    job.actualRunner = "vercel_sandbox";
+    job.runnerState = "sandbox_running";
+    job.sandboxRunId = input.sandboxRunId;
+    job.claimedAt = input.startedAt;
+    job.attemptNumber += 1;
+    return job;
   }
 
   async updateHeartbeat(input: {
@@ -86,6 +128,7 @@ class MemoryCollectorJobStore implements CollectorJobStore {
     message?: string;
     heartbeatAt: string;
     leaseExpiresAt: string;
+    runnerState: CollectorJobRecord["runnerState"];
   }) {
     const job = await this.findByJobId(input.jobId);
     if (!job) return null;
@@ -97,6 +140,8 @@ class MemoryCollectorJobStore implements CollectorJobStore {
     job.lastHeartbeatStage = input.stage;
     job.leaseExpiresAt = input.leaseExpiresAt;
     job.resultMessage = input.message;
+    job.actualRunner = "local_collector";
+    job.runnerState = input.runnerState;
     return job;
   }
 
@@ -128,6 +173,41 @@ class MemoryCollectorJobStore implements CollectorJobStore {
     job.suggestedDisposition = input.suggestedDisposition;
     job.resultMessage = input.message;
     job.finishedAt = input.reportedAt;
+    job.runnerState = input.status === "failed" ? "failed" : "completed";
+    return job;
+  }
+
+  async updateSandboxFailure(input: {
+    jobId: string;
+    reason: CollectorJobRecord["fallbackReason"];
+    message: string;
+    failedAt: string;
+    fallbackEligible: boolean;
+    sandboxRunId?: string;
+  }) {
+    const job = await this.findByJobId(input.jobId);
+    if (!job) return null;
+
+    job.actualRunner = "vercel_sandbox";
+    job.sandboxRunId = input.sandboxRunId;
+    job.fallbackReason = input.reason;
+    job.resultMessage = input.message;
+
+    if (input.fallbackEligible) {
+      job.state = "queued";
+      job.runnerState = "sandbox_failed_fallback_eligible";
+      job.fallbackEligible = true;
+      job.collectorId = undefined;
+      job.localRunId = undefined;
+      job.claimedAt = undefined;
+      job.leaseExpiresAt = undefined;
+    } else {
+      job.state = "failed";
+      job.runnerState = "failed";
+      job.fallbackEligible = false;
+      job.finishedAt = input.failedAt;
+    }
+
     return job;
   }
 }
@@ -147,9 +227,39 @@ describe("collector job service", () => {
 
     expect(result.state).toBe("queued");
     expect(result.seedUrl).toBe("https://mp.weixin.qq.com/s/example");
+    expect(result.preferredRunner).toBe("vercel_sandbox");
+    expect(result.runnerState).toBe("sandbox_pending");
+    expect(result.fallbackEligible).toBe(false);
   });
 
-  it("claims at most one queued job and assigns a lease", async () => {
+  it("does not let the local collector claim default sandbox jobs", async () => {
+    const store = new MemoryCollectorJobStore([
+      {
+        id: 1,
+        jobId: "job-sandbox",
+        seedUrl: "https://example.com/sandbox",
+        state: "queued",
+        requestedAt: "2026-05-28T07:00:00.000Z",
+        attemptNumber: 0,
+        preferredRunner: "vercel_sandbox",
+        runnerState: "sandbox_pending",
+        fallbackEligible: false,
+      },
+    ]);
+
+    const result = await claimCollectorJob(
+      { collectorId: "home-1" },
+      store,
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+
+    expect(result).toEqual({
+      kind: "none",
+      retryAfterSeconds: 60,
+    });
+  });
+
+  it("claims at most one local-eligible queued job and assigns a lease", async () => {
     const store = new MemoryCollectorJobStore([
       {
         id: 1,
@@ -158,6 +268,9 @@ describe("collector job service", () => {
         state: "queued",
         requestedAt: "2026-05-28T07:00:00.000Z",
         attemptNumber: 0,
+        preferredRunner: "local_collector",
+        runnerState: "local_pending",
+        fallbackEligible: false,
       },
       {
         id: 2,
@@ -166,6 +279,9 @@ describe("collector job service", () => {
         state: "queued",
         requestedAt: "2026-05-28T07:30:00.000Z",
         attemptNumber: 0,
+        preferredRunner: "local_collector",
+        runnerState: "local_pending",
+        fallbackEligible: false,
       },
     ]);
 
@@ -181,6 +297,8 @@ describe("collector job service", () => {
         jobId: "job-old",
         seedUrl: "https://example.com/old",
         attemptNumber: 1,
+        actualRunner: "local_collector",
+        runnerState: "local_claimed",
       },
     });
     expect(result.kind === "claimed" && result.job.leaseExpiresAt).toBeTruthy();
@@ -211,6 +329,9 @@ describe("collector job service", () => {
         leaseExpiresAt: "2026-05-28T07:11:00.000Z",
         collectorId: "offline-collector",
         attemptNumber: 1,
+        preferredRunner: "local_collector",
+        runnerState: "local_running",
+        fallbackEligible: false,
       },
     ]);
 
@@ -229,6 +350,100 @@ describe("collector job service", () => {
     });
   });
 
+  it("routes fallback-eligible sandbox failures back to the local collector", async () => {
+    const store = new MemoryCollectorJobStore([
+      {
+        id: 1,
+        jobId: "job-sandbox",
+        seedUrl: "https://example.com/sandbox",
+        state: "running",
+        requestedAt: "2026-05-28T07:00:00.000Z",
+        attemptNumber: 1,
+        preferredRunner: "vercel_sandbox",
+        actualRunner: "vercel_sandbox",
+        runnerState: "sandbox_running",
+        fallbackEligible: false,
+        sandboxRunId: "sb-run-1",
+      },
+    ]);
+
+    const routed = await routeSandboxCollectorJobFailure(
+      "job-sandbox",
+      {
+        reason: "captcha_required",
+        message: "QR captcha appeared in hosted browser.",
+        sandboxRunId: "sb-run-1",
+      },
+      store,
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+
+    expect(routed).toMatchObject({
+      kind: "updated",
+      job: {
+        jobId: "job-sandbox",
+        state: "queued",
+        preferredRunner: "vercel_sandbox",
+        actualRunner: "vercel_sandbox",
+        runnerState: "sandbox_failed_fallback_eligible",
+        fallbackEligible: true,
+        fallbackReason: "captcha_required",
+      },
+    });
+
+    const claimed = await claimCollectorJob(
+      { collectorId: "home-1" },
+      store,
+      new Date("2026-05-28T08:01:00.000Z"),
+    );
+
+    expect(claimed).toMatchObject({
+      kind: "claimed",
+      job: {
+        jobId: "job-sandbox",
+        actualRunner: "local_collector",
+        runnerState: "fallback_claimed",
+        fallbackReason: "captcha_required",
+        attemptNumber: 2,
+      },
+    });
+  });
+
+  it("marks a sandbox attempt as the actual running job attempt", async () => {
+    const store = new MemoryCollectorJobStore([
+      {
+        id: 1,
+        jobId: "job-sandbox",
+        seedUrl: "https://example.com/sandbox",
+        state: "queued",
+        requestedAt: "2026-05-28T07:00:00.000Z",
+        attemptNumber: 0,
+        preferredRunner: "vercel_sandbox",
+        runnerState: "sandbox_pending",
+        fallbackEligible: false,
+      },
+    ]);
+
+    const result = await startSandboxCollectorJob(
+      "job-sandbox",
+      { sandboxRunId: "sb-run-1" },
+      store,
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+
+    expect(result).toMatchObject({
+      kind: "updated",
+      job: {
+        jobId: "job-sandbox",
+        state: "running",
+        actualRunner: "vercel_sandbox",
+        runnerState: "sandbox_running",
+        sandboxRunId: "sb-run-1",
+        attemptNumber: 1,
+      },
+    });
+  });
+
   it("accepts heartbeat only from the collector that owns an active lease", async () => {
     const store = new MemoryCollectorJobStore([
       {
@@ -241,6 +456,10 @@ describe("collector job service", () => {
         leaseExpiresAt: "2026-05-28T08:05:00.000Z",
         collectorId: "home-1",
         attemptNumber: 1,
+        preferredRunner: "local_collector",
+        actualRunner: "local_collector",
+        runnerState: "local_claimed",
+        fallbackEligible: false,
       },
     ]);
 
@@ -297,6 +516,10 @@ describe("collector job service", () => {
         collectorId: "home-1",
         localRunId: "local-1",
         attemptNumber: 1,
+        preferredRunner: "local_collector",
+        actualRunner: "local_collector",
+        runnerState: "local_running",
+        fallbackEligible: false,
       },
     ]);
 
@@ -331,6 +554,10 @@ describe("collector job service", () => {
         localRunId: "local-1",
         attemptNumber: 1,
         finishedAt: "2026-05-28T07:40:00.000Z",
+        preferredRunner: "local_collector",
+        actualRunner: "local_collector",
+        runnerState: "completed",
+        fallbackEligible: false,
       },
     ]);
 

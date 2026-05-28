@@ -125,12 +125,18 @@ export function buildFixtureRun({
   };
 }
 
-export function createCollectorHeaders({ collectorId, collectorApiKey }) {
-  return {
+export function createCollectorHeaders({
+  collectorId,
+  collectorApiKey,
+  collectorJobId,
+}) {
+  const headers = {
     authorization: `Bearer ${collectorApiKey}`,
     "content-type": "application/json",
     "x-collector-id": collectorId,
   };
+  if (collectorJobId) headers["x-collector-job-id"] = collectorJobId;
+  return headers;
 }
 
 export async function runCollectorFixture({

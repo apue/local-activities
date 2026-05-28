@@ -19,9 +19,16 @@ Rationale:
 
 Use Vercel for the web app and ingest API.
 
-Vercel Cron may trigger lightweight scheduled checks or orchestration callbacks. Vercel Workflow is the likely durable serverless execution option for bounded multi-step backend jobs such as extraction orchestration, source-run follow-up, review-state transitions, or retryable provider calls. Vercel Sandbox and Vercel Queue remain planning-level candidates for exceptional extraction or queueing cases; adopt them only when an implementation task needs them.
+Vercel Sandbox is the default hosted Agent runner for admin-created collection
+jobs. Vercel Cron may trigger lightweight scheduled checks or orchestration
+callbacks. Vercel Workflow remains the likely durable serverless execution
+option for bounded multi-step backend jobs such as Sandbox orchestration,
+source-run follow-up, review-state transitions, or retryable provider calls.
+Vercel Queue remains a planning-level candidate.
 
-Do not run ordinary long-lived browser automation or unbounded collector jobs inside request/response Vercel functions.
+Do not run ordinary long-lived browser automation or unbounded collector jobs
+inside request/response Vercel functions. Use Sandbox for bounded hosted Agent
+attempts and the local collector for fallback/manual recovery.
 
 ## Database
 
@@ -45,13 +52,14 @@ The first concrete migration for these tables is `supabase/migrations/2026052809
 
 ## Collector Runtime
 
-Use a separate local Node.js runtime for source collection.
+Use Vercel Sandbox as the default hosted Agent runtime and a separate local
+Node.js runtime for fallback source collection.
 
 Initial implementation target:
 
-- Playwright-based adapter.
-- Persistent browser profile.
-- Four-hour schedule.
+- Agent API adapter shared by Sandbox and local fallback.
+- Persistent local browser/profile only on the home collector machine.
+- Four-hour schedule for tracked-source polling.
 - Upload-only integration with Vercel ingest APIs.
 
 The collector must implement normalized output contracts so future implementations can use browser extensions, Computer Use, AgentBrowser, or an agent editor.

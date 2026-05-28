@@ -30,7 +30,7 @@ export async function runE2eFixtureSmoke({
     path: "/api/admin/collector-jobs",
     headers: config.adminHeaders,
     fetchImpl,
-    body: { seedUrl },
+    body: { seedUrl, preferredRunner: "local_collector" },
   });
   const jobId = createdJob.job?.jobId;
   if (!jobId) throw new Error("admin_job_create_failed");

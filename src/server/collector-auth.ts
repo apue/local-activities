@@ -1,8 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 
+import { verifyCollectorScopedToken } from "./collector-scoped-token";
+
 type CollectorAuthEnv = {
   [key: string]: string | undefined;
   COLLECTOR_API_KEY?: string;
+  COLLECTOR_SCOPED_TOKEN_SECRET?: string;
 };
 
 export type CollectorAuthResult =
@@ -46,7 +49,16 @@ export function authenticateCollectorRequest(
     ? authorization.slice("Bearer ".length).trim()
     : "";
 
-  if (!token || !secureCompare(token, expectedToken)) {
+  if (
+    !token ||
+    (!secureCompare(token, expectedToken) &&
+      !verifyCollectorScopedToken({
+        token,
+        collectorId,
+        jobId: request.headers.get("x-collector-job-id")?.trim(),
+        secret: env.COLLECTOR_SCOPED_TOKEN_SECRET,
+      }))
+  ) {
     return {
       ok: false,
       status: 401,

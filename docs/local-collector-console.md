@@ -10,19 +10,19 @@ For operational bootstrap on Vercel and the first home collector machine, see [D
 
 ## Core Design
 
-The MVP has two ways to start collection work:
+The MVP has three ways to start collection work:
 
 - local console seed: the operator opens a local page on the home machine, pastes a URL, and starts a local collector run
-- admin portal seed: the operator pastes a URL in the Vercel admin portal, which creates a queued collector job for the home machine to claim
+- admin portal seed: the operator pastes a URL in the Vercel admin portal, which creates a queued job whose preferred runner is `vercel_sandbox`
+- local fallback: Sandbox failures with expected platform/browser reasons make the same job claimable by the home-machine collector
 
-Both paths converge on the same local collector runtime:
+All paths converge on the same backend-validated upload boundary:
 
 ```text
-local console or Vercel collector job
--> local queue
--> collector worker with browser/profile
+admin portal job
+-> Vercel Sandbox Agent runner or local fallback collector
 -> external agent API for classification and extraction
--> normalized upload to Vercel ingest API
+-> normalized upload to Vercel ingest API with collector contract
 -> Vercel validates and stores in Supabase
 -> admin portal reviews drafts, evidence, and failures
 ```
@@ -31,12 +31,12 @@ The home machine observes pages and proposes results. Vercel and the backend val
 
 ## Non-Goals
 
-- Do not dynamically deploy a new agent for each URL.
+- Do not let Sandbox, the local collector, or the Agent write directly to Supabase.
 - Do not expose the home-machine console as a public internet service.
 - Do not let the collector write directly to Supabase.
 - Do not let the collector or agent publish canonical events.
 - Do not add OAuth, per-device key management, signed requests, or mTLS for the MVP.
-- Do not make Vercel run unbounded browser sessions.
+- Do not make ordinary Vercel request/response functions run unbounded browser sessions.
 
 ## Local Console
 
@@ -116,7 +116,22 @@ Vercel, and upload normalized objects without direct Supabase access.
 
 ## Vercel Collector Job Queue
 
-The Vercel app stores collector jobs created by the admin portal or backend workflows. The home collector polls Vercel to claim jobs.
+The Vercel app stores collector jobs created by the admin portal or backend workflows. New jobs default to `preferredRunner=vercel_sandbox`. The home collector polls Vercel but can claim only jobs whose preferred runner is `local_collector` or whose Sandbox attempt has made them fallback-eligible.
+
+### Runner State
+
+Collector jobs preserve the execution runner separately from terminal job state:
+
+- `preferredRunner`: `vercel_sandbox` or `local_collector`
+- `actualRunner`: runner used by the current or latest attempt
+- `runnerState`: `sandbox_pending`, `sandbox_running`,
+  `sandbox_failed_fallback_eligible`, `local_pending`, `local_claimed`,
+  `local_running`, `fallback_claimed`, `fallback_running`, `completed`, or
+  `failed`
+- `fallbackEligible`: whether the local collector may claim a Sandbox-failed job
+- `fallbackReason`: structured reason such as `captcha_required`,
+  `login_required`, `fetch_blocked`, `fetch_timeout`,
+  `region_network_failed`, or `sandbox_runtime_timeout`
 
 ### Job States
 
@@ -180,6 +195,11 @@ type ClaimJobResponse = {
     leaseExpiresAt: string;
     attemptNumber: number;
     requestedMode?: "auto" | "text_only" | "image_heavy_debug";
+    preferredRunner: "vercel_sandbox" | "local_collector";
+    actualRunner?: "vercel_sandbox" | "local_collector";
+    runnerState: string;
+    fallbackEligible: boolean;
+    fallbackReason?: string;
   };
 };
 ```
@@ -196,6 +216,8 @@ type ClaimJobResponse = {
 Claim rules:
 
 - Only `queued` jobs can be claimed.
+- The local collector can claim only `preferredRunner=local_collector` jobs or
+  `fallbackEligible=true` jobs.
 - Claiming sets `collectorId`, `claimedAt`, `leaseExpiresAt`, and `attemptNumber`.
 - The MVP should use a 10-minute lease by default.
 - A job whose lease expires can return to `queued` or move to `expired`, depending on attempt count.
@@ -281,12 +303,14 @@ The collector should not claim a new job while one is running in the MVP. It can
 
 ## Authentication
 
-The MVP uses one shared collector token.
+The MVP uses one shared local collector token and a separate scoped token secret
+for short-lived Sandbox ingest credentials.
 
 Vercel environment:
 
 ```text
 COLLECTOR_API_KEY=long-random-secret
+COLLECTOR_SCOPED_TOKEN_SECRET=long-random-signing-secret
 ```
 
 Home collector environment:
@@ -305,13 +329,22 @@ Authorization: Bearer <COLLECTOR_API_KEY>
 X-Collector-Id: <COLLECTOR_ID>
 ```
 
+Sandbox ingest requests use a signed scoped token instead of the long-lived
+collector token:
+
+```text
+Authorization: Bearer scoped.<payload>.<signature>
+X-Collector-Id: sandbox-<job-id>
+X-Collector-Job-Id: <job-id>
+```
+
 MVP token rules:
 
 - Use a high-entropy random token.
 - Do not log the token.
 - Do not expose the token in browser-side code.
 - Rotate the token if the home machine is lost, shared, or suspected compromised.
-- A later issue may add per-collector tokens, but the MVP should not start there.
+- Scoped Sandbox tokens expire and are limited to one signed job ID.
 
 ## Admin Portal Integration
 
@@ -321,7 +354,8 @@ Minimum admin portal behavior:
 
 - paste seed URL
 - create `queued` collector job
-- show job state and last heartbeat
+- show job state, preferred runner, actual runner, attempt number, fallback
+  state, failure reason, and last heartbeat
 - show claimed collector ID when present
 - link completed jobs to uploaded source run, snapshots, drafts, evidence, and failures
 - show `needs_review`, `needs_info`, `failed`, and `not_activity` outcomes in review queues

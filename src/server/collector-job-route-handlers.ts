@@ -180,5 +180,10 @@ function toClaimResponseJob(job: CollectorJobRecord) {
     leaseExpiresAt: job.leaseExpiresAt,
     attemptNumber: job.attemptNumber,
     requestedMode: job.requestedMode,
+    preferredRunner: job.preferredRunner,
+    actualRunner: job.actualRunner,
+    runnerState: job.runnerState,
+    fallbackEligible: job.fallbackEligible,
+    fallbackReason: job.fallbackReason,
   };
 }

@@ -26,6 +26,12 @@ type CollectorJobRow = {
   last_heartbeat_stage: CollectorJobRecord["lastHeartbeatStage"] | null;
   suggested_disposition: CollectorJobRecord["suggestedDisposition"] | null;
   result_message: string | null;
+  preferred_runner: CollectorJobRecord["preferredRunner"];
+  actual_runner: CollectorJobRecord["actualRunner"] | null;
+  runner_state: CollectorJobRecord["runnerState"];
+  fallback_eligible: boolean;
+  fallback_reason: CollectorJobRecord["fallbackReason"] | null;
+  sandbox_run_id: string | null;
 };
 
 type EventDraftRow = {
@@ -64,6 +70,7 @@ class SupabaseAdminStore implements AdminStore {
   async createCollectorJob(input: {
     seedUrl: string;
     requestedAt: string;
+    preferredRunner: CollectorJobRecord["preferredRunner"];
   }): Promise<CollectorJobRecord> {
     const row = await this.writeOne<CollectorJobRow>(
       this.client
@@ -73,6 +80,12 @@ class SupabaseAdminStore implements AdminStore {
           seed_url: input.seedUrl,
           state: "queued",
           requested_at: input.requestedAt,
+          preferred_runner: input.preferredRunner,
+          runner_state:
+            input.preferredRunner === "local_collector"
+              ? "local_pending"
+              : "sandbox_pending",
+          fallback_eligible: false,
         })
         .select("*")
         .single(),
@@ -225,6 +238,12 @@ function toJobRecord(row: CollectorJobRow): CollectorJobRecord {
     lastHeartbeatStage: row.last_heartbeat_stage ?? undefined,
     suggestedDisposition: row.suggested_disposition ?? undefined,
     resultMessage: row.result_message ?? undefined,
+    preferredRunner: row.preferred_runner,
+    actualRunner: row.actual_runner ?? undefined,
+    runnerState: row.runner_state,
+    fallbackEligible: row.fallback_eligible,
+    fallbackReason: row.fallback_reason ?? undefined,
+    sandboxRunId: row.sandbox_run_id ?? undefined,
   };
 }
 

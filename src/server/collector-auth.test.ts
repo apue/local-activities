@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { authenticateCollectorRequest } from "./collector-auth";
+import { createCollectorScopedToken } from "./collector-scoped-token";
 
 function request(headers: HeadersInit) {
   return new Request("https://example.com/api/collector/ping", { headers });
@@ -85,5 +86,58 @@ describe("authenticateCollectorRequest", () => {
     });
     expect(JSON.stringify(result)).not.toContain("collector-secret");
     expect(JSON.stringify(result)).not.toContain("wrong-secret");
+  });
+
+  it("accepts short-lived job-scoped collector tokens for sandbox ingestion", () => {
+    const token = createCollectorScopedToken({
+      collectorId: "sandbox-job-1",
+      jobId: "job-1",
+      expiresAt: "2999-05-28T08:20:00.000Z",
+      secret: "scoped-token-secret",
+    });
+
+    const result = authenticateCollectorRequest(
+      request({
+        authorization: `Bearer ${token}`,
+        "x-collector-id": "sandbox-job-1",
+        "x-collector-job-id": "job-1",
+      }),
+      {
+        COLLECTOR_API_KEY: "collector-secret",
+        COLLECTOR_SCOPED_TOKEN_SECRET: "scoped-token-secret",
+      },
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      collectorId: "sandbox-job-1",
+    });
+  });
+
+  it("rejects scoped collector tokens outside their signed job", () => {
+    const token = createCollectorScopedToken({
+      collectorId: "sandbox-job-1",
+      jobId: "job-1",
+      expiresAt: "2999-05-28T08:20:00.000Z",
+      secret: "scoped-token-secret",
+    });
+
+    const result = authenticateCollectorRequest(
+      request({
+        authorization: `Bearer ${token}`,
+        "x-collector-id": "sandbox-job-1",
+        "x-collector-job-id": "job-2",
+      }),
+      {
+        COLLECTOR_API_KEY: "collector-secret",
+        COLLECTOR_SCOPED_TOKEN_SECRET: "scoped-token-secret",
+      },
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      status: 401,
+      error: "invalid_collector_token",
+    });
   });
 });

@@ -20,6 +20,37 @@ export const collectorJobStateSchema = z.enum([
   "expired",
 ]);
 
+export const collectorJobRunnerSchema = z.enum([
+  "vercel_sandbox",
+  "local_collector",
+]);
+
+export const collectorJobRunnerStateSchema = z.enum([
+  "sandbox_pending",
+  "sandbox_running",
+  "sandbox_failed_fallback_eligible",
+  "local_pending",
+  "local_claimed",
+  "local_running",
+  "fallback_claimed",
+  "fallback_running",
+  "completed",
+  "failed",
+]);
+
+export const collectorJobFallbackReasonSchema = z.enum([
+  "captcha_required",
+  "login_required",
+  "fetch_blocked",
+  "fetch_timeout",
+  "region_network_failed",
+  "sandbox_runtime_timeout",
+  "agent_config_missing",
+  "agent_request_failed",
+  "agent_response_invalid_schema",
+  "unsupported",
+]);
+
 export const claimJobRequestSchema = z
   .object({
     collectorId: z.string().min(1),
@@ -41,6 +72,11 @@ export const claimJobResponseSchema = z
         requestedMode: z
           .enum(["auto", "text_only", "image_heavy_debug"])
           .optional(),
+        preferredRunner: collectorJobRunnerSchema,
+        actualRunner: collectorJobRunnerSchema.optional(),
+        runnerState: collectorJobRunnerStateSchema,
+        fallbackEligible: z.boolean(),
+        fallbackReason: collectorJobFallbackReasonSchema.optional(),
       })
       .strict()
       .nullable(),
@@ -83,6 +119,13 @@ export const jobReportRequestSchema = z
 
 export type CollectorCapability = z.infer<typeof collectorCapabilitySchema>;
 export type CollectorJobState = z.infer<typeof collectorJobStateSchema>;
+export type CollectorJobRunner = z.infer<typeof collectorJobRunnerSchema>;
+export type CollectorJobRunnerState = z.infer<
+  typeof collectorJobRunnerStateSchema
+>;
+export type CollectorJobFallbackReason = z.infer<
+  typeof collectorJobFallbackReasonSchema
+>;
 export type ClaimJobRequest = z.infer<typeof claimJobRequestSchema>;
 export type ClaimJobResponse = z.infer<typeof claimJobResponseSchema>;
 export type HeartbeatRequest = z.infer<typeof heartbeatRequestSchema>;

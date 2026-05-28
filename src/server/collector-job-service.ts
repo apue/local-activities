@@ -1,4 +1,7 @@
 import type {
+  CollectorJobFallbackReason,
+  CollectorJobRunner,
+  CollectorJobRunnerState,
   CollectorJobState,
   SuggestedDisposition,
 } from "../contracts/collector-job";
@@ -31,6 +34,12 @@ export type CollectorJobRecord = {
   failureIds?: string[];
   resultMessage?: string;
   finishedAt?: string;
+  preferredRunner: CollectorJobRunner;
+  actualRunner?: CollectorJobRunner;
+  runnerState: CollectorJobRunnerState;
+  fallbackEligible: boolean;
+  fallbackReason?: CollectorJobFallbackReason;
+  sandboxRunId?: string;
 };
 
 export type CollectorJobStore = {
@@ -39,12 +48,14 @@ export type CollectorJobStore = {
     sourceId?: string;
     requestedMode?: CollectorJobRequestedMode;
     requestedAt: string;
+    preferredRunner: CollectorJobRunner;
   }): Promise<CollectorJobRecord>;
   expireStaleLeases(now: string, maxAttempts: number): Promise<void>;
   claimNextQueuedJob(input: {
     collectorId: string;
     claimedAt: string;
     leaseExpiresAt: string;
+    runner: CollectorJobRunner;
   }): Promise<CollectorJobRecord | null>;
   findByJobId(jobId: string): Promise<CollectorJobRecord | null>;
   updateHeartbeat(input: {
@@ -55,6 +66,7 @@ export type CollectorJobStore = {
     message?: string;
     heartbeatAt: string;
     leaseExpiresAt: string;
+    runnerState: CollectorJobRunnerState;
   }): Promise<CollectorJobRecord | null>;
   updateReport(input: {
     jobId: string;
@@ -69,6 +81,19 @@ export type CollectorJobStore = {
     suggestedDisposition?: SuggestedDisposition;
     message?: string;
     reportedAt: string;
+  }): Promise<CollectorJobRecord | null>;
+  updateSandboxStarted(input: {
+    jobId: string;
+    sandboxRunId: string;
+    startedAt: string;
+  }): Promise<CollectorJobRecord | null>;
+  updateSandboxFailure(input: {
+    jobId: string;
+    reason: CollectorJobFallbackReason;
+    message: string;
+    failedAt: string;
+    fallbackEligible: boolean;
+    sandboxRunId?: string;
   }): Promise<CollectorJobRecord | null>;
 };
 
@@ -113,18 +138,29 @@ const TERMINAL_STATES = new Set<CollectorJobState>([
   "cancelled",
   "expired",
 ]);
+const FALLBACK_ELIGIBLE_REASONS = new Set<CollectorJobFallbackReason>([
+  "captcha_required",
+  "login_required",
+  "fetch_blocked",
+  "fetch_timeout",
+  "region_network_failed",
+  "sandbox_runtime_timeout",
+]);
 
 export async function createQueuedCollectorJob(
   input: {
     seedUrl: string;
     sourceId?: string;
     requestedMode?: CollectorJobRequestedMode;
+    preferredRunner?: CollectorJobRunner;
   },
   store: CollectorJobStore,
   now = new Date(),
 ) {
+  const preferredRunner = input.preferredRunner ?? "vercel_sandbox";
   return store.createQueuedJob({
     ...input,
+    preferredRunner,
     requestedAt: now.toISOString(),
   });
 }
@@ -143,6 +179,7 @@ export async function claimCollectorJob(
     collectorId: input.collectorId,
     claimedAt: nowIso,
     leaseExpiresAt: addSeconds(now, DEFAULT_LEASE_SECONDS).toISOString(),
+    runner: "local_collector",
   });
 
   if (!job) {
@@ -154,6 +191,38 @@ export async function claimCollectorJob(
 
   return {
     kind: "claimed",
+    job,
+  };
+}
+
+export async function routeSandboxCollectorJobFailure(
+  jobId: string,
+  input: {
+    reason: CollectorJobFallbackReason;
+    message: string;
+    sandboxRunId?: string;
+  },
+  store: CollectorJobStore,
+  now = new Date(),
+): Promise<MutateCollectorJobResult> {
+  const job = await store.updateSandboxFailure({
+    jobId,
+    reason: input.reason,
+    message: input.message,
+    sandboxRunId: input.sandboxRunId,
+    failedAt: now.toISOString(),
+    fallbackEligible: FALLBACK_ELIGIBLE_REASONS.has(input.reason),
+  });
+
+  if (!job) {
+    return {
+      kind: "not_found",
+      error: "collector_job_not_found",
+    };
+  }
+
+  return {
+    kind: "updated",
     job,
   };
 }
@@ -173,6 +242,8 @@ export async function heartbeatCollectorJob(
   const existing = await store.findByJobId(jobId);
   const ownership = validateActiveOwnership(existing, input.collectorId, now);
   if (ownership) return ownership;
+  const runnerState =
+    existing?.fallbackEligible === true ? "fallback_running" : "local_running";
 
   const job = await store.updateHeartbeat({
     jobId,
@@ -185,6 +256,34 @@ export async function heartbeatCollectorJob(
       now,
       input.extendLeaseSeconds ?? DEFAULT_LEASE_SECONDS,
     ).toISOString(),
+    runnerState,
+  });
+
+  if (!job) {
+    return {
+      kind: "not_found",
+      error: "collector_job_not_found",
+    };
+  }
+
+  return {
+    kind: "updated",
+    job,
+  };
+}
+
+export async function startSandboxCollectorJob(
+  jobId: string,
+  input: {
+    sandboxRunId: string;
+  },
+  store: CollectorJobStore,
+  now = new Date(),
+): Promise<MutateCollectorJobResult> {
+  const job = await store.updateSandboxStarted({
+    jobId,
+    sandboxRunId: input.sandboxRunId,
+    startedAt: now.toISOString(),
   });
 
   if (!job) {

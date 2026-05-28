@@ -29,6 +29,16 @@ create table if not exists public.collector_jobs (
   collector_id text,
   local_run_id text,
   attempt_number integer not null default 0 check (attempt_number >= 0),
+  preferred_runner text not null default 'vercel_sandbox'
+    check (preferred_runner in ('vercel_sandbox', 'local_collector')),
+  actual_runner text
+    check (actual_runner is null or actual_runner in ('vercel_sandbox', 'local_collector')),
+  runner_state text not null default 'sandbox_pending'
+    check (runner_state in ('sandbox_pending', 'sandbox_running', 'sandbox_failed_fallback_eligible', 'local_pending', 'local_claimed', 'local_running', 'fallback_claimed', 'fallback_running', 'completed', 'failed')),
+  fallback_eligible boolean not null default false,
+  fallback_reason text
+    check (fallback_reason is null or fallback_reason in ('captcha_required', 'login_required', 'fetch_blocked', 'fetch_timeout', 'region_network_failed', 'sandbox_runtime_timeout', 'agent_config_missing', 'agent_request_failed', 'agent_response_invalid_schema', 'unsupported')),
+  sandbox_run_id text,
   last_heartbeat_at timestamptz,
   last_heartbeat_stage text
     check (last_heartbeat_stage is null or last_heartbeat_stage in ('capturing', 'extracting', 'uploading')),
@@ -54,7 +64,7 @@ create table if not exists public.source_runs (
   draft_count integer not null default 0 check (draft_count >= 0),
   failure_count integer not null default 0 check (failure_count >= 0),
   failure_reason text
-    check (failure_reason is null or failure_reason in ('fetch_blocked', 'fetch_timeout', 'login_required', 'captcha_required', 'parser_mismatch', 'source_identity_missing', 'activity_fields_missing', 'image_download_failed', 'ocr_failed', 'vision_failed', 'agent_config_missing', 'agent_request_failed', 'agent_response_invalid_schema', 'not_activity', 'unsupported')),
+    check (failure_reason is null or failure_reason in ('fetch_blocked', 'fetch_timeout', 'region_network_failed', 'sandbox_runtime_timeout', 'login_required', 'captcha_required', 'parser_mismatch', 'source_identity_missing', 'activity_fields_missing', 'image_download_failed', 'ocr_failed', 'vision_failed', 'agent_config_missing', 'agent_request_failed', 'agent_response_invalid_schema', 'not_activity', 'unsupported')),
   diagnostics jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   unique (collector_id, run_id)
@@ -212,7 +222,7 @@ create table if not exists public.collector_failures (
   stage text not null
     check (stage in ('source_discovery', 'page_fetch', 'dom_parse', 'image_capture', 'ocr', 'vision_extraction', 'agent_extraction', 'draft_extraction', 'upload')),
   reason text not null
-    check (reason in ('fetch_blocked', 'fetch_timeout', 'login_required', 'captcha_required', 'parser_mismatch', 'source_identity_missing', 'activity_fields_missing', 'image_download_failed', 'ocr_failed', 'vision_failed', 'agent_config_missing', 'agent_request_failed', 'agent_response_invalid_schema', 'not_activity', 'unsupported')),
+    check (reason in ('fetch_blocked', 'fetch_timeout', 'region_network_failed', 'sandbox_runtime_timeout', 'login_required', 'captcha_required', 'parser_mismatch', 'source_identity_missing', 'activity_fields_missing', 'image_download_failed', 'ocr_failed', 'vision_failed', 'agent_config_missing', 'agent_request_failed', 'agent_response_invalid_schema', 'not_activity', 'unsupported')),
   message text not null,
   retryable boolean not null,
   screenshot_asset_id text,
@@ -224,6 +234,8 @@ create index if not exists sources_health_status_idx on public.sources (health_s
 create index if not exists collector_jobs_source_id_idx on public.collector_jobs (source_id);
 create index if not exists collector_jobs_queued_idx on public.collector_jobs (requested_at)
   where state = 'queued';
+create index if not exists collector_jobs_local_claim_idx on public.collector_jobs (requested_at)
+  where state = 'queued' and (preferred_runner = 'local_collector' or fallback_eligible = true);
 create index if not exists collector_jobs_lease_idx on public.collector_jobs (lease_expires_at)
   where state in ('claimed', 'running');
 create index if not exists source_runs_source_id_idx on public.source_runs (source_id, started_at desc);
