@@ -2,6 +2,25 @@ import { notFound } from "next/navigation";
 
 import { getSupabaseAdminClient } from "./supabase-admin";
 
+type PublicEventsClient = {
+  from(table: "canonical_events"): {
+    select(columns: string): {
+      eq(column: string, value: string): {
+        or(filter: string): {
+          order(
+            column: string,
+            options: { ascending: boolean },
+          ): {
+            limit(
+              count: number,
+            ): PromiseLike<{ data: unknown[] | null; error: unknown }>;
+          };
+        };
+      };
+    };
+  };
+};
+
 export type CanonicalEventRow = {
   event_id: string;
   title: string;
@@ -62,7 +81,17 @@ const publicEventColumns = [
 ].join(",");
 
 export async function listPublicUpcomingEvents(now = new Date()) {
-  const { data, error } = await getSupabaseAdminClient()
+  return listPublicUpcomingEventsFromClient(
+    getSupabaseAdminClient() as unknown as PublicEventsClient,
+    now,
+  );
+}
+
+export async function listPublicUpcomingEventsFromClient(
+  client: PublicEventsClient,
+  now = new Date(),
+) {
+  const { data, error } = await client
     .from("canonical_events")
     .select(publicEventColumns)
     .eq("status", "published")
@@ -70,7 +99,7 @@ export async function listPublicUpcomingEvents(now = new Date()) {
     .order("starts_at", { ascending: true })
     .limit(100);
 
-  if (error) throw new Error("public_events_list_failed");
+  if (error) return [];
 
   return filterUpcomingPublishedEvents(
     (data ?? []) as unknown as CanonicalEventRow[],

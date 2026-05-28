@@ -4,6 +4,7 @@ import {
   buildUpcomingEventFilter,
   filterUpcomingPublishedEvents,
   formatPublicEventTime,
+  listPublicUpcomingEventsFromClient,
   shapePublicEvent,
   type CanonicalEventRow,
 } from "./public-events";
@@ -96,5 +97,43 @@ describe("public event helpers", () => {
 
   it("formats event time in Asia Shanghai for public display", () => {
     expect(formatPublicEventTime(baseEvent)).toContain("6月6日");
+  });
+
+  it("returns an empty public list when the backing store is temporarily unavailable", async () => {
+    const client = {
+      from() {
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  or() {
+                    return {
+                      order() {
+                        return {
+                          async limit() {
+                            return {
+                              data: null,
+                              error: { message: "relation missing" },
+                            };
+                          },
+                        };
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    await expect(
+      listPublicUpcomingEventsFromClient(
+        client,
+        new Date("2026-06-01T00:00:00.000Z"),
+      ),
+    ).resolves.toEqual([]);
   });
 });
