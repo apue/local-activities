@@ -91,6 +91,35 @@ article snapshot
 
 The LLM provider should not write final database state directly.
 
+Extraction must support both DOM text and retained article images. WeChat source pages often place time, venue, or registration QR codes in lazy-loaded poster images. The collector should preserve these images, and the extraction layer should attach field-level provenance and confidence to event drafts.
+
+Known extraction modes:
+
+- text-dominant article extraction
+- image-dominant OCR or vision extraction
+- QR-registration extraction
+- multi-mention article splitting
+- expired source-post classification
+
+Public pages consume reviewed event fields and registration assets. They should not render raw extraction diagnostics or admin-only confidence explanations.
+
+## Asset Storage
+
+Use Vercel static hosting only for assets committed with the repository, such as prototype fixtures.
+
+Runtime collector assets must use a storage abstraction because Vercel deployment files are immutable. The first implementation may choose Vercel Blob for speed, but the adapter boundary should allow later migration to S3 or Cloudflare R2/CDN.
+
+Expected asset records should support:
+
+- stable storage key
+- provider name
+- public URL or access mode
+- content hash for deduplication
+- MIME type and size
+- source post relation
+- event draft or canonical event relation when applicable
+- usage classification such as poster, registration QR, cover image, or article image
+
 ## Event Matching
 
 Use rule-based weighted matching for MVP:

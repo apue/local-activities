@@ -20,11 +20,17 @@ Test focus:
 - event card and detail rendering
 - empty states
 - mobile layout regressions after UI scaffolding exists
+- cultural-calendar grouping by date or near-term bucket
+- desktop agenda plus detail preview behavior
+- mobile list-to-detail behavior
+- registration QR section rendering for QR-only registration events
+- hiding admin or extraction diagnostics from public pages
 
 Expected checks:
 
 - component or route tests for data-to-view behavior
 - browser smoke tests for key public pages once the app is scaffolded
+- fixture-driven visual smoke checks for mobile and desktop layouts
 
 ## Admin Dashboard
 
@@ -64,12 +70,16 @@ Test focus:
 - failure reason mapping
 - source run reporting
 - upload retries and idempotency
+- WeChat lazy-loaded image discovery after scrolling
+- poster and QR image preservation
+- source pattern classification
 
 Expected checks:
 
 - unit tests for adapters using saved page fixtures
 - integration tests against local or mocked ingest endpoints
 - no tests should require bypassing captcha or platform protections
+- fixtures for text-dominant, image-dominant, QR-registration, multi-mention, blocked, and expired source posts
 
 ## Extraction / LLM
 
@@ -80,10 +90,14 @@ Test focus:
 - evidence attachment
 - confidence routing
 - relative date normalization using article publication date and Asia/Shanghai timezone
+- OCR or vision extraction from retained poster images
+- QR-registration detection and asset attachment
+- separation of public fields from admin-only extraction notes
 
 Expected checks:
 
 - fixture-based extraction tests with saved article text
+- fixture-based extraction tests with saved poster and QR images
 - schema validation tests for model output
 - regression fixtures for known extraction failures
 

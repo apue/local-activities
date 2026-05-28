@@ -18,13 +18,17 @@ The app remains a mobile-first guide to official cultural activities in Beijing.
 
 MVP public views:
 
+- Cultural calendar homepage grouped by time
+- Today and near-term available activities
 - This weekend
-- Today available
-- Reservation closing soon
-- Upcoming
+- Next week and later upcoming groups
 - Event detail
 
 The primary screen should not be a map-first browsing experience. Map support is useful on event detail pages and as a future secondary discovery surface.
+
+The homepage should feel like a curated cultural calendar rather than a social feed. Event cards should stay compact and action-oriented, with a thumbnail used as a supporting cue rather than the dominant content.
+
+On wider screens, the preferred browsing model is an event agenda with an adjacent detail preview. On mobile, tapping an event card should open a detail page or detail sheet.
 
 ### Event Detail Actions
 
@@ -35,9 +39,11 @@ An event detail page should prioritize:
 - Reservation status and deadline
 - Official source link
 - Reservation/action link
+- Registration QR code section when QR is the action mechanism
 - Map open button
 - Add-to-calendar button
-- Optional audio summary
+
+Event details should not expose internal review language such as extraction confidence, normalized-from-image notes, or "official evidence" labels. Those details belong in admin or collector diagnostics, not the public page.
 
 ## Map And Geocoding
 
@@ -175,6 +181,45 @@ Expected normalized outputs:
 Do not bypass login walls, captchas, or platform protections. Report structured failures such as `captcha_required`, `login_required`, or `fetch_blocked`.
 
 The detailed collector/agent upload contract and page-capture modes are defined in [Collector Agent Ingestion Spec](collector-agent-ingestion.md).
+
+Observed WeChat article patterns that the normalized output contracts must support:
+
+- `text_dominant`: DOM text contains enough event fields for a high-confidence draft.
+- `image_dominant`: poster images contain the action-critical fields and require OCR or vision extraction.
+- `qr_registration`: the registration action is a QR code image rather than a URL.
+- `multi_mention`: one article contains a primary event plus related or secondary event mentions.
+- `expired_source_post`: the source is useful for history or fixtures but should not enter default public discovery.
+
+For WeChat articles, the collector should scroll through the page before final extraction so lazy-loaded poster images and QR codes are discovered. The backend should store the resulting image assets as evidence references attached to article snapshots and event drafts.
+
+### Image And Asset Handling
+
+For short-lived prototypes and fixed assets, images may be committed under `public/` and served by Vercel as static files.
+
+Runtime collector assets are different. Poster images, registration QR codes, and source snapshots discovered after deployment should not be written to the Vercel filesystem. Store those assets through a provider abstraction.
+
+Initial storage path:
+
+- static prototype assets: `public/event-assets/...`
+- runtime assets: provider-backed object storage
+
+Provider plan:
+
+1. Use Vercel-hosted static assets only for committed prototype or seed fixtures.
+2. Use a storage adapter for runtime collector assets.
+3. A temporary adapter may use Vercel Blob if needed.
+4. Future adapters may use S3 or Cloudflare R2/CDN without changing public event rendering contracts.
+
+Asset metadata should include:
+
+- provider
+- storage key
+- public or signed URL
+- MIME type
+- content hash
+- original source URL when available
+- usage such as `poster`, `registration_qr`, `cover`, or `article_image`
+- owning source post or event draft
 
 ## Vercel
 
