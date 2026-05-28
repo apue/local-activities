@@ -281,23 +281,27 @@ The operator then edits `.env` with collector-machine values, especially:
 - `TEXT_INFERENCE_API_KEY`
 - `TEXT_INFERENCE_MODEL`
 
-Expected future collector commands:
+Current collector commands:
 
 ```bash
-pnpm run collector:install-browsers
 pnpm run collector:dev
 pnpm run collector
-```
-
-Expected future local console command:
-
-```bash
 pnpm run collector:console
 ```
 
-The implementation may choose one long-running command that starts both the worker and console, but it must document the behavior clearly.
+The current implementation starts one long-running local service that includes
+the local operator console, JSON-backed local queue, and one-at-a-time worker.
+It uses `LOCAL_COLLECTOR_PROCESSOR=fixture` as the temporary processor until the
+real browser/LLM extractor lands.
 
 The local console should default to localhost. If exposed on the LAN for convenience, it should require `LOCAL_COLLECTOR_CONSOLE_TOKEN`.
+
+Example startup:
+
+```bash
+pnpm collector:console --env-file .env
+pnpm collector:console --help
+```
 
 ## Runtime Flow
 
@@ -396,21 +400,22 @@ pnpm run db:check
 
 ### Slice 4: Collector Bootstrap
 
-Add collector install and startup commands.
+Add collector startup commands.
 
 Expected command shape:
 
 ```bash
-pnpm run collector:install-browsers
 pnpm run collector:dev
 pnpm run collector
 pnpm run collector:console
 ```
 
-Until the real browser/LLM collector lands, use the fixture smoke command to
-prove collector API connectivity from the target machine:
+The current local console command uses the fixture processor and JSON local
+queue. Until the real browser/LLM collector lands, use it or the fixture smoke
+command to prove collector API connectivity from the target machine:
 
 ```bash
+pnpm collector:console --env-file .env
 pnpm collector:fixture --env-file .env --seed-url "https://mp.weixin.qq.com/s/example"
 pnpm collector:fixture --env-file .env --claim-once --fixture ready-event
 ```

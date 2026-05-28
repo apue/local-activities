@@ -75,6 +75,10 @@ export const targets = {
       "TEXT_INFERENCE_ENDPOINT_STYLE",
     ],
     optional: [
+      "LOCAL_COLLECTOR_PROCESSOR",
+      "LOCAL_COLLECTOR_QUEUE_FILE",
+      "COLLECTOR_CONSOLE_HOST",
+      "COLLECTOR_CONSOLE_PORT",
       "LOCAL_COLLECTOR_CONSOLE_TOKEN",
       "EXA_API_KEY",
       "SERPER_API_KEY",
