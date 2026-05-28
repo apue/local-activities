@@ -109,11 +109,16 @@ describe("admin route handlers", () => {
   });
 
   it("creates queued collector jobs for valid seed URLs", async () => {
+    const startedJobs: CollectorJobRecord[] = [];
     const response = await handleAdminCreateCollectorJob(
       request({ seedUrl: "https://mp.weixin.qq.com/s/example" }),
       new RouteAdminStore(),
       { ADMIN_ACCESS_TOKEN: "admin-secret" },
       new Date("2026-05-28T08:00:00.000Z"),
+      async (job) => {
+        startedJobs.push(job);
+        return { status: "started" as const, sandboxId: "sb_123" };
+      },
     );
 
     expect(response.status).toBe(200);
@@ -126,7 +131,48 @@ describe("admin route handlers", () => {
         runnerState: "sandbox_pending",
         fallbackEligible: false,
       },
+      sandboxStart: {
+        status: "started",
+        sandboxId: "sb_123",
+      },
     });
+    expect(startedJobs).toHaveLength(1);
+    expect(startedJobs[0]).toMatchObject({
+      jobId: "job-1",
+      preferredRunner: "vercel_sandbox",
+    });
+  });
+
+  it("does not start Sandbox for explicitly local collector jobs", async () => {
+    const startedJobs: CollectorJobRecord[] = [];
+    const response = await handleAdminCreateCollectorJob(
+      request({
+        seedUrl: "https://mp.weixin.qq.com/s/example",
+        preferredRunner: "local_collector",
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-05-28T08:00:00.000Z"),
+      async (job) => {
+        startedJobs.push(job);
+        return { status: "started" as const, sandboxId: "sb_123" };
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      job: {
+        jobId: "job-1",
+        preferredRunner: "local_collector",
+        runnerState: "local_pending",
+      },
+      sandboxStart: {
+        status: "skipped",
+        reason: "local_collector_preferred",
+      },
+    });
+    expect(startedJobs).toHaveLength(0);
   });
 
   it("lists drafts for admin review", async () => {
