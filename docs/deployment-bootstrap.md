@@ -290,9 +290,9 @@ pnpm run collector:console
 ```
 
 The current implementation starts one long-running local service that includes
-the local operator console, JSON-backed local queue, and one-at-a-time worker.
-It uses `LOCAL_COLLECTOR_PROCESSOR=fixture` as the temporary processor until the
-real browser/LLM extractor lands.
+the local operator console, JSON-backed local queue, Vercel job polling, and a
+one-at-a-time worker. It uses `LOCAL_COLLECTOR_PROCESSOR=fixture` as the
+temporary processor until the real browser/LLM extractor lands.
 
 The local console should default to localhost. If exposed on the LAN for convenience, it should require `LOCAL_COLLECTOR_CONSOLE_TOKEN`.
 
@@ -303,6 +303,11 @@ pnpm collector:console --env-file .env
 pnpm collector:console --help
 ```
 
+Polling is enabled by default when the collector runtime starts. Use
+`COLLECTOR_POLLING_ENABLED=false` for local console-only debugging. Poll cadence
+is controlled by `COLLECTOR_POLL_INTERVAL_SECONDS`,
+`COLLECTOR_ERROR_BACKOFF_SECONDS`, and `COLLECTOR_CAPABILITIES`.
+
 ## Runtime Flow
 
 ### Admin-Triggered Job
@@ -311,10 +316,12 @@ pnpm collector:console --help
 2. Admin pastes a source or article URL.
 3. Backend validates the URL and creates a queued collector job.
 4. Collector polls Vercel and claims the job.
-5. Collector sends heartbeats while running.
-6. Collector captures the page, classifies the capture mode, calls the LLM or agent API if needed, and uploads normalized results.
-7. Vercel validates uploads, stores state in Supabase, computes review state, and links results to the job.
-8. Admin reviews the draft, failure, or missing-information state.
+5. The local collector persists the claimed job into its local queue.
+6. Collector sends heartbeats while running.
+7. Collector captures the page, classifies the capture mode, calls the LLM or agent API if needed, and uploads normalized results.
+8. Collector reports completion or failure back to the Vercel job endpoint.
+9. Vercel validates uploads, stores state in Supabase, computes review state, and links results to the job.
+10. Admin reviews the draft, failure, or missing-information state.
 
 ### Local Console Job
 
@@ -410,9 +417,10 @@ pnpm run collector
 pnpm run collector:console
 ```
 
-The current local console command uses the fixture processor and JSON local
-queue. Until the real browser/LLM collector lands, use it or the fixture smoke
-command to prove collector API connectivity from the target machine:
+The current local console command uses Vercel polling, the fixture processor,
+and JSON local queue. Until the real browser/LLM collector lands, use it or the
+fixture smoke command to prove collector API connectivity from the target
+machine:
 
 ```bash
 pnpm collector:console --env-file .env

@@ -91,11 +91,12 @@ pnpm collector:fixture --env-file .env --claim-once --fixture ready-event
 pnpm collector:fixture --env-file .env --claim-once --fixture failure
 ```
 
-The local console command starts a local-only web service with a JSON-backed
-queue and one-at-a-time worker. In the current skeleton it uses
-`LOCAL_COLLECTOR_PROCESSOR=fixture`, which uploads deterministic source-run,
-article-snapshot, and draft payloads through the existing collector API
-boundary. The fixture commands can still be used for direct API checks.
+The local console command starts a local-only web service with Vercel job
+polling, a JSON-backed queue, and one-at-a-time worker. In the current skeleton
+it uses `LOCAL_COLLECTOR_PROCESSOR=fixture`, which uploads deterministic
+source-run, article-snapshot, and draft payloads through the existing collector
+API boundary, then reports claimed Vercel jobs. The fixture commands can still
+be used for direct API checks.
 
 Fixture mode is not a real browser or LLM extractor, and it must not be used as
 a substitute for production collection. Its purpose is to prove that the
@@ -407,11 +408,17 @@ Implement Vercel job polling and local execution handoff.
 
 Expected output:
 
-- configurable polling cadence
-- claim API client
-- heartbeat loop
-- report submission
-- retry/backoff behavior
+- configurable polling cadence: implemented through
+  `COLLECTOR_POLL_INTERVAL_SECONDS` and `COLLECTOR_ERROR_BACKOFF_SECONDS`
+- claim API client: implemented in `pnpm collector:console`
+- heartbeat loop: implemented during local run state transitions
+- report submission: implemented after upload or failure
+- retry/backoff behavior: implemented for no-job and error polling states
+
+Remaining work:
+
+- richer lease recovery behavior after interrupted local processes
+- real browser/LLM extraction processor to replace fixture mode
 
 ### Slice 6: Admin Portal Job Visibility
 
