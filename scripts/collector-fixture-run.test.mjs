@@ -195,6 +195,42 @@ describe("collector fixture runner", () => {
     });
     expect(result.kind).toBe("uploaded");
   });
+
+  it("stops before uploading when the claimed job does not match the expected job", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init, body: JSON.parse(init.body) });
+      return jsonResponse({
+        job: {
+          jobId: "old-job",
+          seedUrl: "https://mp.weixin.qq.com/s/old",
+          requestedAt: "2026-05-28T08:59:00.000Z",
+          leaseExpiresAt: "2026-05-28T09:10:00.000Z",
+          attemptNumber: 1,
+        },
+      });
+    };
+
+    await expect(
+      runCollectorFixture({
+        env: {
+          COLLECTOR_BASE_URL: "https://activities.example",
+          COLLECTOR_API_KEY: "collector-secret",
+          COLLECTOR_ID: "home-1",
+        },
+        fetchImpl,
+        now: new Date("2026-05-28T09:00:00.000Z"),
+        claimOnce: true,
+        expectedJobId: "new-job",
+        runId: "fixture-claimed",
+        fixture: "ready-event",
+      }),
+    ).rejects.toThrow("claimed_unexpected_job");
+
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://activities.example/api/collector/jobs/claim",
+    ]);
+  });
 });
 
 function jsonResponse(body, status = 200) {

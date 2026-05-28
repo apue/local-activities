@@ -424,6 +424,17 @@ Add a smoke test or checklist command that proves:
 - collector can upload a controlled fixture result
 - admin can see the resulting review state
 
+The current fixture smoke command covers the deterministic path through publish:
+
+```bash
+pnpm smoke:e2e-fixture --env-file .env.local --seed-url "https://mp.weixin.qq.com/s/example"
+```
+
+Run it from a machine or network that can resolve and reach the configured
+`APP_BASE_URL`. The command uses the same admin and collector API boundaries as
+the deployed app, publishes the fixture draft, and verifies the resulting public
+event detail page contains the published title.
+
 ### Slice 6: Operational Handoff
 
 Add an operator runbook after implementation exists. It should cover start, stop, logs, token rotation, collector machine replacement, failed-job retry, and Vercel deployment rollback.
