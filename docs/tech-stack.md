@@ -325,11 +325,22 @@ Environment:
 - `TEXT_INFERENCE_API_KEY`
 - `TEXT_INFERENCE_MODEL`
 - `TEXT_INFERENCE_ENDPOINT_STYLE`
+- `VISION_INFERENCE_PROVIDER`
+- `VISION_INFERENCE_API_BASE_URL`
+- `VISION_INFERENCE_API_KEY`
+- `VISION_INFERENCE_MODEL`
+- `VISION_INFERENCE_ENDPOINT_STYLE`
 
 Endpoint style:
 
 - Prefer the OpenAI Responses-style API where available.
 - Support chat-completions-compatible providers, likely including DeepSeek, if Responses API is unavailable.
+
+Browser-backed collector runs use `VISION_INFERENCE_*` for image OCR/vision
+analysis when those values are configured. If they are omitted, the collector
+falls back to `TEXT_INFERENCE_*` so a hobby deployment can start with one
+provider key. These variables are collector-side only and must not be exposed to
+browser code.
 
 Persist prompt version, model name, and extraction confidence with outputs for reproducibility.
 

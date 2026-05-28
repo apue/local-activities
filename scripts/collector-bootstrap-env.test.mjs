@@ -73,6 +73,31 @@ describe("collector bootstrap env generator", () => {
     expect(evaluateTarget("collector", parsed)).toMatchObject({ ok: true });
   });
 
+  it("copies optional vision inference overrides without requiring them", () => {
+    const env = buildCollectorBootstrapEnv({
+      sourceEnv: {
+        NEXT_PUBLIC_APP_URL: "https://local-activities.vercel.app",
+        COLLECTOR_API_KEY: "collector-token",
+        TEXT_INFERENCE_API_BASE_URL: "https://agent.example/v1",
+        TEXT_INFERENCE_API_KEY: "llm-secret",
+        TEXT_INFERENCE_MODEL: "gpt-test",
+        VISION_INFERENCE_API_BASE_URL: "https://vision.example/v1",
+        VISION_INFERENCE_API_KEY: "vision-secret",
+        VISION_INFERENCE_MODEL: "vision-model",
+        VISION_INFERENCE_ENDPOINT_STYLE: "chat-completions",
+      },
+      collectorHost: "192.168.0.16",
+    });
+
+    expect(env).toMatchObject({
+      VISION_INFERENCE_API_BASE_URL: "https://vision.example/v1",
+      VISION_INFERENCE_API_KEY: "vision-secret",
+      VISION_INFERENCE_MODEL: "vision-model",
+      VISION_INFERENCE_ENDPOINT_STYLE: "chat-completions",
+    });
+    expect(evaluateTarget("collector", env)).toMatchObject({ ok: true });
+  });
+
   it("falls back to NEXT_PUBLIC_APP_URL when collector base URLs are placeholders", () => {
     const env = buildCollectorBootstrapEnv({
       sourceEnv: {
