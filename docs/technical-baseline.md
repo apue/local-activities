@@ -58,6 +58,8 @@ See [Collector Agent Ingestion Spec](collector-agent-ingestion.md) for the colle
 
 See [Local Collector Console And Job Queue Spec](local-collector-console.md) for the home-machine console, Vercel job polling, lease, and heartbeat design.
 
+See [Deployment Bootstrap Spec](deployment-bootstrap.md) for the end-to-end Vercel, Supabase, and home-machine collector setup target.
+
 ## API Validation
 
 Use schema validation for all collector-facing endpoints. Zod is the default candidate because it works well with TypeScript and Next.js.
@@ -143,3 +145,5 @@ The repository keeps a full safe variable template in [`.env.example`](../.env.e
 - optional Vercel Cron/Workflow/Sandbox/Queue configuration
 
 See [MVP Tech Stack And End-To-End Feature Notes](tech-stack.md) for feature-by-feature stack notes.
+
+See [Deployment Bootstrap Spec](deployment-bootstrap.md) for production/preview Vercel env setup, collector-machine env setup, and the end-to-end smoke test expected after implementation lands.

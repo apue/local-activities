@@ -6,6 +6,8 @@ This document defines the MVP design for a home-machine collector console and a 
 
 The intended reader is a future coding agent implementing the local collector UI, local queue, Vercel job APIs, polling worker, or admin portal integration. The design keeps the home machine simple while preserving the project boundary that collector and agent outputs are untrusted.
 
+For operational bootstrap on Vercel and the first home collector machine, see [Deployment Bootstrap Spec](deployment-bootstrap.md).
+
 ## Core Design
 
 The MVP has two ways to start collection work:
