@@ -143,12 +143,18 @@ DATABASE_URL
 
 CRON_SECRET
 
-NEXT_PUBLIC_AMAP_JS_API_KEY
-AMAP_WEB_SERVICE_API_KEY
-
 VERCEL_WEB_ANALYTICS_ENABLED
 VERCEL_SPEED_INSIGHTS_ENABLED
 OBSERVABILITY_PROVIDER
+```
+
+Map/geocoding variables are planned but not required until map or location
+features are implemented:
+
+```text
+NEXT_PUBLIC_AMAP_JS_API_KEY
+AMAP_WEB_SERVICE_API_KEY
+AMAP_SECURITY_JS_CODE
 ```
 
 Keep legacy Supabase aliases only where implementation or local scripts still require them:
@@ -217,8 +223,6 @@ vercel env add SUPABASE_SECRET_KEY production
 vercel env add DATABASE_URL production
 vercel env add CRON_SECRET production
 vercel env add NEXT_PUBLIC_APP_URL production
-vercel env add NEXT_PUBLIC_AMAP_JS_API_KEY production
-vercel env add AMAP_WEB_SERVICE_API_KEY production
 vercel env add OBSERVABILITY_PROVIDER production
 vercel env add VERCEL_WEB_ANALYTICS_ENABLED production
 vercel env add VERCEL_SPEED_INSIGHTS_ENABLED production
@@ -236,8 +240,6 @@ vercel env add SUPABASE_SECRET_KEY preview
 vercel env add DATABASE_URL preview
 vercel env add CRON_SECRET preview
 vercel env add NEXT_PUBLIC_APP_URL preview
-vercel env add NEXT_PUBLIC_AMAP_JS_API_KEY preview
-vercel env add AMAP_WEB_SERVICE_API_KEY preview
 vercel env add OBSERVABILITY_PROVIDER preview
 vercel env add VERCEL_WEB_ANALYTICS_ENABLED preview
 vercel env add VERCEL_SPEED_INSIGHTS_ENABLED preview
