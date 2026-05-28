@@ -112,6 +112,20 @@ The Supabase project should exist before production bootstrap. Local development
 
 ## Environment Boundaries
 
+Before setting or rotating secrets, run the environment inventory command for
+the target runtime. It prints only variable names and status; it does not print
+configured values.
+
+```bash
+pnpm env:check --target local-app --env-file .env.local
+pnpm env:check --target vercel --env-file .env.local
+pnpm env:check --target collector --env-file .env
+```
+
+Use `--target all` to check every runtime target against the current process
+environment, or `--list-targets` to print the supported target names. Placeholder
+values from `.env.example`, such as `replace-with-*`, are treated as not ready.
+
 ### Vercel Environment Variables
 
 Vercel production and preview environments need the variables required by the deployed web app and API:
