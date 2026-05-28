@@ -14,7 +14,7 @@ The initial focus is narrow by design: embassy, cultural-center, and official in
 
 ## Current Repository State
 
-This repository is currently documentation-first. It defines the MVP scope and system baseline before application scaffolding.
+This repository has a minimal Next.js scaffold, health checks, shared planning docs, and the first backend contract/schema foundation. The implementation is still incomplete: public event views, admin workflows, collector APIs, local collector runtime, matching, and full deployment verification are being built through GitHub issues and PRs.
 
 ## Documents
 

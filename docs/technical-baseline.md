@@ -41,6 +41,8 @@ Expected core tables:
 - `event_revisions`
 - `collector_failures`
 
+The first concrete migration for these tables is `supabase/migrations/20260528090000_mvp_core_schema.sql`.
+
 ## Collector Runtime
 
 Use a separate local Node.js runtime for source collection.
@@ -63,6 +65,8 @@ See [Deployment Bootstrap Spec](deployment-bootstrap.md) for the end-to-end Verc
 ## API Validation
 
 Use schema validation for all collector-facing endpoints. Zod is the default candidate because it works well with TypeScript and Next.js.
+
+Shared runtime contracts live under `src/contracts/` and must be used by API routes, local collector code, and tests before accepting collector or admin-facing payloads.
 
 Collector APIs must support:
 
