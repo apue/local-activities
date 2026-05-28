@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local Activities Admin Prototype</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="admin-shell">
+      <aside class="sidebar" aria-label="Admin navigation">
+        <div class="brand">
+          <span class="brand-mark">北</span>
+          <div>
+            <strong>Local Activities</strong>
+            <span>Admin MVP</span>
+          </div>
+        </div>
+        <nav class="nav-list" aria-label="Sections">
+          <a href="#overview" class="is-active">Overview</a>
+          <a href="#inbox">Inbox</a>
+          <a href="#sources">Sources</a>
+          <a href="#runs">Runs</a>
+          <a href="#published">Published</a>
+        </nav>
+        <div class="sidebar-note">
+          <span>Last collector check</span>
+          <strong>10:42</strong>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar" id="overview">
+          <div>
+            <p class="eyebrow">Solo operator dashboard</p>
+            <h1>今天需要处理什么</h1>
+          </div>
+          <button class="primary-action" type="button" data-open-seed>+ Add seed URL</button>
+        </header>
+
+        <section class="overview-grid" aria-label="Overview metrics">
+          <article class="metric-card urgent">
+            <span>Pending drafts</span>
+            <strong>7</strong>
+            <small>3 个缺关键信息</small>
+          </article>
+          <article class="metric-card warn">
+            <span>Attention sources</span>
+            <strong>4</strong>
+            <small>2 个连续失败</small>
+          </article>
+          <article class="metric-card">
+            <span>Last success</span>
+            <strong>28m</strong>
+            <small>印度驻华大使馆</small>
+          </article>
+          <article class="metric-card ok">
+            <span>Published upcoming</span>
+            <strong>12</strong>
+            <small>本周末 5 个</small>
+          </article>
+        </section>
+
+        <section class="work-grid">
+          <section class="panel inbox-panel" id="inbox">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Review queue</p>
+                <h2>Inbox</h2>
+              </div>
+              <div class="segmented" role="tablist" aria-label="Inbox filter">
+                <button type="button" class="is-selected" data-filter="all">All</button>
+                <button type="button" data-filter="missing">Missing</button>
+                <button type="button" data-filter="duplicate">Duplicates</button>
+              </div>
+            </div>
+            <div id="draft-list" class="draft-list"></div>
+          </section>
+
+          <aside class="panel detail-panel" aria-label="Selected draft">
+            <div id="draft-detail"></div>
+          </aside>
+        </section>
+
+        <section class="lower-grid">
+          <section class="panel" id="sources">
+            <div class="panel-header compact">
+              <div>
+                <p class="eyebrow">Tracked channels</p>
+                <h2>Sources</h2>
+              </div>
+              <span class="count-pill">18 sources</span>
+            </div>
+            <div id="source-list" class="table-list"></div>
+          </section>
+
+          <section class="panel" id="runs">
+            <div class="panel-header compact">
+              <div>
+                <p class="eyebrow">Collector</p>
+                <h2>Runs</h2>
+              </div>
+              <span class="count-pill">Last 6</span>
+            </div>
+            <div id="run-list" class="table-list"></div>
+          </section>
+        </section>
+
+        <section class="panel published-panel" id="published">
+          <div class="panel-header compact">
+            <div>
+              <p class="eyebrow">Public surface</p>
+              <h2>Published</h2>
+            </div>
+            <span class="count-pill">12 upcoming</span>
+          </div>
+          <div id="published-list" class="published-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="modal-root"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
