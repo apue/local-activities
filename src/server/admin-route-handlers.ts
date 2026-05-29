@@ -109,11 +109,15 @@ export async function handleAdminListCollectorJobs(
   const auth = authenticateAdminRequest(request, env);
   if (!auth.ok) return authErrorResponse(auth);
 
-  const jobs = await listAdminCollectorJobs(store);
-  return Response.json({
-    ok: true,
-    jobs,
-  });
+  try {
+    const jobs = await listAdminCollectorJobs(store);
+    return Response.json({
+      ok: true,
+      jobs,
+    });
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
 }
 
 export async function handleAdminListEventDrafts(
@@ -126,12 +130,15 @@ export async function handleAdminListEventDrafts(
 
   const url = new URL(request.url);
   const reviewState = url.searchParams.get("reviewState") ?? undefined;
-  const drafts = await listAdminEventDrafts({ reviewState }, store);
-
-  return Response.json({
-    ok: true,
-    drafts,
-  });
+  try {
+    const drafts = await listAdminEventDrafts({ reviewState }, store);
+    return Response.json({
+      ok: true,
+      drafts,
+    });
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
 }
 
 export async function handleAdminGetEventDraft(
