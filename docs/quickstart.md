@@ -155,6 +155,23 @@ The repository includes `.codex/config.toml` with the built-in Context7 MCP endp
 
 Project-level skills live in `.agents/skills`.
 
+## Local Capture Commands
+
+There are two separate capture paths:
+
+- `/capture-event <url-or-shared-text>` is a Codex runtime workflow. The
+  current Codex session uses local `agent-browser` to open the page, inspect the
+  content, infer the event draft, and upload through the existing backend APIs.
+  This path must not require `EDITOR_AGENT_API_KEY`, `EDITOR_AGENT_MODEL`,
+  `OPENAI_API_KEY`, or `OPENAI_MODEL`.
+- `pnpm editor:capture -- --env-file .env.local <url-or-shared-text>` is the
+  autonomous API-agent collector path for local collector or Vercel Sandbox
+  execution. It runs project scripts and requires an OpenAI-compatible editor
+  model provider configuration.
+
+Both paths must report structured failures such as `captcha_required`,
+`login_required`, or `fetch_blocked` instead of bypassing platform protections.
+
 Current project skills:
 
 - `frontend-design`: Anthropic frontend design skill.
