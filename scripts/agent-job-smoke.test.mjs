@@ -7,7 +7,7 @@ import {
 } from "./agent-job-smoke.mjs";
 
 describe("agent job smoke", () => {
-  it("creates a sandbox job, polls it, verifies DB records, and does not publish", async () => {
+  it("creates a sandbox job, polls it, and verifies auto-published public event", async () => {
     const requests = [];
     const dbChecks = [];
     const jobRunning = buildJob({ state: "running", runnerState: "sandbox_running" });
@@ -42,6 +42,17 @@ describe("agent job smoke", () => {
         return jsonResult(200, { ok: true, jobs: [jobCompleted] });
       }
 
+      if (request.method === "GET" && request.path === "/") {
+        return textResult(200, "Thai Festival Beijing 2026");
+      }
+
+      if (request.method === "GET" && request.path === "/events/event-1") {
+        return textResult(
+          200,
+          "Thai Festival Beijing 2026 北京市朝阳区朝阳公园 https://mp.weixin.qq.com/s/agent-smoke",
+        );
+      }
+
       throw new Error(`unexpected_request:${request.method}:${request.path}`);
     };
     const dbClient = {
@@ -51,7 +62,27 @@ describe("agent job smoke", () => {
       },
       async listDraftsByIds(ids) {
         dbChecks.push({ table: "event_drafts", ids });
-        return [{ id: 401, draft_id: "draft-public-1", review_state: "ready_for_review" }];
+        return [
+          {
+            id: 401,
+            draft_id: "draft-public-1",
+            article_url: "https://mp.weixin.qq.com/s/agent-smoke",
+            review_state: "approved",
+          },
+        ];
+      },
+      async listPublishedEventsBySourceUrls(sourceUrls) {
+        dbChecks.push({ table: "canonical_events", sourceUrls });
+        return [
+          {
+            event_id: "event-1",
+            title: "Thai Festival Beijing 2026",
+            source_url: "https://mp.weixin.qq.com/s/agent-smoke",
+            venue_name: null,
+            venue_address: "北京市朝阳区朝阳公园",
+            starts_at: "2026-05-30T02:30:00.000Z",
+          },
+        ];
       },
     };
 
@@ -72,6 +103,8 @@ describe("agent job smoke", () => {
     expect(requests.map((request) => [request.method, request.path])).toEqual([
       ["POST", "/api/admin/collector-jobs"],
       ["GET", "/api/admin/collector-jobs"],
+      ["GET", "/"],
+      ["GET", "/events/event-1"],
     ]);
     expect(requests[0].body).toEqual({
       seedUrl: "https://mp.weixin.qq.com/s/agent-smoke",
@@ -85,13 +118,19 @@ describe("agent job smoke", () => {
       { table: "article_snapshots", id: "201" },
       { table: "evidence_assets", id: "301" },
       { table: "event_drafts", ids: ["401"] },
+      {
+        table: "canonical_events",
+        sourceUrls: ["https://mp.weixin.qq.com/s/agent-smoke"],
+      },
     ]);
     expect(result).toMatchObject({
       kind: "passed",
       jobId: "job-1",
-      outcome: "draft_ready_for_review",
+      outcome: "event_published",
       draftIds: ["401"],
-      reviewStates: ["ready_for_review"],
+      reviewStates: ["approved"],
+      eventIds: ["event-1"],
+      publicUrls: ["https://local-activities.example/events/event-1"],
     });
   });
 
@@ -146,6 +185,8 @@ describe("agent job smoke", () => {
       fallbackEligible: false,
       draftIds: ["401"],
       reviewStates: ["ready_for_review"],
+      eventIds: ["event-1"],
+      publicUrls: ["https://local-activities.example/events/event-1"],
       failureIds: [],
       elapsedSeconds: 12,
     });
@@ -153,6 +194,7 @@ describe("agent job smoke", () => {
     expect(summary).toContain("Agent job smoke passed");
     expect(summary).toContain("jobId=job-1");
     expect(summary).toContain("drafts=401");
+    expect(summary).toContain("events=event-1");
     expect(summary).not.toContain("admin-secret");
     expect(summary).not.toContain("supabase-secret");
   });
@@ -177,12 +219,19 @@ function jsonResult(status, json) {
   return { status, json, text: JSON.stringify(json) };
 }
 
+function textResult(status, text) {
+  return { status, text };
+}
+
 function emptyDbClient() {
   return {
     async findById() {
       return null;
     },
     async listDraftsByIds() {
+      return [];
+    },
+    async listPublishedEventsBySourceUrls() {
       return [];
     },
   };

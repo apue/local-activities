@@ -20,6 +20,7 @@ const reviewableStates = new Set([
   "needs_info",
   "possible_duplicate",
 ]);
+const publishedDraftStates = new Set(["approved"]);
 
 export async function runAgentJobSmoke({
   env = process.env,
@@ -79,6 +80,15 @@ export async function runAgentJobSmoke({
       supabaseSecretKey: config.supabaseSecretKey,
     });
   const dbResult = await verifyJobRecords(currentJob, verifier);
+  const publicUrls =
+    dbResult.events.length > 0
+      ? await verifyPublicEvents({
+          baseUrl: config.baseUrl,
+          proxyUrl: config.proxyUrl,
+          requestImpl,
+          events: dbResult.events,
+        })
+      : [];
 
   if (!outcome.passed) {
     throw new Error(
@@ -89,7 +99,7 @@ export async function runAgentJobSmoke({
   return {
     kind: "passed",
     jobId,
-    outcome: refineOutcome(outcome.outcome, dbResult.reviewStates),
+    outcome: refineOutcome(outcome.outcome, dbResult),
     state: currentJob.state,
     runnerState: currentJob.runnerState,
     actualRunner: currentJob.actualRunner,
@@ -97,17 +107,20 @@ export async function runAgentJobSmoke({
     fallbackReason: currentJob.fallbackReason,
     draftIds: currentJob.eventDraftIds ?? [],
     reviewStates: dbResult.reviewStates,
+    eventIds: dbResult.events.map((event) => event.event_id),
+    publicUrls,
     failureIds: currentJob.failureIds ?? [],
     elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
   };
 }
 
-function refineOutcome(outcome, reviewStates) {
+function refineOutcome(outcome, dbResult) {
   if (outcome !== "draft_created") return outcome;
-  if (reviewStates.includes("ready_for_review")) return "draft_ready_for_review";
-  if (reviewStates.includes("needs_info")) return "draft_needs_info";
-  if (reviewStates.includes("needs_review")) return "draft_needs_review";
-  if (reviewStates.includes("possible_duplicate")) return "draft_possible_duplicate";
+  if (dbResult.events.length > 0) return "event_published";
+  if (dbResult.reviewStates.includes("ready_for_review")) return "draft_ready_for_review";
+  if (dbResult.reviewStates.includes("needs_info")) return "draft_needs_info";
+  if (dbResult.reviewStates.includes("needs_review")) return "draft_needs_review";
+  if (dbResult.reviewStates.includes("possible_duplicate")) return "draft_possible_duplicate";
   return outcome;
 }
 
@@ -171,6 +184,10 @@ export function formatAgentJobSmokeSummary(result) {
     result.reviewStates.length
       ? `reviewStates=${result.reviewStates.join(",")}`
       : null,
+    result.eventIds?.length ? `events=${result.eventIds.join(",")}` : null,
+    result.publicUrls?.length
+      ? `publicUrls=${result.publicUrls.join(",")}`
+      : null,
     `failures=${
       result.failureIds.length ? result.failureIds.join(",") : "none"
     }`,
@@ -202,6 +219,8 @@ async function fetchAdminJob({
 
 async function verifyJobRecords(job, dbClient) {
   const reviewStates = [];
+  const articleUrls = [];
+  let events = [];
 
   await verifyIds(dbClient, "source_runs", compact([job.sourceRunId]));
   await verifyIds(dbClient, "article_snapshots", job.articleSnapshotIds ?? []);
@@ -218,18 +237,74 @@ async function verifyJobRecords(job, dbClient) {
     }
     for (const draft of drafts) {
       reviewStates.push(draft.review_state);
+      if (draft.article_url) articleUrls.push(draft.article_url);
     }
     if (
       reviewStates.length > 0 &&
-      !reviewStates.some((state) => reviewableStates.has(state))
+      !reviewStates.some(
+        (state) => reviewableStates.has(state) || publishedDraftStates.has(state),
+      )
     ) {
       throw new Error(
-        `agent_job_no_reviewable_draft:${reviewStates.join(",")}`,
+        `agent_job_no_acceptable_draft:${reviewStates.join(",")}`,
       );
+    }
+    if (reviewStates.some((state) => publishedDraftStates.has(state))) {
+      events = await dbClient.listPublishedEventsBySourceUrls(articleUrls);
+      if (events.length === 0) {
+        throw new Error(`agent_job_no_published_event:${articleUrls.join(",")}`);
+      }
     }
   }
 
-  return { reviewStates };
+  return { reviewStates, events };
+}
+
+async function verifyPublicEvents({
+  baseUrl,
+  proxyUrl,
+  requestImpl,
+  events,
+}) {
+  const list = await (requestImpl ?? requestHttp)({
+    baseUrl,
+    proxyUrl,
+    method: "GET",
+    path: "/",
+    headers: {},
+  });
+  assertPublicResponseContains(list, "/", [events[0]?.title]);
+
+  const publicUrls = [];
+  for (const event of events) {
+    const path = `/events/${event.event_id}`;
+    const detail = await (requestImpl ?? requestHttp)({
+      baseUrl,
+      proxyUrl,
+      method: "GET",
+      path,
+      headers: {},
+    });
+    assertPublicResponseContains(detail, path, [
+      event.title,
+      event.source_url,
+      event.venue_name ?? event.venue_address,
+    ]);
+    publicUrls.push(`${baseUrl}${path}`);
+  }
+  return publicUrls;
+}
+
+function assertPublicResponseContains(response, path, values) {
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`public_page_failed:${path}:${response.status}`);
+  }
+  const text = response.text ?? JSON.stringify(response.json ?? {});
+  for (const value of values.filter(Boolean)) {
+    if (!text.includes(value)) {
+      throw new Error(`public_page_missing_text:${path}:${value}`);
+    }
+  }
 }
 
 async function verifyIds(dbClient, table, ids) {
@@ -273,9 +348,18 @@ function createSupabaseSmokeVerifier({ supabaseUrl, supabaseSecretKey }) {
     async listDraftsByIds(ids) {
       const { data, error } = await client
         .from("event_drafts")
-        .select("id,draft_id,review_state")
+        .select("id,draft_id,article_url,review_state")
         .in("id", ids);
       if (error) throw new Error("agent_job_db_query_failed:event_drafts");
+      return data ?? [];
+    },
+    async listPublishedEventsBySourceUrls(sourceUrls) {
+      const { data, error } = await client
+        .from("canonical_events")
+        .select("event_id,title,source_url,venue_name,venue_address,starts_at")
+        .eq("status", "published")
+        .in("source_url", sourceUrls);
+      if (error) throw new Error("agent_job_db_query_failed:canonical_events");
       return data ?? [];
     },
   };
@@ -490,7 +574,7 @@ function printHelp() {
   console.log(`Usage: pnpm smoke:agent-job --env-file .env.local --seed-url URL
 
 Runs a real Agent/Sandbox smoke:
-  admin job create -> poll admin job state -> verify reported IDs in Supabase
+  admin job create -> poll admin job state -> verify Supabase records -> verify public pages
 
 Required environment:
   APP_BASE_URL or NEXT_PUBLIC_APP_URL
@@ -511,7 +595,7 @@ Required on the target Vercel deployment for live extraction:
   OPENAI_API_KEY
   OPENAI_MODEL
 
-The command does not publish drafts.`);
+The command expects parsed drafts to auto-publish when minimum public fields are present.`);
 }
 
 export async function runCli(
