@@ -36,7 +36,7 @@ export type CanonicalEventRow = {
   registration_url: string | null;
   source_url: string;
   summary: string | null;
-  schedule_text: string | null;
+  schedule_text?: string | null;
   entry_notes: string | null;
   status: "draft" | "published" | "cancelled" | "withdrawn";
   published_at: string | null;
@@ -77,7 +77,6 @@ const publicEventColumns = [
   "registration_url",
   "source_url",
   "summary",
-  "schedule_text",
   "entry_notes",
   "status",
   "published_at",

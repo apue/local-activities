@@ -138,4 +138,47 @@ describe("public event helpers", () => {
       ),
     ).resolves.toEqual([]);
   });
+
+  it("does not require the optional schedule_text column in public queries", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const client = {
+      from(...args: unknown[]) {
+        calls.push(["from", args]);
+        return {
+          select(...selectArgs: unknown[]) {
+            calls.push(["select", selectArgs]);
+            return {
+              eq() {
+                return {
+                  or() {
+                    return {
+                      order() {
+                        return {
+                          async limit() {
+                            return {
+                              data: [{ ...baseEvent, schedule_text: undefined }],
+                              error: null,
+                            };
+                          },
+                        };
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const events = await listPublicUpcomingEventsFromClient(
+      client,
+      new Date("2026-06-01T00:00:00.000Z"),
+    );
+
+    expect(calls).toContainEqual(["from", ["canonical_events"]]);
+    expect(calls[1]?.[1]?.[0]).not.toContain("schedule_text");
+    expect(events[0]?.scheduleText).toBeUndefined();
+  });
 });
