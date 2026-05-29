@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildEditorCaptureEnv,
   extractCaptureInputUrl,
+  extractCaptureInputUrls,
   formatEditorCaptureSummary,
   parseArgs,
+  runEditorCaptureBatch,
   runEditorCapture,
 } from "./editor-agent-capture.mjs";
 
@@ -15,6 +17,21 @@ describe("editor agent capture", () => {
         "复制这段内容后打开小红书 https://example.com/post/1 ，查看更多",
       ),
     ).toBe("https://example.com/post/1");
+  });
+
+  it("extracts all URLs from pasted shared text in order", () => {
+    expect(
+      extractCaptureInputUrls(
+        [
+          "第一个 https://example.com/post/1 ，查看更多",
+          "第二个 https://mp.weixin.qq.com/s/abc。",
+          "重复的 https://example.com/post/1 不需要再次处理",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "https://example.com/post/1",
+      "https://mp.weixin.qq.com/s/abc",
+    ]);
   });
 
   it("maps editor provider aliases onto the collector agent env", () => {
@@ -87,6 +104,62 @@ describe("editor agent capture", () => {
     });
   });
 
+  it("runs a batch sequentially and preserves per-item failures", async () => {
+    const calls = [];
+
+    const result = await runEditorCaptureBatch({
+      input: [
+        "https://mp.weixin.qq.com/s/first",
+        "https://mp.weixin.qq.com/s/second",
+      ].join("\n"),
+      env: {
+        COLLECTOR_BASE_URL: "https://local-activities.example",
+        COLLECTOR_ID: "home-1",
+        COLLECTOR_API_KEY: "collector-secret",
+        AGENT_PROVIDER: "openai",
+        OPENAI_API_KEY: "openai-secret",
+        OPENAI_MODEL: "gpt-5-mini",
+      },
+      now: new Date("2026-05-29T09:00:00.000Z"),
+      runCollectorAgentImpl: async (input) => {
+        calls.push(input.seedUrl);
+        if (input.seedUrl.endsWith("/first")) {
+          return {
+            kind: "uploaded",
+            runId: input.runId,
+            uploadedIds: {
+              eventDraftId: "draft-1",
+            },
+          };
+        }
+        throw new Error("network_error");
+      },
+    });
+
+    expect(calls).toEqual([
+      "https://mp.weixin.qq.com/s/first",
+      "https://mp.weixin.qq.com/s/second",
+    ]);
+    expect(result).toMatchObject({
+      kind: "batch",
+      totalCount: 2,
+      succeededCount: 1,
+      failedCount: 1,
+      results: [
+        {
+          ok: true,
+          outcome: "event_submitted",
+          seedUrl: "https://mp.weixin.qq.com/s/first",
+        },
+        {
+          ok: false,
+          seedUrl: "https://mp.weixin.qq.com/s/second",
+          error: "network_error",
+        },
+      ],
+    });
+  });
+
   it("reports missing local provider config before invoking the processor", async () => {
     await expect(
       runEditorCapture({
@@ -118,6 +191,39 @@ describe("editor agent capture", () => {
       }),
     ).toContain(
       "Editor capture finished outcome=structured_failure seedUrl=https://mp.weixin.qq.com/s/captcha runId=editor-run sourceRunId=101 failureId=401",
+    );
+  });
+
+  it("summarizes batch results for operator use", () => {
+    expect(
+      formatEditorCaptureSummary({
+        kind: "batch",
+        totalCount: 2,
+        succeededCount: 1,
+        failedCount: 1,
+        results: [
+          {
+            ok: true,
+            outcome: "event_submitted",
+            seedUrl: "https://example.com/one",
+            runId: "run-1",
+            uploadedIds: {
+              eventDraftId: "draft-1",
+            },
+          },
+          {
+            ok: false,
+            seedUrl: "https://example.com/two",
+            error: "network_error",
+          },
+        ],
+      }),
+    ).toBe(
+      [
+        "Editor capture batch finished total=2 succeeded=1 failed=1",
+        "[1] ok outcome=event_submitted seedUrl=https://example.com/one runId=run-1 eventDraftId=draft-1",
+        "[2] failed seedUrl=https://example.com/two error=network_error",
+      ].join("\n"),
     );
   });
 

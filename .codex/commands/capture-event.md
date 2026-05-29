@@ -1,8 +1,9 @@
 ---
-description: "Capture one local activity URL through the local editor-agent path"
+description: "Capture local activity URLs through the local editor-agent path"
 ---
 
-Run the project-local editor capture command for the user-provided URL or shared text:
+Run the project-local editor capture command for the user-provided URL or shared text.
+The input may contain one or more HTTP(S) URLs:
 
 ```bash
 pnpm editor:capture -- --env-file .env.local "$ARGUMENTS"
