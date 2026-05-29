@@ -147,6 +147,10 @@ Poster handling:
   `posterImageUrl`.
 - If Blob upload is unavailable, leave `posterImageUrl` empty rather than
   storing a hotlinked source image as the public poster.
+- Never put a WeChat/source-site image URL directly in `posterImageUrl`.
+  Preserve that original URL as `posterImageSourceUrl` and/or evidence. The
+  `posterImageUrl` field is reserved for app-owned public asset URLs returned by
+  the storage adapter, so the public UI does not depend on third-party hotlinks.
 
 If a field is not supported by the existing collector contract, adapt it to the
 nearest existing event draft or evidence field before upload.

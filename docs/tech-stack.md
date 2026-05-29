@@ -226,6 +226,8 @@ Asset metadata should include:
 Environment:
 
 - `BLOB_READ_WRITE_TOKEN`
+- `PUBLIC_ASSET_URL_PREFIXES` optional comma-separated allowlist for app-owned
+  public asset URL prefixes outside the default Vercel Blob hostname.
 
 ## Vercel
 

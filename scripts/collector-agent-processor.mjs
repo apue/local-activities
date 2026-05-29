@@ -474,7 +474,9 @@ async function requestModelWithRetries({
         fetchImpl,
         attempt,
       });
-      const parsed = parseAgentResponse(parseOpenAIJson(data));
+      const parsed = parseAgentResponse(parseOpenAIJson(data), {
+        publicAssetUrlPrefixes: config.publicAssetUrlPrefixes,
+      });
       if (parsed.ok) return parsed;
       if (parsed.retryable === false) return parsed;
       lastError = parsed;
@@ -596,7 +598,7 @@ function buildAgentMessages({
     {
       role: "system",
       content:
-        "Extract admin-curated Beijing activity data. Return only JSON matching the collector agent response contract. Preserve multi-day or repeated daily hours in eventDraft.scheduleText when the source describes them. If an image is an event poster or campaign visual containing the activity title, date, venue, or main promotional artwork, include its public URL in eventDraft.posterImageUrl with useful alt text. Do not classify QR-only images, account avatars, decorative dividers, emoji art, or unrelated article images as posters.",
+        "Extract admin-curated Beijing activity data. Return only JSON matching the collector agent response contract. Preserve multi-day or repeated daily hours in eventDraft.scheduleText when the source describes them. If an image is an event poster or campaign visual containing the activity title, date, venue, or main promotional artwork, preserve the original article image URL in eventDraft.posterImageSourceUrl and add useful poster evidence. Only set eventDraft.posterImageUrl when the URL is an app-owned public asset URL that was already uploaded to the configured public asset store; never put WeChat/source-site image URLs in posterImageUrl. Do not classify QR-only images, account avatars, decorative dividers, emoji art, or unrelated article images as posters.",
     },
     {
       role: "user",
@@ -685,7 +687,7 @@ function extractOpenAIOutputText(data) {
   return undefined;
 }
 
-function parseAgentResponse(data) {
+function parseAgentResponse(data, options = {}) {
   data = normalizeAgentResponseEnvelope(data);
   if (!data || typeof data !== "object") {
     return invalidAgentResponse("Agent response was not an object.");
@@ -718,6 +720,7 @@ function parseAgentResponse(data) {
     const eventDraft = normalizeEventDraft(
       data.eventDraft,
       data.missingFields,
+      options,
     );
     if (!eventDraft) {
       return invalidAgentResponse("Agent response missed valid event draft.");
@@ -947,7 +950,7 @@ function normalizeEvidenceAssets(inputs) {
     .filter(Boolean);
 }
 
-function normalizeEventDraft(input, missingFields) {
+function normalizeEventDraft(input, missingFields, options = {}) {
   if (!input || typeof input !== "object") return undefined;
   if (
     !isUrl(input.articleUrl) ||
@@ -970,6 +973,17 @@ function normalizeEventDraft(input, missingFields) {
   if (normalizedMissingFields.length > 0) {
     signals.add("missing_required_public_field");
   }
+  const posterImageUrl = normalizePublicPosterImageUrl(
+    input.posterImageUrl,
+    options.publicAssetUrlPrefixes,
+  );
+  const posterImageSourceUrl =
+    isUrl(input.posterImageSourceUrl)
+      ? input.posterImageSourceUrl
+      : isUrl(input.posterImageUrl) && !posterImageUrl
+        ? input.posterImageUrl
+        : undefined;
+
   return removeUndefined({
     articleUrl: input.articleUrl,
     sourceId: nonEmpty(input.sourceId),
@@ -994,13 +1008,9 @@ function normalizeEventDraft(input, missingFields) {
       ? input.registrationUrl
       : undefined,
     scheduleText: nonEmpty(input.scheduleText),
-    posterImageUrl: isUrl(input.posterImageUrl)
-      ? input.posterImageUrl
-      : undefined,
+    posterImageUrl,
     posterImageAlt: nonEmpty(input.posterImageAlt),
-    posterImageSourceUrl: isUrl(input.posterImageSourceUrl)
-      ? input.posterImageSourceUrl
-      : undefined,
+    posterImageSourceUrl,
     summary: nonEmpty(input.summary),
     entryNotes: nonEmpty(input.entryNotes),
     signals: [...signals],
@@ -1010,6 +1020,28 @@ function normalizeEventDraft(input, missingFields) {
     fieldEvidence: normalizeFieldEvidence(input.fieldEvidence),
     confidence: input.confidence,
   });
+}
+
+function normalizePublicPosterImageUrl(value, publicAssetUrlPrefixes = []) {
+  if (!isUrl(value)) return undefined;
+  if (isTrustedPublicAssetUrl(value, publicAssetUrlPrefixes)) return value;
+  return undefined;
+}
+
+function isTrustedPublicAssetUrl(value, publicAssetUrlPrefixes = []) {
+  const normalizedPrefixes = publicAssetUrlPrefixes
+    .map((prefix) => normalizeBaseUrl(prefix))
+    .filter(Boolean);
+  if (normalizedPrefixes.some((prefix) => value.startsWith(`${prefix}/`))) {
+    return true;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.hostname.endsWith(".public.blob.vercel-storage.com");
+  } catch {
+    return false;
+  }
 }
 
 function buildBrowserSmokePayloads({
@@ -1763,6 +1795,7 @@ function readAgentConfig(env) {
     browserRunner,
     eventCandidateLookupEnabled: env.AGENT_EVENT_CANDIDATE_LOOKUP === "true",
     eventResolutionEnabled: env.AGENT_EVENT_RESOLUTION_ENABLED === "true",
+    publicAssetUrlPrefixes: parseCsv(env.PUBLIC_ASSET_URL_PREFIXES),
     sandboxSetupStartedAt: parseTimestampMs(env.SANDBOX_SETUP_STARTED_AT),
     sandboxBrowserReadyAt: parseTimestampMs(env.SANDBOX_BROWSER_READY_AT),
     agentProvider,
@@ -1821,6 +1854,13 @@ function envelope({ collectorId, runId, observedAt, payload }) {
 
 function normalizeBaseUrl(value) {
   return value?.trim().replace(/\/+$/, "") || undefined;
+}
+
+function parseCsv(value) {
+  return String(value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function normalizeFailureReason(reason) {

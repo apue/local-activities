@@ -147,47 +147,47 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
   ) {
     const payload = envelope.payload;
     const sourceRunId = await this.findSourceRunId(envelope);
-    const row = await this.writeOne<{ id: number }>(
-      this.client
-        .from("event_drafts")
-        .upsert(
-          {
-            draft_id: createStableCollectorObjectId("draft", [
-              payload.articleUrl,
-              payload.extractionAttemptId,
-            ]),
-            source_id: parseOptionalNumericId(payload.sourceId),
-            source_run_id: sourceRunId,
-            article_url: payload.articleUrl,
-            extraction_attempt_id: payload.extractionAttemptId,
-            capture_mode: payload.captureMode,
-            title: payload.title ?? null,
-            original_title: payload.originalTitle ?? null,
-            organizer: payload.organizer ?? null,
-            starts_at: payload.startsAt ?? null,
-            ends_at: payload.endsAt ?? null,
-            timezone: payload.timezone,
-            venue_name: payload.venueName ?? null,
-            venue_address: payload.venueAddress ?? null,
-            city: payload.city,
-            reservation_status: payload.reservationStatus ?? null,
-            registration_action: payload.registrationAction ?? null,
-            registration_url: payload.registrationUrl ?? null,
-            poster_image_url: payload.posterImageUrl ?? null,
-            poster_image_alt: payload.posterImageAlt ?? null,
-            poster_image_source_url: payload.posterImageSourceUrl ?? null,
-            summary: payload.summary ?? null,
-            entry_notes: payload.entryNotes ?? null,
-            signals: payload.signals,
-            evidence_asset_ids: payload.evidenceAssetIds,
-            field_evidence: payload.fieldEvidence,
-            confidence: payload.confidence,
-            review_state: options?.reviewState ?? computeDraftReviewState(payload),
-          },
-          { onConflict: "article_url,extraction_attempt_id" },
-        )
-        .select("id")
-        .single(),
+    const draftRow = {
+      draft_id: createStableCollectorObjectId("draft", [
+        payload.articleUrl,
+        payload.extractionAttemptId,
+      ]),
+      source_id: parseOptionalNumericId(payload.sourceId),
+      source_run_id: sourceRunId,
+      article_url: payload.articleUrl,
+      extraction_attempt_id: payload.extractionAttemptId,
+      capture_mode: payload.captureMode,
+      title: payload.title ?? null,
+      original_title: payload.originalTitle ?? null,
+      organizer: payload.organizer ?? null,
+      starts_at: payload.startsAt ?? null,
+      ends_at: payload.endsAt ?? null,
+      timezone: payload.timezone,
+      venue_name: payload.venueName ?? null,
+      venue_address: payload.venueAddress ?? null,
+      city: payload.city,
+      reservation_status: payload.reservationStatus ?? null,
+      registration_action: payload.registrationAction ?? null,
+      registration_url: payload.registrationUrl ?? null,
+      poster_image_url: payload.posterImageUrl ?? null,
+      poster_image_alt: payload.posterImageAlt ?? null,
+      poster_image_source_url: payload.posterImageSourceUrl ?? null,
+      summary: payload.summary ?? null,
+      entry_notes: payload.entryNotes ?? null,
+      signals: payload.signals,
+      evidence_asset_ids: payload.evidenceAssetIds,
+      field_evidence: payload.fieldEvidence,
+      confidence: payload.confidence,
+      review_state: options?.reviewState ?? computeDraftReviewState(payload),
+    };
+    const row = await this.writeOneWithOptionalPosterFallback<{ id: number }>(
+      draftRow,
+      (rowPayload) =>
+        this.client
+          .from("event_drafts")
+          .upsert(rowPayload, { onConflict: "article_url,extraction_attempt_id" })
+          .select("id")
+          .single(),
     );
 
     return { id: String(row.id) };
@@ -202,36 +202,36 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
       payload.articleUrl,
       payload.extractionAttemptId,
     ]);
-    const row = await this.writeOne<{ event_id: string }>(
+    const eventRow = {
+      event_id: eventId,
+      title: payload.title,
+      organizer: payload.organizer ?? null,
+      starts_at: payload.startsAt,
+      ends_at: payload.endsAt ?? null,
+      timezone: payload.timezone,
+      city: payload.city,
+      venue_name: payload.venueName ?? null,
+      venue_address: payload.venueAddress ?? null,
+      reservation_status: payload.reservationStatus ?? "unknown",
+      registration_action: payload.registrationAction ?? null,
+      registration_url: payload.registrationUrl ?? null,
+      source_url: payload.articleUrl,
+      poster_image_url: payload.posterImageUrl ?? null,
+      poster_image_alt: payload.posterImageAlt ?? null,
+      poster_image_source_url: payload.posterImageSourceUrl ?? null,
+      summary: payload.summary ?? null,
+      entry_notes: payload.entryNotes ?? null,
+      status: "published",
+      review_state: "approved",
+      published_at: input.publishedAt,
+      updated_at: input.publishedAt,
+    };
+    const row = await this.writeOneWithOptionalPosterFallback<{
+      event_id: string;
+    }>(eventRow, (rowPayload) =>
       this.client
         .from("canonical_events")
-        .upsert(
-          {
-            event_id: eventId,
-            title: payload.title,
-            organizer: payload.organizer ?? null,
-            starts_at: payload.startsAt,
-            ends_at: payload.endsAt ?? null,
-            timezone: payload.timezone,
-            city: payload.city,
-            venue_name: payload.venueName ?? null,
-            venue_address: payload.venueAddress ?? null,
-            reservation_status: payload.reservationStatus ?? "unknown",
-            registration_action: payload.registrationAction ?? null,
-            registration_url: payload.registrationUrl ?? null,
-            source_url: payload.articleUrl,
-            poster_image_url: payload.posterImageUrl ?? null,
-            poster_image_alt: payload.posterImageAlt ?? null,
-            poster_image_source_url: payload.posterImageSourceUrl ?? null,
-            summary: payload.summary ?? null,
-            entry_notes: payload.entryNotes ?? null,
-            status: "published",
-            review_state: "approved",
-            published_at: input.publishedAt,
-            updated_at: input.publishedAt,
-          },
-          { onConflict: "event_id" },
-        )
+        .upsert(rowPayload, { onConflict: "event_id" })
         .select("event_id")
         .single(),
     );
@@ -290,10 +290,46 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
     if (error || !data) throw new Error("collector_ingest_write_failed");
     return data;
   }
+
+  private async writeOneWithOptionalPosterFallback<T>(
+    payload: Record<string, unknown>,
+    buildRequest: (
+      payload: Record<string, unknown>,
+    ) => PromiseLike<{ data: T | null; error: unknown }>,
+  ) {
+    let { data, error } = await buildRequest(payload);
+    if (error && isMissingOptionalPosterColumnError(error)) {
+      ({ data, error } = await buildRequest(withoutOptionalPosterColumns(payload)));
+    }
+    if (error || !data) throw new Error("collector_ingest_write_failed");
+    return data;
+  }
 }
 
 function parseOptionalNumericId(id: string | undefined) {
   if (!id) return null;
   const parsed = Number(id);
   return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function withoutOptionalPosterColumns(payload: Record<string, unknown>) {
+  const {
+    poster_image_url: _posterImageUrl,
+    poster_image_alt: _posterImageAlt,
+    poster_image_source_url: _posterImageSourceUrl,
+    ...rest
+  } = payload;
+  return rest;
+}
+
+function isMissingOptionalPosterColumnError(error: unknown) {
+  const message =
+    typeof error === "object" && error && "message" in error
+      ? String(error.message)
+      : String(error ?? "");
+  return (
+    message.includes("poster_image_url") ||
+    message.includes("poster_image_alt") ||
+    message.includes("poster_image_source_url")
+  );
 }
