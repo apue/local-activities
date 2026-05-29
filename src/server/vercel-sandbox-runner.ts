@@ -140,7 +140,7 @@ await runCollectorAgent({
     'if [ -n "${COLLECTOR_GIT_REF:-}" ]; then git fetch --depth 1 origin "$COLLECTOR_GIT_REF" && git checkout FETCH_HEAD; fi',
     "corepack enable",
     "pnpm install --frozen-lockfile",
-    'if [ "$COLLECTOR_BROWSER_RUNNER" = "agent_browser" ]; then npm install -g agent-browser@0.27.0; fi',
+    'if [ "$COLLECTOR_BROWSER_RUNNER" = "agent_browser" ]; then npm install -g agent-browser@0.27.0 && agent-browser install --with-deps; fi',
     'if [ "$COLLECTOR_BROWSER_RUNNER" = "playwright" ]; then pnpm exec playwright install --with-deps chromium; fi',
     'echo "sandbox_browser_preflight runner=$COLLECTOR_BROWSER_RUNNER"',
     'if [ "$COLLECTOR_BROWSER_RUNNER" = "playwright" ]; then node --input-type=module -e "const { chromium } = await import(\'playwright\'); const browser = await chromium.launch({ headless: true }); await browser.close(); console.log(\'playwright_preflight_ok\');"; fi',
