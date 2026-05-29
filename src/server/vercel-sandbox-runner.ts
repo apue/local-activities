@@ -21,6 +21,9 @@ export type SandboxAgentRunnerPayload = {
     openaiModel: string;
     openaiBaseUrl?: string;
   };
+  browser: {
+    runner: "playwright" | "agent_browser";
+  };
   repository: {
     url: string;
     gitRef?: string;
@@ -38,6 +41,12 @@ export type VercelSandboxClient = {
   create(input: {
     name: string;
     tags: Record<string, string>;
+    runtime: "node24";
+    resources: {
+      vcpus: number;
+      memory: number;
+    };
+    timeout: number;
   }): Promise<{
     sandboxId: string;
     runCommand(params: {
@@ -68,6 +77,7 @@ export function buildSandboxAgentRunnerPayload(input: {
   openaiApiKey: string;
   openaiModel: string;
   openaiBaseUrl?: string;
+  browserRunner?: "playwright" | "agent_browser";
   repositoryUrl?: string;
   gitRef?: string;
   collectorId: string;
@@ -99,6 +109,9 @@ export function buildSandboxAgentRunnerPayload(input: {
         ? normalizeBaseUrl(input.openaiBaseUrl)
         : undefined,
     },
+    browser: {
+      runner: input.browserRunner ?? "playwright",
+    },
     repository: {
       url:
         input.repositoryUrl?.trim() ||
@@ -119,13 +132,20 @@ await runCollectorAgent({
 });`;
   const script = [
     "set -euo pipefail",
+    'export SANDBOX_SETUP_STARTED_AT="$(node -e \'console.log(Date.now())\')"',
+    'echo "sandbox_setup_start runner=$COLLECTOR_BROWSER_RUNNER"',
     "rm -rf local-activities",
     'git clone --depth 1 "$COLLECTOR_REPOSITORY_URL" local-activities',
     "cd local-activities",
     'if [ -n "${COLLECTOR_GIT_REF:-}" ]; then git fetch --depth 1 origin "$COLLECTOR_GIT_REF" && git checkout FETCH_HEAD; fi',
     "corepack enable",
     "pnpm install --frozen-lockfile",
-    "pnpm exec playwright install chromium",
+    'if [ "$COLLECTOR_BROWSER_RUNNER" = "agent_browser" ]; then npm install -g agent-browser@0.27.0; fi',
+    'if [ "$COLLECTOR_BROWSER_RUNNER" = "playwright" ]; then pnpm exec playwright install --with-deps chromium; fi',
+    'echo "sandbox_browser_preflight runner=$COLLECTOR_BROWSER_RUNNER"',
+    'if [ "$COLLECTOR_BROWSER_RUNNER" = "playwright" ]; then node --input-type=module -e "const { chromium } = await import(\'playwright\'); const browser = await chromium.launch({ headless: true }); await browser.close(); console.log(\'playwright_preflight_ok\');"; fi',
+    'if [ "$COLLECTOR_BROWSER_RUNNER" = "agent_browser" ]; then agent-browser --version && agent-browser --session sandbox-preflight batch --bail "open about:blank" "get title" --json; fi',
+    'export SANDBOX_BROWSER_READY_AT="$(node -e \'console.log(Date.now())\')"',
     `node --input-type=module -e ${shellQuote(code)}`,
   ].join("\n");
 
@@ -144,6 +164,7 @@ await runCollectorAgent({
       COLLECTOR_JOB_ID: payload.job.jobId,
       COLLECTOR_SEED_URL: payload.job.seedUrl,
       COLLECTOR_RUN_ID: payload.ingest.runId,
+      COLLECTOR_BROWSER_RUNNER: payload.browser.runner,
       AGENT_PROVIDER: payload.provider.name,
       OPENAI_API_KEY: payload.provider.openaiApiKey,
       OPENAI_MODEL: payload.provider.openaiModel,
@@ -167,6 +188,12 @@ export async function runVercelSandboxAgentJob(input: {
       collectorJobId: input.job.jobId,
       runner: "vercel_sandbox",
     },
+    runtime: "node24",
+    resources: {
+      vcpus: 2,
+      memory: 4096,
+    },
+    timeout: 1_200_000,
   });
 
   await input.sandboxJobStore.updateSandboxStarted({

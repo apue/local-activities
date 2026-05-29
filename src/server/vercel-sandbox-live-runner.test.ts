@@ -59,6 +59,7 @@ describe("vercel sandbox live runner", () => {
         AGENT_PROVIDER: "openai",
         OPENAI_API_KEY: "openai-secret",
         OPENAI_MODEL: "gpt-5-mini",
+        COLLECTOR_BROWSER_RUNNER: "agent_browser",
         VERCEL_GIT_COMMIT_SHA: "abc123",
         VERCEL_GIT_REPO_OWNER: "apue",
         VERCEL_GIT_REPO_SLUG: "local-activities",
@@ -79,6 +80,8 @@ describe("vercel sandbox live runner", () => {
     );
     expect(JSON.stringify(run)).toContain("https://github.com/apue/local-activities.git");
     expect(JSON.stringify(run)).toContain("abc123");
+    expect(JSON.stringify(run)).toContain("COLLECTOR_BROWSER_RUNNER");
+    expect(JSON.stringify(run)).toContain("agent_browser");
     expect(JSON.stringify(run)).not.toContain("long-lived-collector-secret");
     expect(JSON.stringify(run)).not.toContain("admin-secret");
     expect(JSON.stringify(run)).not.toContain("AGENT_API_BASE_URL");

@@ -17,6 +17,7 @@ type SandboxRunnerEnv = {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_BASE_URL?: string;
+  COLLECTOR_BROWSER_RUNNER?: string;
   VERCEL_GIT_COMMIT_SHA?: string;
   VERCEL_GIT_REPO_OWNER?: string;
   VERCEL_GIT_REPO_SLUG?: string;
@@ -64,6 +65,7 @@ export function createVercelSandboxJobStarter(input: {
         openaiApiKey: config.value.openaiApiKey,
         openaiModel: config.value.openaiModel,
         openaiBaseUrl: config.value.openaiBaseUrl,
+        browserRunner: config.value.browserRunner,
         repositoryUrl: config.value.repositoryUrl,
         gitRef: config.value.gitRef,
         collectorId,
@@ -123,6 +125,7 @@ function readSandboxRunnerConfig(env: SandboxRunnerEnv):
         openaiApiKey: string;
         openaiModel: string;
         openaiBaseUrl?: string;
+        browserRunner: "playwright" | "agent_browser";
         repositoryUrl: string;
         gitRef?: string;
       };
@@ -159,10 +162,16 @@ function readSandboxRunnerConfig(env: SandboxRunnerEnv):
       openaiApiKey,
       openaiModel,
       openaiBaseUrl: env.OPENAI_BASE_URL?.trim() || undefined,
+      browserRunner: readBrowserRunner(env.COLLECTOR_BROWSER_RUNNER),
       repositoryUrl: buildRepositoryUrl(env),
       gitRef: env.VERCEL_GIT_COMMIT_SHA?.trim() || undefined,
     },
   };
+}
+
+function readBrowserRunner(value: string | undefined) {
+  const runner = value?.trim();
+  return runner === "agent_browser" ? "agent_browser" : "playwright";
 }
 
 function buildRepositoryUrl(env: SandboxRunnerEnv) {

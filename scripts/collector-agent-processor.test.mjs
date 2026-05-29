@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { runCollectorAgent } from "./collector-agent-processor.mjs";
+import {
+  observePageForBenchmark,
+  runCollectorAgent,
+} from "./collector-agent-processor.mjs";
 
 describe("collector agent processor", () => {
   it("observes the page, calls OpenAI, and uploads validated normalized payloads", async () => {
@@ -65,6 +68,14 @@ describe("collector agent processor", () => {
     expect(calls[5].body.payload).toMatchObject({
       scheduleText: "6月6日 14:00-16:00",
     });
+    expect(calls[2].body.payload.diagnostics).toEqual(
+      expect.arrayContaining([
+        { key: "browser_runner", value: "playwright" },
+        { key: "timing_total_elapsed_ms", value: expect.any(String) },
+        { key: "timing_page_observe_elapsed_ms", value: expect.any(String) },
+        { key: "timing_agent_request_elapsed_ms", value: expect.any(String) },
+      ]),
+    );
     expect(JSON.stringify(calls.map((call) => call.body))).not.toContain(
       "openai-secret",
     );
@@ -86,6 +97,7 @@ describe("collector agent processor", () => {
         COLLECTOR_API_KEY: "collector-secret",
         COLLECTOR_ID: "sandbox-job-1",
         COLLECTOR_BROWSER_SMOKE_ONLY: "true",
+        COLLECTOR_BROWSER_RUNNER: "agent_browser",
       },
       seedUrl: "https://mp.weixin.qq.com/s/browser-smoke",
       runId: "browser-smoke-run",
@@ -113,6 +125,9 @@ describe("collector agent processor", () => {
       draftCount: 0,
       failureCount: 0,
     });
+    expect(calls[1].body.payload.diagnostics).toEqual(
+      expect.arrayContaining([{ key: "browser_runner", value: "agent_browser" }]),
+    );
   });
 
   it("retries invalid OpenAI responses before uploading a valid response", async () => {
@@ -214,6 +229,39 @@ describe("collector agent processor", () => {
       reason: "captcha_required",
       retryable: false,
     });
+    expect(calls[3].body.payload.diagnostics).toEqual(
+      expect.arrayContaining([
+        { key: "browser_runner", value: "playwright" },
+      ]),
+    );
+  });
+
+  it("measures browser observations for benchmark runs without uploading", async () => {
+    const result = await observePageForBenchmark({
+      seedUrl: "https://mp.weixin.qq.com/s/benchmark",
+      runner: "agent_browser",
+      browserObserver: async () =>
+        pageObservation({
+          finalUrl: "https://mp.weixin.qq.com/s/benchmark",
+          visibleText: "Benchmark page text",
+          imageCandidates: [],
+        }),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(result).toMatchObject({
+      runner: "agent_browser",
+      ok: true,
+      finalUrl: "https://mp.weixin.qq.com/s/benchmark",
+      visibleTextLength: "Benchmark page text".length,
+      imageCandidateCount: 0,
+    });
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        { key: "browser_runner", value: "agent_browser" },
+        { key: "benchmark_total_elapsed_ms", value: expect.any(String) },
+      ]),
+    );
   });
 });
 
