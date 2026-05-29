@@ -2,23 +2,17 @@ import { notFound } from "next/navigation";
 
 import { getSupabaseAdminClient } from "./supabase-admin";
 
-type PublicEventsClient = {
-  from(table: "canonical_events"): {
-    select(columns: string): {
-      eq(column: string, value: string): {
-        or(filter: string): {
-          order(
-            column: string,
-            options: { ascending: boolean },
-          ): {
-            limit(
-              count: number,
-            ): PromiseLike<{ data: unknown[] | null; error: unknown }>;
-          };
-        };
-      };
-    };
-  };
+export type PublicEventsClient = {
+  from(table: "canonical_events"): PublicEventsQuery;
+};
+
+type PublicEventsQuery = {
+  select(columns: string): PublicEventsQuery;
+  eq(column: string, value: string): PublicEventsQuery;
+  or(filter: string): PublicEventsQuery;
+  order(column: string, options: { ascending: boolean }): PublicEventsQuery;
+  limit(count: number): PromiseLike<{ data: unknown[] | null; error: unknown }>;
+  maybeSingle?<T>(): PromiseLike<{ data: T | null; error: unknown }>;
 };
 
 export type CanonicalEventRow = {
@@ -35,9 +29,9 @@ export type CanonicalEventRow = {
   registration_action: string | null;
   registration_url: string | null;
   source_url: string;
-  poster_image_url: string | null;
-  poster_image_alt: string | null;
-  poster_image_source_url: string | null;
+  poster_image_url?: string | null;
+  poster_image_alt?: string | null;
+  poster_image_source_url?: string | null;
   summary: string | null;
   schedule_text?: string | null;
   entry_notes: string | null;
@@ -68,7 +62,7 @@ export type PublicEvent = {
   status: "published";
 };
 
-const publicEventColumns = [
+const basePublicEventColumns = [
   "event_id",
   "title",
   "organizer",
@@ -82,13 +76,17 @@ const publicEventColumns = [
   "registration_action",
   "registration_url",
   "source_url",
-  "poster_image_url",
-  "poster_image_alt",
-  "poster_image_source_url",
   "summary",
   "entry_notes",
   "status",
   "published_at",
+].join(",");
+
+const publicEventColumns = [
+  basePublicEventColumns,
+  "poster_image_url",
+  "poster_image_alt",
+  "poster_image_source_url",
 ].join(",");
 
 export async function listPublicUpcomingEvents(now = new Date()) {
@@ -102,13 +100,11 @@ export async function listPublicUpcomingEventsFromClient(
   client: PublicEventsClient,
   now = new Date(),
 ) {
-  const { data, error } = await client
-    .from("canonical_events")
-    .select(publicEventColumns)
-    .eq("status", "published")
-    .or(buildUpcomingEventFilter(now))
-    .order("starts_at", { ascending: true })
-    .limit(100);
+  const first = await queryPublicUpcomingEvents(client, publicEventColumns, now);
+  const { data, error } =
+    first.error && isMissingOptionalPosterColumnError(first.error)
+      ? await queryPublicUpcomingEvents(client, basePublicEventColumns, now)
+      : first;
 
   if (error) return [];
 
@@ -119,19 +115,77 @@ export async function listPublicUpcomingEventsFromClient(
 }
 
 export async function getPublicEvent(eventId: string, now = new Date()) {
-  const { data, error } = await getSupabaseAdminClient()
-    .from("canonical_events")
-    .select(publicEventColumns)
-    .eq("event_id", eventId)
-    .eq("status", "published")
-    .maybeSingle<CanonicalEventRow>();
+  const event = await getPublicEventFromClient(
+    getSupabaseAdminClient() as unknown as PublicEventsClient,
+    eventId,
+    now,
+  );
+
+  if (!event) notFound();
+  return event;
+}
+
+export async function getPublicEventFromClient(
+  client: PublicEventsClient,
+  eventId: string,
+  now = new Date(),
+) {
+  const first = await queryPublicEvent(client, publicEventColumns, eventId);
+  const { data, error } =
+    first.error && isMissingOptionalPosterColumnError(first.error)
+      ? await queryPublicEvent(client, basePublicEventColumns, eventId)
+      : first;
 
   if (error) throw new Error("public_event_read_failed");
-  if (!data) notFound();
+  if (!data) return null;
 
   const [event] = filterUpcomingPublishedEvents([data], now);
-  if (!event) notFound();
+  if (!event) return null;
   return shapePublicEvent(event);
+}
+
+function queryPublicUpcomingEvents(
+  client: PublicEventsClient,
+  columns: string,
+  now: Date,
+) {
+  return client
+    .from("canonical_events")
+    .select(columns)
+    .eq("status", "published")
+    .or(buildUpcomingEventFilter(now))
+    .order("starts_at", { ascending: true })
+    .limit(100);
+}
+
+function queryPublicEvent(
+  client: PublicEventsClient,
+  columns: string,
+  eventId: string,
+) {
+  const query = client
+    .from("canonical_events")
+    .select(columns)
+    .eq("event_id", eventId)
+    .eq("status", "published");
+
+  if (!query.maybeSingle) {
+    throw new Error("public_event_client_missing_maybe_single");
+  }
+
+  return query.maybeSingle<CanonicalEventRow>();
+}
+
+function isMissingOptionalPosterColumnError(error: unknown) {
+  const message =
+    typeof error === "object" && error && "message" in error
+      ? String(error.message)
+      : String(error ?? "");
+  return (
+    message.includes("poster_image_url") ||
+    message.includes("poster_image_alt") ||
+    message.includes("poster_image_source_url")
+  );
 }
 
 export function filterUpcomingPublishedEvents(

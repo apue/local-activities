@@ -5,9 +5,11 @@ import {
   filterUpcomingPublishedEvents,
   formatReservationStatus,
   formatPublicEventTime,
+  getPublicEventFromClient,
   listPublicUpcomingEventsFromClient,
   shapePublicEvent,
   type CanonicalEventRow,
+  type PublicEventsClient,
 } from "./public-events";
 
 const baseEvent: CanonicalEventRow = {
@@ -142,7 +144,7 @@ describe("public event helpers", () => {
           },
         };
       },
-    };
+    } as unknown as PublicEventsClient;
 
     await expect(
       listPublicUpcomingEventsFromClient(
@@ -183,7 +185,7 @@ describe("public event helpers", () => {
           },
         };
       },
-    };
+    } as unknown as PublicEventsClient;
 
     const events = await listPublicUpcomingEventsFromClient(
       client,
@@ -195,4 +197,145 @@ describe("public event helpers", () => {
     expect(calls[1]?.[1]?.[0]).not.toContain("schedule_text");
     expect(events[0]?.scheduleText).toBeUndefined();
   });
+
+  it("falls back to base public columns before the poster migration is applied", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const client = fallbackListClient(calls);
+
+    const events = await listPublicUpcomingEventsFromClient(
+      client,
+      new Date("2026-06-01T00:00:00.000Z"),
+    );
+
+    expect(calls.filter(([name]) => name === "select")).toEqual([
+      [
+        "select",
+        [
+          expect.stringContaining("poster_image_url"),
+        ],
+      ],
+      [
+        "select",
+        [
+          expect.not.stringContaining("poster_image_url"),
+        ],
+      ],
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.title).toBe("Italian Design Weekend");
+    expect(events[0]?.posterImageUrl).toBeUndefined();
+  });
+
+  it("falls back to base public columns for detail reads before the poster migration is applied", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const client = fallbackSingleClient(calls);
+
+    const event = await getPublicEventFromClient(
+      client,
+      "event-1",
+      new Date("2026-06-01T00:00:00.000Z"),
+    );
+
+    const selectedColumns = calls
+      .filter(([name]) => name === "select")
+      .map(([, args]) => String(args[0]));
+    expect(selectedColumns[0]).toContain("poster_image_url");
+    expect(selectedColumns[1]).not.toContain("poster_image_url");
+    expect(event?.eventId).toBe("event-1");
+    expect(event?.posterImageUrl).toBeUndefined();
+  });
 });
+
+function fallbackListClient(calls: Array<[string, unknown[]]>) {
+  let attempts = 0;
+  const query = {
+    select(...args: unknown[]) {
+      calls.push(["select", args]);
+      attempts += 1;
+      return query;
+    },
+    eq(...args: unknown[]) {
+      calls.push(["eq", args]);
+      return query;
+    },
+    or(...args: unknown[]) {
+      calls.push(["or", args]);
+      return query;
+    },
+    order(...args: unknown[]) {
+      calls.push(["order", args]);
+      return query;
+    },
+    async limit(...args: unknown[]) {
+      calls.push(["limit", args]);
+      if (attempts === 1) {
+        return {
+          data: null,
+          error: {
+            message: "column canonical_events.poster_image_url does not exist",
+          },
+        };
+      }
+      return {
+        data: [
+          {
+            ...baseEvent,
+            poster_image_url: undefined,
+            poster_image_alt: undefined,
+            poster_image_source_url: undefined,
+          },
+        ],
+        error: null,
+      };
+    },
+  };
+
+  return {
+    from(...args: unknown[]) {
+      calls.push(["from", args]);
+      return query;
+    },
+  } as unknown as PublicEventsClient;
+}
+
+function fallbackSingleClient(calls: Array<[string, unknown[]]>) {
+  let attempts = 0;
+  const query = {
+    select(...args: unknown[]) {
+      calls.push(["select", args]);
+      attempts += 1;
+      return query;
+    },
+    eq(...args: unknown[]) {
+      calls.push(["eq", args]);
+      return query;
+    },
+    async maybeSingle(...args: unknown[]) {
+      calls.push(["maybeSingle", args]);
+      if (attempts === 1) {
+        return {
+          data: null,
+          error: {
+            message: "column canonical_events.poster_image_url does not exist",
+          },
+        };
+      }
+      return {
+        data: {
+          ...baseEvent,
+          poster_image_url: undefined,
+          poster_image_alt: undefined,
+          poster_image_source_url: undefined,
+        },
+        error: null,
+      };
+    },
+  };
+
+  return {
+    from(...args: unknown[]) {
+      calls.push(["from", args]);
+      return query;
+    },
+  } as unknown as PublicEventsClient;
+}
