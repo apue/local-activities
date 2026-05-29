@@ -36,6 +36,9 @@ describe("vercel sandbox live runner", () => {
         jobId: string;
         sandboxRunId: string;
         startedAt: string;
+        collectorId: string;
+        localRunId: string;
+        leaseExpiresAt: string;
       }) {
         calls.push({ kind: "updateSandboxStarted", input });
         return {

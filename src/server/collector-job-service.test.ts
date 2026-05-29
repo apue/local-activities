@@ -108,6 +108,9 @@ class MemoryCollectorJobStore implements CollectorJobStore {
     jobId: string;
     sandboxRunId: string;
     startedAt: string;
+    collectorId: string;
+    localRunId: string;
+    leaseExpiresAt: string;
   }) {
     const job = await this.findByJobId(input.jobId);
     if (!job || job.state !== "queued") return null;
@@ -115,7 +118,10 @@ class MemoryCollectorJobStore implements CollectorJobStore {
     job.actualRunner = "vercel_sandbox";
     job.runnerState = "sandbox_running";
     job.sandboxRunId = input.sandboxRunId;
+    job.collectorId = input.collectorId;
+    job.localRunId = input.localRunId;
     job.claimedAt = input.startedAt;
+    job.leaseExpiresAt = input.leaseExpiresAt;
     job.attemptNumber += 1;
     return job;
   }
@@ -436,10 +442,66 @@ describe("collector job service", () => {
       job: {
         jobId: "job-sandbox",
         state: "running",
+        collectorId: "sandbox-job-sandbox",
+        localRunId: "sandbox-job-sandbox-1",
         actualRunner: "vercel_sandbox",
         runnerState: "sandbox_running",
         sandboxRunId: "sb-run-1",
+        leaseExpiresAt: "2026-05-28T08:10:00.000Z",
         attemptNumber: 1,
+      },
+    });
+  });
+
+  it("accepts final reports from a started sandbox job", async () => {
+    const store = new MemoryCollectorJobStore([
+      {
+        id: 1,
+        jobId: "job-sandbox",
+        seedUrl: "https://example.com/sandbox",
+        state: "queued",
+        requestedAt: "2026-05-28T07:00:00.000Z",
+        attemptNumber: 0,
+        preferredRunner: "vercel_sandbox",
+        runnerState: "sandbox_pending",
+        fallbackEligible: false,
+      },
+    ]);
+
+    await startSandboxCollectorJob(
+      "job-sandbox",
+      { sandboxRunId: "sb-run-1" },
+      store,
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+
+    const result = await reportCollectorJob(
+      "job-sandbox",
+      {
+        collectorId: "sandbox-job-sandbox",
+        localRunId: "sandbox-job-sandbox-1",
+        status: "failed",
+        sourceRunId: "run-1",
+        failureIds: ["failure-1"],
+        suggestedDisposition: "failed",
+        message: "Sandbox captured a structured failure.",
+      },
+      store,
+      new Date("2026-05-28T08:01:00.000Z"),
+    );
+
+    expect(result).toMatchObject({
+      kind: "updated",
+      job: {
+        jobId: "job-sandbox",
+        state: "failed",
+        collectorId: "sandbox-job-sandbox",
+        localRunId: "sandbox-job-sandbox-1",
+        failureIds: ["failure-1"],
+        sourceRunId: "run-1",
+        suggestedDisposition: "failed",
+        resultMessage: "Sandbox captured a structured failure.",
+        runnerState: "failed",
       },
     });
   });

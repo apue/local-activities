@@ -11,6 +11,7 @@ export type SandboxAgentRunnerPayload = {
   ingest: {
     baseUrl: string;
     collectorId: string;
+    runId: string;
     token: string;
     tokenExpiresAt: string;
   };
@@ -54,6 +55,9 @@ export type SandboxJobStore = {
     jobId: string;
     sandboxRunId: string;
     startedAt: string;
+    collectorId: string;
+    localRunId: string;
+    leaseExpiresAt: string;
   }): Promise<CollectorJobRecord | null>;
 };
 
@@ -71,17 +75,19 @@ export function buildSandboxAgentRunnerPayload(input: {
   scopedIngestTokenExpiresAt: string;
   forbiddenSecrets?: Record<string, string | undefined>;
 }): SandboxAgentRunnerPayload {
+  const attemptNumber = input.job.attemptNumber + 1;
   return {
     job: {
       jobId: input.job.jobId,
       seedUrl: input.job.seedUrl,
       sourceId: input.job.sourceId,
-      attemptNumber: input.job.attemptNumber + 1,
+      attemptNumber,
       requestedMode: input.job.requestedMode,
     },
     ingest: {
       baseUrl: normalizeBaseUrl(input.appBaseUrl),
       collectorId: input.collectorId,
+      runId: `${input.collectorId}-${attemptNumber}`,
       token: input.scopedIngestToken,
       tokenExpiresAt: input.scopedIngestTokenExpiresAt,
     },
@@ -137,7 +143,7 @@ await runCollectorAgent({
       COLLECTOR_API_KEY: payload.ingest.token,
       COLLECTOR_JOB_ID: payload.job.jobId,
       COLLECTOR_SEED_URL: payload.job.seedUrl,
-      COLLECTOR_RUN_ID: `sandbox-${payload.job.jobId}-${payload.job.attemptNumber}`,
+      COLLECTOR_RUN_ID: payload.ingest.runId,
       AGENT_PROVIDER: payload.provider.name,
       OPENAI_API_KEY: payload.provider.openaiApiKey,
       OPENAI_MODEL: payload.provider.openaiModel,
@@ -167,6 +173,9 @@ export async function runVercelSandboxAgentJob(input: {
     jobId: input.job.jobId,
     sandboxRunId: sandbox.sandboxId,
     startedAt: (input.now ?? new Date()).toISOString(),
+    collectorId: input.payload.ingest.collectorId,
+    localRunId: input.payload.ingest.runId,
+    leaseExpiresAt: input.payload.ingest.tokenExpiresAt,
   });
 
   const command = buildSandboxAgentCommand(input.payload);

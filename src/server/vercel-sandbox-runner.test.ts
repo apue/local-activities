@@ -49,6 +49,7 @@ describe("vercel sandbox runner", () => {
       ingest: {
         baseUrl: "https://local-activities.example",
         collectorId: "sandbox-job-1",
+        runId: "sandbox-job-1-1",
         token: "scoped-ingest-token",
         tokenExpiresAt: "2026-05-28T08:20:00.000Z",
       },
@@ -76,6 +77,7 @@ describe("vercel sandbox runner", () => {
       COLLECTOR_ID: "sandbox-job-1",
       COLLECTOR_API_KEY: "scoped-ingest-token",
       COLLECTOR_JOB_ID: "job-1",
+      COLLECTOR_RUN_ID: "sandbox-job-1-1",
       AGENT_PROVIDER: "openai",
       OPENAI_API_KEY: "openai-secret",
       OPENAI_MODEL: "gpt-5-mini",
@@ -110,6 +112,9 @@ describe("vercel sandbox runner", () => {
       async updateSandboxStarted(input: {
         jobId: string;
         sandboxRunId: string;
+        collectorId: string;
+        localRunId: string;
+        leaseExpiresAt: string;
       }) {
         calls.push({ kind: "updateSandboxStarted", input });
         return {
@@ -145,6 +150,9 @@ describe("vercel sandbox runner", () => {
           jobId: "job-1",
           sandboxRunId: "sb_123",
           startedAt: "2026-05-28T08:00:00.000Z",
+          collectorId: "sandbox-job-1",
+          localRunId: "sandbox-job-1-1",
+          leaseExpiresAt: "2026-05-28T08:20:00.000Z",
         },
       },
       expect.objectContaining({
