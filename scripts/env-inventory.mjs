@@ -35,7 +35,12 @@ export const targets = {
       "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
       "SUPABASE_SECRET_KEY",
     ],
-    optional: ["SUPABASE_SERVICE_ROLE_KEY", "DATABASE_URL"],
+    optional: [
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "DATABASE_URL",
+      "LOCAL_TEST_HTTP_PROXY",
+      "LOCAL_TEST_HTTPS_PROXY",
+    ],
   },
   vercel: {
     description: "Vercel hosted app, admin API, collector API, and public pages",

@@ -46,6 +46,7 @@ Expected checks:
 - unit tests for state transitions
 - integration tests for admin actions
 - browser smoke tests for critical admin flows after UI scaffolding exists
+- read-only deployed admin API smoke via `pnpm smoke:admin-readonly`
 
 ## Backend API
 
@@ -61,6 +62,7 @@ Expected checks:
 - API route tests or service-level integration tests
 - negative tests for missing auth and malformed payloads
 - duplicate upload tests
+- deployed API smoke for public/admin reachability and admin auth shape
 
 ## Collector Runtime
 
