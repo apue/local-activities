@@ -4,10 +4,15 @@ import type { CollectorIngestStore } from "./collector-ingest-service";
 import {
   handleArticleSnapshotIngest,
   handleEventDraftIngest,
+  handleSourceCandidateIngest,
   handleSourceRunIngest,
 } from "./collector-ingest-route-handlers";
 
 class RouteIngestStore implements CollectorIngestStore {
+  async upsertSourceCandidate() {
+    return { id: "source-1" };
+  }
+
   async upsertSourceRun() {
     return { id: "source-run-1" };
   }
@@ -154,6 +159,32 @@ describe("collector ingest route handlers", () => {
       id: "draft-1",
       reviewState: "needs_info",
       autoPublished: false,
+    });
+  });
+
+  it("accepts source candidates before source run uploads", async () => {
+    const response = await handleSourceCandidateIngest(
+      post({
+        ...envelopeBase,
+        payload: {
+          sourceKey: "wechat:italian-cultural-institute-beijing",
+          name: "意大利驻华使馆文化处",
+          seedUrl: "https://mp.weixin.qq.com/s/example",
+          platform: "wechat_official_account",
+          confidence: 0.82,
+          diagnostics: [
+            { key: "source_name_evidence", value: "article author name" },
+          ],
+        },
+      }),
+      new RouteIngestStore(),
+      { COLLECTOR_API_KEY: "collector-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      id: "source-1",
     });
   });
 

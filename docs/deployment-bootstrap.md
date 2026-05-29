@@ -10,7 +10,7 @@ GitHub repository
 -> Vercel Sandbox hosted Agent runner for default jobs
 -> Supabase Postgres
 -> home-machine collector at 192.168.0.16 for fallback and operator-controlled reruns
--> external LLM or agent API used by the sandbox or local collector runtime
+-> OpenAI-compatible provider used by the sandbox or local collector runtime
 ```
 
 The intended reader is a future coding agent implementing deployment scripts, environment validation, local collector startup, or end-to-end smoke tests. Treat this as an execution spec. It defines the required operating shape, secret boundaries, commands that implementation should support, and acceptance criteria.
@@ -21,7 +21,7 @@ The intended reader is a future coding agent implementing deployment scripts, en
 - Required Vercel environment variables can be added or checked with Vercel CLI.
 - New admin-created jobs default to the hosted `vercel_sandbox` runner.
 - A second machine, initially `192.168.0.16`, can clone the same repository, configure local collector secrets, and run the collector as fallback without direct Supabase access.
-- The local collector can poll Vercel, claim local-eligible or fallback jobs, call a local/external LLM or agent API, upload normalized results, and surface reviewable state in the admin portal.
+- The local collector can poll Vercel, claim local-eligible or fallback jobs, call an OpenAI-compatible provider, upload normalized results, and surface reviewable state in the admin portal.
 - The backend remains the authority for validation, deduplication, review state, and publication.
 
 ## Non-Goals
@@ -101,11 +101,12 @@ admin tokens, Vercel management tokens, or the long-lived home-machine
 `sandbox_runtime_timeout`, the backend records the structured reason and makes
 the job eligible for the local collector fallback.
 
-### External LLM Or Agent API
+### Sandbox Agent Provider
 
-The LLM or agent API is the extraction dependency for classification,
-OCR/vision interpretation, and structured extraction. It may be called by the
-hosted sandbox runner or by the local fallback collector.
+The repo-local agent runs inside Vercel Sandbox for the hosted path. It opens
+pages with a browser first, then calls the configured OpenAI-compatible provider
+for classification and structured extraction. The provider is not a custom
+`/extract` service.
 
 Rules:
 
@@ -113,7 +114,8 @@ Rules:
 - Vercel APIs must not depend on provider-specific response shapes.
 - Provider API keys can live in Vercel only for the bounded sandbox runner and
   must remain server-side.
-- The agent API must not receive `COLLECTOR_API_KEY`, Supabase secrets, Vercel tokens, or admin tokens.
+- The provider API must not receive `COLLECTOR_API_KEY`, Supabase secrets,
+  Vercel tokens, or admin tokens.
 
 ## Prerequisites
 
@@ -124,7 +126,7 @@ Both the developer machine and collector machine should support:
 - Git
 - Vercel CLI for the machine that manages Vercel project configuration
 - Supabase CLI for schema and local database work
-- Access to the operator-owned Agent API used for page capture and extraction
+- Access to the OpenAI-compatible provider used for extraction
 
 The Vercel project should be linked to the GitHub repository so PRs create preview deployments and `main` creates production deployments.
 
@@ -207,9 +209,10 @@ LOCAL_COLLECTOR_PROCESSOR=agent
 COLLECTOR_CAPABILITIES=agent_api
 LOCAL_COLLECTOR_CONSOLE_TOKEN=optional-local-console-token
 
-AGENT_API_BASE_URL=https://your-agent-api.example/v1
-AGENT_API_KEY=collector-side-agent-secret
-AGENT_MODEL=optional-agent-model
+AGENT_PROVIDER=openai
+OPENAI_API_KEY=collector-side-openai-secret
+OPENAI_MODEL=provider-model-name
+OPENAI_BASE_URL=https://api.openai.com/v1
 AGENT_TIMEOUT_SECONDS=120
 AGENT_MAX_ATTEMPTS=3
 ```
@@ -241,8 +244,9 @@ vercel env add ADMIN_ACCESS_TOKEN production
 vercel env add COLLECTOR_API_KEY production
 vercel env add COLLECTOR_SCOPED_TOKEN_SECRET production
 vercel env add INTERNAL_API_SECRET production
-vercel env add AGENT_API_BASE_URL production
-vercel env add AGENT_API_KEY production
+vercel env add AGENT_PROVIDER production
+vercel env add OPENAI_API_KEY production
+vercel env add OPENAI_MODEL production
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY production
 vercel env add SUPABASE_SECRET_KEY production
@@ -253,7 +257,6 @@ vercel env add OBSERVABILITY_PROVIDER production
 vercel env add VERCEL_WEB_ANALYTICS_ENABLED production
 vercel env add VERCEL_SPEED_INSIGHTS_ENABLED production
 vercel env add VERCEL_SANDBOX_ENABLED production
-vercel env add VERCEL_SANDBOX_API_KEY production
 ```
 
 Add preview variables the same way:
@@ -263,8 +266,9 @@ vercel env add ADMIN_ACCESS_TOKEN preview
 vercel env add COLLECTOR_API_KEY preview
 vercel env add COLLECTOR_SCOPED_TOKEN_SECRET preview
 vercel env add INTERNAL_API_SECRET preview
-vercel env add AGENT_API_BASE_URL preview
-vercel env add AGENT_API_KEY preview
+vercel env add AGENT_PROVIDER preview
+vercel env add OPENAI_API_KEY preview
+vercel env add OPENAI_MODEL preview
 vercel env add NEXT_PUBLIC_SUPABASE_URL preview
 vercel env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY preview
 vercel env add SUPABASE_SECRET_KEY preview
@@ -275,7 +279,6 @@ vercel env add OBSERVABILITY_PROVIDER preview
 vercel env add VERCEL_WEB_ANALYTICS_ENABLED preview
 vercel env add VERCEL_SPEED_INSIGHTS_ENABLED preview
 vercel env add VERCEL_SANDBOX_ENABLED preview
-vercel env add VERCEL_SANDBOX_API_KEY preview
 ```
 
 After variables are set, local development can pull a local file:
@@ -322,8 +325,9 @@ values, especially:
 - `COLLECTOR_API_KEY`
 - `COLLECTOR_ID`
 - `LOCAL_COLLECTOR_PROCESSOR`
-- `AGENT_API_BASE_URL`
-- `AGENT_API_KEY`
+- `AGENT_PROVIDER`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
 - `AGENT_MAX_ATTEMPTS`
 
 Current collector commands:
@@ -338,8 +342,9 @@ The current implementation starts one long-running local service that includes
 the local operator console, JSON-backed local queue, Vercel job polling, and a
 one-at-a-time worker. `LOCAL_COLLECTOR_PROCESSOR=fixture` keeps deterministic
 smoke behavior, while `LOCAL_COLLECTOR_PROCESSOR=agent` enables the real
-collector path. The collector sends seed URL and run context to the configured
-Agent API; the Agent owns browser automation, OCR, vision, and page reasoning.
+collector path. The collector opens the seed URL with the repo-local browser
+agent, then sends page observation and run context to the configured provider
+for structured extraction.
 
 The local console should default to localhost. If exposed on the LAN for convenience, it should require `LOCAL_COLLECTOR_CONSOLE_TOKEN`.
 
@@ -356,8 +361,8 @@ Polling is enabled by default when the collector runtime starts. Use
 is controlled by `COLLECTOR_POLL_INTERVAL_SECONDS`,
 `COLLECTOR_ERROR_BACKOFF_SECONDS`, and `COLLECTOR_CAPABILITIES`.
 
-Local fallback Agent mode requires collector-side `AGENT_API_BASE_URL` and
-`AGENT_API_KEY`.
+Local fallback Agent mode requires collector-side `AGENT_PROVIDER`,
+`OPENAI_API_KEY`, and `OPENAI_MODEL`.
 If they are missing, the local run fails as `agent_config_missing` without
 printing provider secrets. The collector validates the Agent response schema
 before upload, retries invalid responses up to `AGENT_MAX_ATTEMPTS`, and uploads
@@ -376,7 +381,8 @@ Neither path uploads provider secrets as collector payload data.
    `preferredRunner=vercel_sandbox`.
 4. Backend or Workflow starts a Vercel Sandbox attempt and marks the job
    `sandbox_running`.
-5. Sandbox calls the Agent API, validates the response through the shared
+5. Sandbox opens the URL with the repo-local browser agent, calls the configured
+   provider with page observation, validates the response through the shared
    collector contract, and uploads normalized payloads to Vercel using a
    short-lived scoped ingest token.
 6. If Sandbox reports a fallback-eligible failure, the job returns to `queued`
@@ -485,7 +491,7 @@ pnpm run collector:console
 
 The current local console command uses Vercel polling and JSON local queue.
 Use `LOCAL_COLLECTOR_PROCESSOR=fixture` for deterministic API connectivity
-checks, or `LOCAL_COLLECTOR_PROCESSOR=agent` for real Agent API extraction:
+checks, or `LOCAL_COLLECTOR_PROCESSOR=agent` for real provider extraction:
 
 ```bash
 pnpm collector:bootstrap-env --env-file .env.local --collector-host 192.168.0.16 --output .env

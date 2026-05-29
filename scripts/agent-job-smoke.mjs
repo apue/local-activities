@@ -506,6 +506,11 @@ Optional polling controls:
   AGENT_JOB_SMOKE_MAX_POLLS
   AGENT_JOB_SMOKE_POLL_INTERVAL_MS
 
+Required on the target Vercel deployment for live extraction:
+  AGENT_PROVIDER=openai
+  OPENAI_API_KEY
+  OPENAI_MODEL
+
 The command does not publish drafts.`);
 }
 

@@ -22,9 +22,10 @@ const outputOrder = [
   "COLLECTOR_POLL_INTERVAL_SECONDS",
   "COLLECTOR_ERROR_BACKOFF_SECONDS",
   "COLLECTOR_CAPABILITIES",
-  "AGENT_API_BASE_URL",
-  "AGENT_API_KEY",
-  "AGENT_MODEL",
+  "AGENT_PROVIDER",
+  "OPENAI_API_KEY",
+  "OPENAI_MODEL",
+  "OPENAI_BASE_URL",
   "AGENT_TIMEOUT_SECONDS",
   "AGENT_MAX_ATTEMPTS",
   "EXA_API_KEY",
@@ -68,12 +69,11 @@ export function buildCollectorBootstrapEnv({
       value(sourceEnv.COLLECTOR_ERROR_BACKOFF_SECONDS) || "60",
     COLLECTOR_CAPABILITIES:
       value(sourceEnv.COLLECTOR_CAPABILITIES) || "agent_api",
-    AGENT_API_BASE_URL:
-      value(sourceEnv.AGENT_API_BASE_URL)
-      || "https://your-agent-api.example/v1",
-    AGENT_API_KEY:
-      value(sourceEnv.AGENT_API_KEY) || "replace-with-agent-api-key",
-    AGENT_MODEL: value(sourceEnv.AGENT_MODEL),
+    AGENT_PROVIDER: value(sourceEnv.AGENT_PROVIDER) || "openai",
+    OPENAI_API_KEY:
+      value(sourceEnv.OPENAI_API_KEY) || "replace-with-openai-api-key",
+    OPENAI_MODEL: value(sourceEnv.OPENAI_MODEL) || "replace-with-openai-model",
+    OPENAI_BASE_URL: value(sourceEnv.OPENAI_BASE_URL),
     AGENT_TIMEOUT_SECONDS: value(sourceEnv.AGENT_TIMEOUT_SECONDS) || "120",
     AGENT_MAX_ATTEMPTS: value(sourceEnv.AGENT_MAX_ATTEMPTS) || "3",
     EXA_API_KEY: value(sourceEnv.EXA_API_KEY),

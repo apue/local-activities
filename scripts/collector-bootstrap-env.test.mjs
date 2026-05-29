@@ -21,8 +21,8 @@ describe("collector bootstrap env generator", () => {
         SUPABASE_SECRET_KEY: "supabase-secret",
         DATABASE_URL: "postgres://secret",
         VERCEL_TOKEN: "vercel-secret",
-        AGENT_API_BASE_URL: "https://agent.example/v1",
-        AGENT_MODEL: "agent-test",
+        OPENAI_BASE_URL: "https://api.openai.com/v1",
+        OPENAI_MODEL: "gpt-5-mini",
       },
       collectorHost: "192.168.0.16",
     });
@@ -34,9 +34,10 @@ describe("collector bootstrap env generator", () => {
       COLLECTOR_ID: "home-192-168-0-16",
       LOCAL_COLLECTOR_PROCESSOR: "agent",
       COLLECTOR_CAPABILITIES: "agent_api",
-      AGENT_API_BASE_URL: "https://agent.example/v1",
-      AGENT_API_KEY: "replace-with-agent-api-key",
-      AGENT_MODEL: "agent-test",
+      AGENT_PROVIDER: "openai",
+      OPENAI_BASE_URL: "https://api.openai.com/v1",
+      OPENAI_API_KEY: "replace-with-openai-api-key",
+      OPENAI_MODEL: "gpt-5-mini",
       AGENT_TIMEOUT_SECONDS: "120",
       AGENT_MAX_ATTEMPTS: "3",
     });
@@ -57,9 +58,9 @@ describe("collector bootstrap env generator", () => {
         sourceEnv: {
           APP_BASE_URL: "https://local-activities.vercel.app",
           COLLECTOR_API_KEY: "collector-token",
-          AGENT_API_BASE_URL: "https://agent.example/v1",
-          AGENT_API_KEY: "agent-secret",
-          AGENT_MODEL: "agent-test",
+          OPENAI_BASE_URL: "https://api.openai.com/v1",
+          OPENAI_API_KEY: "openai-secret",
+          OPENAI_MODEL: "gpt-5-mini",
         },
         collectorHost: "192.168.0.16",
       }),
@@ -74,13 +75,13 @@ describe("collector bootstrap env generator", () => {
     expect(evaluateTarget("collector", parsed)).toMatchObject({ ok: true });
   });
 
-  it("copies optional agent runtime settings without requiring a model", () => {
+  it("copies provider runtime settings and defaults missing OpenAI fields", () => {
     const env = buildCollectorBootstrapEnv({
       sourceEnv: {
         NEXT_PUBLIC_APP_URL: "https://local-activities.vercel.app",
         COLLECTOR_API_KEY: "collector-token",
-        AGENT_API_BASE_URL: "https://agent.example/v1",
-        AGENT_API_KEY: "agent-secret",
+        OPENAI_BASE_URL: "https://api.openai.com/v1",
+        OPENAI_API_KEY: "openai-secret",
         AGENT_TIMEOUT_SECONDS: "90",
         AGENT_MAX_ATTEMPTS: "4",
       },
@@ -88,13 +89,17 @@ describe("collector bootstrap env generator", () => {
     });
 
     expect(env).toMatchObject({
-      AGENT_API_BASE_URL: "https://agent.example/v1",
-      AGENT_API_KEY: "agent-secret",
+      AGENT_PROVIDER: "openai",
+      OPENAI_BASE_URL: "https://api.openai.com/v1",
+      OPENAI_API_KEY: "openai-secret",
+      OPENAI_MODEL: "replace-with-openai-model",
       AGENT_TIMEOUT_SECONDS: "90",
       AGENT_MAX_ATTEMPTS: "4",
     });
-    expect(env).not.toHaveProperty("AGENT_MODEL");
-    expect(evaluateTarget("collector", env)).toMatchObject({ ok: true });
+    expect(evaluateTarget("collector", env)).toMatchObject({
+      ok: false,
+      placeholders: ["OPENAI_MODEL"],
+    });
   });
 
   it("falls back to NEXT_PUBLIC_APP_URL when collector base URLs are placeholders", () => {
@@ -118,8 +123,8 @@ describe("collector bootstrap env generator", () => {
         NEXT_PUBLIC_APP_URL: "https://local-activities.vercel.app",
         COLLECTOR_API_KEY: "collector-token",
         LOCAL_COLLECTOR_PROCESSOR: "fixture",
-        AGENT_API_BASE_URL: "https://agent.example/v1",
-        AGENT_API_KEY: "agent-secret",
+        OPENAI_BASE_URL: "https://api.openai.com/v1",
+        OPENAI_API_KEY: "openai-secret",
       },
       collectorHost: "192.168.0.16",
     });
@@ -142,9 +147,9 @@ describe("collector bootstrap env generator", () => {
         {
           NEXT_PUBLIC_APP_URL: "https://local-activities.vercel.app",
           COLLECTOR_API_KEY: "collector-token",
-          AGENT_API_BASE_URL: "https://agent.example/v1",
-          AGENT_API_KEY: "agent-secret",
-          AGENT_MODEL: "agent-test",
+          OPENAI_BASE_URL: "https://api.openai.com/v1",
+          OPENAI_API_KEY: "openai-secret",
+          OPENAI_MODEL: "gpt-5-mini",
         },
       );
 
@@ -172,7 +177,7 @@ describe("collector bootstrap env generator", () => {
           [
             "NEXT_PUBLIC_APP_URL=https://local-activities.vercel.app",
             "COLLECTOR_API_KEY=collector-token",
-            "AGENT_API_KEY=replace-with-agent-api-key",
+            "OPENAI_API_KEY=replace-with-openai-api-key",
             "",
           ].join("\n"),
         ),
@@ -181,14 +186,14 @@ describe("collector bootstrap env generator", () => {
       const code = await runCollectorBootstrapEnvCli(
         ["--env-file", source, "--output", output],
         {
-          AGENT_API_KEY: "agent-secret",
-          AGENT_API_BASE_URL: "https://agent.example/v1",
+          OPENAI_API_KEY: "openai-secret",
+          OPENAI_BASE_URL: "https://api.openai.com/v1",
         },
       );
 
       expect(code).toBe(0);
       expect(parseEnvText(await readFile(output, "utf8"))).toMatchObject({
-        AGENT_API_KEY: "agent-secret",
+        OPENAI_API_KEY: "openai-secret",
       });
     } finally {
       await rm(dir, { recursive: true, force: true });

@@ -18,7 +18,7 @@ LOCAL_TEST_HTTPS_PROXY=http://127.0.0.1:7897
 ```
 
 These variables are only for local smoke scripts. The Next.js app, Vercel
-runtime, collector runtime, and Agent API do not read them.
+runtime, collector runtime, and provider APIs do not read them.
 
 ## Available Cases
 
@@ -63,7 +63,7 @@ generated fixture drafts/events before launch.
 
 ### Real Agent Job Smoke
 
-Use this after Vercel production has real Sandbox and Agent credentials:
+Use this after Vercel production has real Sandbox and OpenAI provider settings:
 
 ```bash
 pnpm smoke:agent-job --env-file .env.local --seed-url "https://mp.weixin.qq.com/s/example"
@@ -71,7 +71,9 @@ pnpm smoke:agent-job --env-file .env.local --seed-url "https://mp.weixin.qq.com/
 
 The command creates a real admin collector job with
 `preferredRunner=vercel_sandbox`, polls admin job state by `jobId`, and verifies
-reported IDs in Supabase. It does not publish drafts.
+reported IDs in Supabase. The Sandbox runner opens the seed URL in a browser,
+passes the page observation to the configured provider, uploads normalized
+collector results, and does not publish drafts.
 
 The command treats these outcomes as explainable smoke results:
 
@@ -94,6 +96,15 @@ Optional polling controls:
 ```bash
 AGENT_JOB_SMOKE_MAX_POLLS=40
 AGENT_JOB_SMOKE_POLL_INTERVAL_MS=15000
+```
+
+Required Vercel provider settings for live extraction:
+
+```bash
+AGENT_PROVIDER=openai
+OPENAI_API_KEY=...
+OPENAI_MODEL=...
+OPENAI_BASE_URL=https://api.openai.com/v1 # optional
 ```
 
 ## Not Yet Covered
