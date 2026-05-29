@@ -71,6 +71,7 @@ export const targets = {
       "AGENT_TIMEOUT_SECONDS",
       "AGENT_MAX_ATTEMPTS",
       "AGENT_EVENT_CANDIDATE_LOOKUP",
+      "AGENT_EVENT_RESOLUTION_ENABLED",
     ],
   },
   collector: {
@@ -107,6 +108,7 @@ export const targets = {
       "AGENT_TIMEOUT_SECONDS",
       "AGENT_MAX_ATTEMPTS",
       "AGENT_EVENT_CANDIDATE_LOOKUP",
+      "AGENT_EVENT_RESOLUTION_ENABLED",
     ],
   },
 };

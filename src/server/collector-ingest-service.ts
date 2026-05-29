@@ -176,7 +176,7 @@ export function computeDraftBackendRouting(
 
 function hasBlockingSignal(payload: EventDraftUpload) {
   return payload.signals.some((signal) =>
-    ["missing_required_public_field"].includes(signal),
+    ["missing_required_public_field", "possible_duplicate"].includes(signal),
   );
 }
 

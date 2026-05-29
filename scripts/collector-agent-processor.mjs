@@ -23,6 +23,13 @@ const dispositions = new Set([
   "not_activity",
   "failed",
 ]);
+const eventResolutionDecisions = new Set([
+  "new_event",
+  "same_event",
+  "update_existing",
+  "cancel_existing",
+  "withdraw_existing",
+]);
 const failureReasons = new Set([
   "fetch_blocked",
   "fetch_timeout",
@@ -1315,6 +1322,26 @@ async function uploadAgentPayloads({
       uploadedIds.eventCandidateLookupError = lookup.error;
     }
     payloads.eventCandidates = lookup.ok ? lookup.candidates : undefined;
+    if (
+      config.eventResolutionEnabled &&
+      payloads.eventCandidates?.length > 0
+    ) {
+      const resolution = await resolveEventWithCandidates({
+        config,
+        fetchImpl,
+        eventDraft: payloads.eventDraft.payload,
+        eventCandidates: payloads.eventCandidates,
+      });
+      if (resolution.ok) {
+        payloads.eventResolutionDecision = resolution.decision;
+        uploadedIds.eventResolutionDecision = resolution.decision.decision;
+        if (resolution.decision.decision !== "new_event") {
+          addDraftSignal(payloads.eventDraft.payload, "possible_duplicate");
+        }
+      } else {
+        uploadedIds.eventResolutionError = resolution.error;
+      }
+    }
   }
 
   if (payloads.eventDraft) {
@@ -1326,6 +1353,30 @@ async function uploadAgentPayloads({
       body: payloads.eventDraft,
     });
     uploadedIds.eventDraftId = eventDraft.id;
+  }
+
+  if (
+    payloads.eventDraft &&
+    payloads.eventResolutionDecision &&
+    payloads.eventResolutionDecision.decision !== "new_event"
+  ) {
+    const resolution = await postEventResolution({
+      config,
+      fetchImpl,
+      eventDraft: payloads.eventDraft.payload,
+      decision: payloads.eventResolutionDecision,
+    });
+    if (resolution.ok) {
+      payloads.eventResolution = resolution.resolution;
+      uploadedIds.eventResolutionId = resolution.resolution.id;
+      uploadedIds.eventResolutionKind = resolution.resolution.kind;
+      if (resolution.resolution.revisionType) {
+        uploadedIds.eventResolutionRevisionType =
+          resolution.resolution.revisionType;
+      }
+    } else {
+      uploadedIds.eventResolutionError = resolution.error;
+    }
   }
 
   if (payloads.collectorFailure) {
@@ -1360,7 +1411,223 @@ async function uploadAgentPayloads({
     ...(payloads.eventCandidates
       ? { eventCandidates: payloads.eventCandidates }
       : {}),
+    ...(payloads.eventResolution
+      ? { eventResolution: payloads.eventResolution }
+      : {}),
   };
+}
+
+async function resolveEventWithCandidates({
+  config,
+  fetchImpl,
+  eventDraft,
+  eventCandidates,
+}) {
+  try {
+    const data = await requestEventResolutionModel({
+      config,
+      fetchImpl,
+      eventDraft,
+      eventCandidates,
+    });
+    const parsed = parseEventResolutionResponse(parseOpenAIJson(data));
+    if (!parsed.ok) return parsed;
+    return {
+      ok: true,
+      decision: parsed.data,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function requestEventResolutionModel({
+  config,
+  fetchImpl,
+  eventDraft,
+  eventCandidates,
+}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  try {
+    const request = buildEventResolutionModelRequest({
+      config,
+      eventDraft,
+      eventCandidates,
+    });
+    const response = await fetchImpl(request.url, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        authorization: `Bearer ${config.openaiApiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(request.body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(`event_resolution_request_failed:${response.status}`);
+    }
+    return data;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("event_resolution_request_failed:timeout");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function buildEventResolutionModelRequest({
+  config,
+  eventDraft,
+  eventCandidates,
+}) {
+  const messages = [
+    {
+      role: "system",
+      content:
+        "Decide whether the extracted Beijing activity draft is a new event or matches an existing candidate. Return only JSON matching the event resolution contract.",
+    },
+    {
+      role: "user",
+      content: JSON.stringify({
+        eventDraft,
+        eventCandidates,
+        decisions: [...eventResolutionDecisions],
+      }),
+    },
+  ];
+
+  if (config.agentApiStyle === "chat_completions") {
+    return {
+      url: `${config.openaiBaseUrl}/chat/completions`,
+      body: removeUndefined({
+        model: config.openaiModel,
+        response_format: { type: "json_object" },
+        messages,
+      }),
+    };
+  }
+
+  return {
+    url: `${config.openaiBaseUrl}/responses`,
+    body: removeUndefined({
+      model: config.openaiModel,
+      text: {
+        format: eventResolutionResponseTextFormat(),
+      },
+      input: messages,
+    }),
+  };
+}
+
+function eventResolutionResponseTextFormat() {
+  return {
+    type: "json_schema",
+    name: "collector_event_resolution",
+    description: "Semantic resolution for one extracted event draft.",
+    strict: false,
+    schema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["decision", "confidence", "rationale"],
+      properties: {
+        decision: {
+          type: "string",
+          enum: [...eventResolutionDecisions],
+        },
+        canonicalEventId: { type: "string" },
+        confidence: { type: "number", minimum: 0, maximum: 1 },
+        rationale: { type: "string" },
+        proposedChanges: {
+          type: "object",
+          additionalProperties: true,
+        },
+        sourceEvidence: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  };
+}
+
+function parseEventResolutionResponse(data) {
+  if (!data || typeof data !== "object") {
+    return { ok: false, error: "event_resolution_invalid_response" };
+  }
+  if (!eventResolutionDecisions.has(data.decision)) {
+    return { ok: false, error: "event_resolution_invalid_decision" };
+  }
+  if (!isNumberInRange(data.confidence, 0, 1) || !nonEmpty(data.rationale)) {
+    return { ok: false, error: "event_resolution_invalid_metadata" };
+  }
+  if (data.decision !== "new_event" && !nonEmpty(data.canonicalEventId)) {
+    return { ok: false, error: "event_resolution_missing_target" };
+  }
+
+  return {
+    ok: true,
+    data: removeUndefined({
+      decision: data.decision,
+      canonicalEventId: nonEmpty(data.canonicalEventId),
+      confidence: data.confidence,
+      rationale: String(data.rationale).slice(0, 2_000),
+      proposedChanges: isPlainObject(data.proposedChanges)
+        ? data.proposedChanges
+        : undefined,
+      sourceEvidence: isPlainObject(data.sourceEvidence)
+        ? data.sourceEvidence
+        : undefined,
+    }),
+  };
+}
+
+async function postEventResolution({ config, fetchImpl, eventDraft, decision }) {
+  try {
+    const data = await postJson({
+      baseUrl: config.baseUrl,
+      path: "/api/collector/event-resolution",
+      headers: config.headers,
+      fetchImpl,
+      body: buildEventResolutionUploadBody({ eventDraft, decision }),
+    });
+    return {
+      ok: true,
+      resolution: data.resolution,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function buildEventResolutionUploadBody({ eventDraft, decision }) {
+  return removeUndefined({
+    decision: decision.decision,
+    eventDraftId: createStableCollectorObjectId("draft", [
+      eventDraft.articleUrl,
+      eventDraft.extractionAttemptId,
+    ]),
+    canonicalEventId: decision.canonicalEventId,
+    confidence: decision.confidence,
+    rationale: decision.rationale,
+    proposedChanges: decision.proposedChanges,
+    sourceEvidence: decision.sourceEvidence,
+  });
+}
+
+function addDraftSignal(eventDraft, signal) {
+  const signals = new Set(eventDraft.signals ?? []);
+  signals.add(signal);
+  eventDraft.signals = [...signals].filter((value) => draftSignals.has(value));
 }
 
 async function lookupEventCandidates({ config, fetchImpl, eventDraft }) {
@@ -1395,6 +1662,14 @@ function buildEventCandidateLookupRequest(eventDraft) {
     sourceUrl: eventDraft.articleUrl,
     limit: 10,
   });
+}
+
+function createStableCollectorObjectId(prefix, parts) {
+  const hash = createHash("sha256")
+    .update(parts.join("\u001f"))
+    .digest("hex")
+    .slice(0, 24);
+  return `${prefix}-${hash}`;
 }
 
 function buildJobReport({ collectorId, runId, uploadedIds }) {
@@ -1480,6 +1755,7 @@ function readAgentConfig(env) {
     browserSmokeOnly,
     browserRunner,
     eventCandidateLookupEnabled: env.AGENT_EVENT_CANDIDATE_LOOKUP === "true",
+    eventResolutionEnabled: env.AGENT_EVENT_RESOLUTION_ENABLED === "true",
     sandboxSetupStartedAt: parseTimestampMs(env.SANDBOX_SETUP_STARTED_AT),
     sandboxBrowserReadyAt: parseTimestampMs(env.SANDBOX_BROWSER_READY_AT),
     agentProvider,
@@ -1589,6 +1865,10 @@ function hashText(value) {
 
 function isNumberInRange(value, min, max) {
   return typeof value === "number" && value >= min && value <= max;
+}
+
+function isPlainObject(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 function positiveInt(value) {
