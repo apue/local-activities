@@ -1427,7 +1427,19 @@ function normalizeBaseUrl(value) {
 }
 
 function normalizeFailureReason(reason) {
-  return failureReasons.has(reason) ? reason : "agent_response_invalid_schema";
+  if (failureReasons.has(reason)) return reason;
+  const normalized = String(reason ?? "").toLowerCase();
+  if (
+    normalized.includes("captcha") ||
+    normalized.includes("verification") ||
+    normalized.includes("verify")
+  ) {
+    return "captcha_required";
+  }
+  if (normalized.includes("block") || normalized.includes("forbidden")) {
+    return "fetch_blocked";
+  }
+  return "agent_response_invalid_schema";
 }
 
 function normalizeFailureStage(stage) {
