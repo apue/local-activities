@@ -87,11 +87,16 @@ describe("vercel sandbox runner", () => {
       COLLECTOR_GIT_REF: "abc123",
     });
     expect(command.command).toBe("bash");
-    expect(command.args.join(" ")).toContain("git clone");
-    expect(command.args.join(" ")).toContain("pnpm install");
-    expect(command.args.join(" ")).toContain("playwright install --with-deps chromium");
-    expect(command.args.join(" ")).toContain("sandbox_browser_preflight");
-    expect(command.args.join(" ")).toContain("SANDBOX_SETUP_STARTED_AT");
+    const script = command.args.join(" ");
+    expect(script).toContain("git clone");
+    expect(script).toContain("pnpm install");
+    expect(script).toContain("playwright install --with-deps chromium");
+    expect(script).toContain("agent-browser install --with-deps");
+    expect(script.indexOf("agent-browser install --with-deps")).toBeLessThan(
+      script.indexOf("sandbox_browser_preflight"),
+    );
+    expect(script).toContain("sandbox_browser_preflight");
+    expect(script).toContain("SANDBOX_SETUP_STARTED_AT");
     expect(JSON.stringify(command)).not.toContain(
       "long-lived-collector-secret",
     );
