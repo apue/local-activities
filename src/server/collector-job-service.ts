@@ -86,6 +86,9 @@ export type CollectorJobStore = {
     jobId: string;
     sandboxRunId: string;
     startedAt: string;
+    collectorId: string;
+    localRunId: string;
+    leaseExpiresAt: string;
   }): Promise<CollectorJobRecord | null>;
   updateSandboxFailure(input: {
     jobId: string;
@@ -280,10 +283,24 @@ export async function startSandboxCollectorJob(
   store: CollectorJobStore,
   now = new Date(),
 ): Promise<MutateCollectorJobResult> {
+  const existing = await store.findByJobId(jobId);
+  if (!existing) {
+    return {
+      kind: "not_found",
+      error: "collector_job_not_found",
+    };
+  }
+
+  const nextAttemptNumber = existing.attemptNumber + 1;
+  const collectorId = `sandbox-${jobId}`;
+  const startedAt = now.toISOString();
   const job = await store.updateSandboxStarted({
     jobId,
     sandboxRunId: input.sandboxRunId,
-    startedAt: now.toISOString(),
+    startedAt,
+    collectorId,
+    localRunId: `${collectorId}-${nextAttemptNumber}`,
+    leaseExpiresAt: addSeconds(now, DEFAULT_LEASE_SECONDS).toISOString(),
   });
 
   if (!job) {

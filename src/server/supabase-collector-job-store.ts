@@ -271,6 +271,9 @@ class SupabaseCollectorJobStore implements CollectorJobStore {
     jobId: string;
     sandboxRunId: string;
     startedAt: string;
+    collectorId: string;
+    localRunId: string;
+    leaseExpiresAt: string;
   }) {
     const { data, error } = await this.client
       .from("collector_jobs")
@@ -291,7 +294,10 @@ class SupabaseCollectorJobStore implements CollectorJobStore {
           actual_runner: "vercel_sandbox",
           runner_state: "sandbox_running",
           sandbox_run_id: input.sandboxRunId,
+          collector_id: input.collectorId,
+          local_run_id: input.localRunId,
           claimed_at: input.startedAt,
+          lease_expires_at: input.leaseExpiresAt,
           attempt_number: data.attempt_number + 1,
           updated_at: input.startedAt,
         })
