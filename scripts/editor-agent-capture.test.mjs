@@ -94,6 +94,7 @@ describe("editor agent capture", () => {
     expect(calls[0].env).toMatchObject({
       COLLECTOR_BROWSER_RUNNER: "agent_browser",
       AGENT_EVENT_CANDIDATE_LOOKUP: "true",
+      AGENT_EVENT_RESOLUTION_ENABLED: "true",
     });
     expect(result).toMatchObject({
       outcome: "event_submitted",
@@ -142,6 +143,42 @@ describe("editor agent capture", () => {
           title: "Existing event",
         },
       ],
+    });
+  });
+
+  it("includes event resolution returned by the processor", async () => {
+    await expect(
+      runEditorCapture({
+        input: "https://mp.weixin.qq.com/s/local",
+        env: {
+          COLLECTOR_BASE_URL: "https://local-activities.example",
+          COLLECTOR_ID: "home-1",
+          COLLECTOR_API_KEY: "collector-secret",
+          AGENT_PROVIDER: "openai",
+          OPENAI_API_KEY: "openai-secret",
+          OPENAI_MODEL: "gpt-5-mini",
+        },
+        runCollectorAgentImpl: async () => ({
+          kind: "uploaded",
+          uploadedIds: {
+            eventDraftId: "draft-1",
+            eventResolutionId: "mention-1",
+            eventResolutionKind: "mention",
+          },
+          eventResolution: {
+            id: "mention-1",
+            kind: "mention",
+          },
+        }),
+      }),
+    ).resolves.toMatchObject({
+      uploadedIds: {
+        eventResolutionId: "mention-1",
+      },
+      eventResolution: {
+        id: "mention-1",
+        kind: "mention",
+      },
     });
   });
 

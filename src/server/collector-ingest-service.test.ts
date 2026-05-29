@@ -227,6 +227,26 @@ describe("collector ingest service", () => {
     ]);
   });
 
+  it("does not auto-publish drafts already resolved as possible duplicates", async () => {
+    const store = new MemoryIngestStore();
+    const envelope = completeDraftEnvelope({
+      confidence: 0.96,
+      signals: ["possible_duplicate"],
+    });
+
+    await expect(
+      ingestEventDraft(envelope, store, {
+        autoPublishEnabled: true,
+        now: new Date("2026-05-28T08:00:00.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      id: "draft-1",
+      reviewState: "needs_review",
+      autoPublished: false,
+    });
+    expect(store.publishedDrafts).toEqual([]);
+  });
+
   it("uses deterministic failure identifiers for idempotency", async () => {
     const store = new MemoryIngestStore();
     const envelope: CollectorEnvelope<CollectorFailure> = {

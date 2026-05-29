@@ -244,6 +244,98 @@ describe("collector agent processor", () => {
     });
   });
 
+  it("submits semantic same-event resolutions without auto-publishing a duplicate draft", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({
+        url,
+        headers: init.headers ?? {},
+        body: init.body ? JSON.parse(init.body) : {},
+      });
+      if (url === "https://api.openai.com/v1/responses") {
+        const modelCallCount = calls.filter((call) =>
+          call.url.endsWith("/responses"),
+        ).length;
+        return jsonResponse(
+          openaiResponse(
+            modelCallCount === 1
+              ? agentSuccessResponse()
+              : eventResolutionResponse(),
+          ),
+        );
+      }
+      if (url === "https://local-activities.example/api/collector/event-candidates") {
+        return jsonResponse({
+          ok: true,
+          candidates: [
+            {
+              eventId: "event-existing",
+              title: "Agent Event",
+              startsAt: "2026-06-06T06:00:00.000Z",
+              timezone: "Asia/Shanghai",
+              city: "Beijing",
+              sourceUrl: "https://mp.weixin.qq.com/s/previous",
+              status: "published",
+            },
+          ],
+        });
+      }
+      if (url === "https://local-activities.example/api/collector/event-resolution") {
+        return jsonResponse({
+          ok: true,
+          resolution: {
+            id: "mention-1",
+            kind: "mention",
+          },
+        });
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorAgent({
+      env: {
+        ...agentEnv(),
+        AGENT_EVENT_CANDIDATE_LOOKUP: "true",
+        AGENT_EVENT_RESOLUTION_ENABLED: "true",
+      },
+      seedUrl: "https://mp.weixin.qq.com/s/agent",
+      runId: "agent-resolution",
+      fetchImpl,
+      browserObserver: async () => pageObservation(),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://api.openai.com/v1/responses",
+      "https://local-activities.example/api/collector/source",
+      "https://local-activities.example/api/collector/source-run",
+      "https://local-activities.example/api/collector/evidence-asset",
+      "https://local-activities.example/api/collector/article-snapshot",
+      "https://local-activities.example/api/collector/event-candidates",
+      "https://api.openai.com/v1/responses",
+      "https://local-activities.example/api/collector/event-draft",
+      "https://local-activities.example/api/collector/event-resolution",
+    ]);
+    expect(calls[6].body.input[1].content).toContain("event-existing");
+    expect(calls[7].body.payload.signals).toContain("possible_duplicate");
+    expect(calls[8].body).toMatchObject({
+      decision: "same_event",
+      eventDraftId: expect.stringMatching(/^draft-[a-f0-9]{24}$/),
+      canonicalEventId: "event-existing",
+      confidence: 0.91,
+      rationale: "Same title and overlapping time.",
+    });
+    expect(result.uploadedIds).toMatchObject({
+      eventDraftId: "id-8",
+      eventResolutionId: "mention-1",
+      eventResolutionKind: "mention",
+    });
+    expect(result.eventResolution).toEqual({
+      id: "mention-1",
+      kind: "mention",
+    });
+  });
+
   it("runs a browser-only smoke path without OpenAI credentials", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {
@@ -580,6 +672,18 @@ function agentSuccessResponse() {
         title: ["asset-poster"],
       },
       confidence: 0.93,
+    },
+  };
+}
+
+function eventResolutionResponse() {
+  return {
+    decision: "same_event",
+    canonicalEventId: "event-existing",
+    confidence: 0.91,
+    rationale: "Same title and overlapping time.",
+    sourceEvidence: {
+      title: ["Agent Event"],
     },
   };
 }
