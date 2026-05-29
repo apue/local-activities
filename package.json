@@ -18,6 +18,7 @@
     "collector:dev": "node scripts/local-collector-console.mjs",
     "collector": "node scripts/local-collector-console.mjs",
     "smoke:e2e-fixture": "node scripts/e2e-fixture-smoke.mjs",
+    "smoke:admin-readonly": "node scripts/admin-readonly-smoke.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

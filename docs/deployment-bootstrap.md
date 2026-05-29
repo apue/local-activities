@@ -497,6 +497,25 @@ pnpm collector:fixture --env-file .env --claim-once --fixture ready-event
 
 ### Slice 5: End-To-End Smoke Test
 
+Before running a write path, use the read-only admin smoke to verify deployment
+reachability, admin auth, Supabase-backed admin list queries, and JSON error
+shape:
+
+```bash
+pnpm smoke:admin-readonly --env-file .env.local
+```
+
+If the browser reaches Vercel but command-line requests time out, configure the
+project-local smoke proxy variables in `.env.local`:
+
+```bash
+LOCAL_TEST_HTTP_PROXY=http://127.0.0.1:7897
+LOCAL_TEST_HTTPS_PROXY=http://127.0.0.1:7897
+```
+
+These variables are not Vercel runtime env vars and should not be required by
+the app itself.
+
 Add a smoke test or checklist command that proves:
 
 - admin can create a collector job

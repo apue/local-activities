@@ -105,6 +105,11 @@ vercel deploy
 vercel logs --deployment <preview-deployment-id> --level error
 ```
 
+For deployed app smoke checks, see [Smoke Tests](smoke-tests.md). If command-line
+requests to Vercel time out while the browser works through a local proxy, set
+`LOCAL_TEST_HTTP_PROXY` and `LOCAL_TEST_HTTPS_PROXY` in `.env.local`; these
+variables are only read by local smoke scripts.
+
 For non-interactive CLI use, set `VERCEL_TOKEN` in `.env.local` or the calling shell. Prefer the environment variable over passing `--token` inline so the token is less likely to appear in logs.
 
 ## GitHub And Vercel Preview Deployments
