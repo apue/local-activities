@@ -110,7 +110,7 @@ export function buildSandboxAgentRunnerPayload(input: {
         : undefined,
     },
     browser: {
-      runner: input.browserRunner ?? "playwright",
+      runner: input.browserRunner ?? "agent_browser",
     },
     repository: {
       url:

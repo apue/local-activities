@@ -1263,9 +1263,9 @@ function readAgentConfig(env) {
   const collectorApiKey = env.COLLECTOR_API_KEY?.trim();
   const browserSmokeOnly = env.COLLECTOR_BROWSER_SMOKE_ONLY === "true";
   const browserRunner =
-    env.COLLECTOR_BROWSER_RUNNER?.trim() === "agent_browser"
-      ? "agent_browser"
-      : "playwright";
+    env.COLLECTOR_BROWSER_RUNNER?.trim() === "playwright"
+      ? "playwright"
+      : "agent_browser";
   const agentProvider = env.AGENT_PROVIDER?.trim();
   const openaiApiKey = env.OPENAI_API_KEY?.trim();
   const openaiModel = env.OPENAI_MODEL?.trim();

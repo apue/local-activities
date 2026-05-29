@@ -171,7 +171,7 @@ function readSandboxRunnerConfig(env: SandboxRunnerEnv):
 
 function readBrowserRunner(value: string | undefined) {
   const runner = value?.trim();
-  return runner === "agent_browser" ? "agent_browser" : "playwright";
+  return runner === "playwright" ? "playwright" : "agent_browser";
 }
 
 function buildRepositoryUrl(env: SandboxRunnerEnv) {
