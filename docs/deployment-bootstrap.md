@@ -543,6 +543,17 @@ matching fixture diagnostics, fixture source URLs, or deterministic fixture
 titles; until then, run fixture smoke tests only against disposable data or
 manually delete generated fixture drafts and canonical events before launch.
 
+After real Sandbox and Agent credentials are configured, run the real Agent job
+smoke against a known source URL:
+
+```bash
+pnpm smoke:agent-job --env-file .env.local --seed-url "https://mp.weixin.qq.com/s/example"
+```
+
+This creates a `vercel_sandbox` job, polls admin job state, verifies reported
+IDs in Supabase, and stops before publish so an operator can review the draft in
+the admin portal.
+
 ### Slice 6: Operational Handoff
 
 Add an operator runbook after implementation exists. It should cover start, stop, logs, token rotation, collector machine replacement, failed-job retry, and Vercel deployment rollback.
