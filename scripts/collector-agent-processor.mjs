@@ -596,7 +596,7 @@ function buildAgentMessages({
     {
       role: "system",
       content:
-        "Extract admin-curated Beijing activity data. Return only JSON matching the collector agent response contract. Preserve multi-day or repeated daily hours in eventDraft.scheduleText when the source describes them.",
+        "Extract admin-curated Beijing activity data. Return only JSON matching the collector agent response contract. Preserve multi-day or repeated daily hours in eventDraft.scheduleText when the source describes them. If an image is an event poster or campaign visual containing the activity title, date, venue, or main promotional artwork, include its public URL in eventDraft.posterImageUrl with useful alt text. Do not classify QR-only images, account avatars, decorative dividers, emoji art, or unrelated article images as posters.",
     },
     {
       role: "user",
@@ -994,6 +994,13 @@ function normalizeEventDraft(input, missingFields) {
       ? input.registrationUrl
       : undefined,
     scheduleText: nonEmpty(input.scheduleText),
+    posterImageUrl: isUrl(input.posterImageUrl)
+      ? input.posterImageUrl
+      : undefined,
+    posterImageAlt: nonEmpty(input.posterImageAlt),
+    posterImageSourceUrl: isUrl(input.posterImageSourceUrl)
+      ? input.posterImageSourceUrl
+      : undefined,
     summary: nonEmpty(input.summary),
     entryNotes: nonEmpty(input.entryNotes),
     signals: [...signals],

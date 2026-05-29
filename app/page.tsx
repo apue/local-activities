@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import styles from "./public-event-ui.module.css";
 import {
+  formatReservationStatus,
   formatPublicEventTime,
   listPublicUpcomingEvents,
 } from "../src/server/public-events";
@@ -28,9 +29,19 @@ export default async function HomePage() {
           {events.map((event) => (
             <Link
               key={event.eventId}
-              className={styles.eventCard}
+              className={`${styles.eventCard} ${
+                event.posterImageUrl ? styles.eventCardWithPoster : ""
+              }`}
               href={`/events/${event.eventId}`}
             >
+              {event.posterImageUrl ? (
+                <div className={styles.posterThumb}>
+                  <img
+                    src={event.posterImageUrl}
+                    alt={event.posterImageAlt ?? `${event.title} poster`}
+                  />
+                </div>
+              ) : null}
               <div className={styles.dateBlock}>
                 {event.scheduleText ?? formatPublicEventTime(event)}
               </div>
@@ -43,9 +54,7 @@ export default async function HomePage() {
                 </div>
               </div>
               <span className={styles.statusPill}>
-                {event.reservationStatus === "required"
-                  ? "Reservation"
-                  : event.reservationStatus}
+                {formatReservationStatus(event.reservationStatus)}
               </span>
             </Link>
           ))}

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildUpcomingEventFilter,
   filterUpcomingPublishedEvents,
+  formatReservationStatus,
   formatPublicEventTime,
   listPublicUpcomingEventsFromClient,
   shapePublicEvent,
@@ -23,6 +24,9 @@ const baseEvent: CanonicalEventRow = {
   registration_action: null,
   registration_url: "https://example.com/register",
   source_url: "https://mp.weixin.qq.com/s/example",
+  poster_image_url: "https://cdn.example.com/posters/event.png",
+  poster_image_alt: "Italian Design Weekend poster",
+  poster_image_source_url: "https://mp.weixin.qq.com/poster.png",
   summary: "A weekend programme about Italian design.",
   schedule_text: "6月6日 14:00-16:00",
   entry_notes: null,
@@ -88,6 +92,9 @@ describe("public event helpers", () => {
       registrationAction: undefined,
       registrationUrl: "https://example.com/register",
       sourceUrl: "https://mp.weixin.qq.com/s/example",
+      posterImageUrl: "https://cdn.example.com/posters/event.png",
+      posterImageAlt: "Italian Design Weekend poster",
+      posterImageSourceUrl: "https://mp.weixin.qq.com/poster.png",
       summary: "A weekend programme about Italian design.",
       scheduleText: "6月6日 14:00-16:00",
       entryNotes: undefined,
@@ -95,6 +102,12 @@ describe("public event helpers", () => {
     });
     expect(Object.keys(shaped)).not.toContain("reviewState");
     expect(Object.keys(shaped)).not.toContain("confidence");
+  });
+
+  it("formats public reservation status without exposing unknown", () => {
+    expect(formatReservationStatus("required")).toBe("需要预约");
+    expect(formatReservationStatus("not_required")).toBe("无需预约");
+    expect(formatReservationStatus("unknown")).toBe("无需预约");
   });
 
   it("formats event time in Asia Shanghai for public display", () => {
@@ -178,6 +191,7 @@ describe("public event helpers", () => {
     );
 
     expect(calls).toContainEqual(["from", ["canonical_events"]]);
+    expect(calls[1]?.[1]?.[0]).toContain("poster_image_url");
     expect(calls[1]?.[1]?.[0]).not.toContain("schedule_text");
     expect(events[0]?.scheduleText).toBeUndefined();
   });

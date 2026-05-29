@@ -207,8 +207,10 @@ Provider plan:
 
 1. Use Vercel-hosted static assets only for committed prototype or seed fixtures.
 2. Use a storage adapter for runtime collector assets.
-3. A temporary adapter may use Vercel Blob if needed.
-4. Future adapters may use S3 or Cloudflare R2/CDN without changing public event rendering contracts.
+3. Use Vercel Blob as the temporary runtime poster storage adapter.
+4. Store public poster URLs on canonical events for fast public reads. Keep
+   evidence assets for audit/review context.
+5. Future adapters may use S3 or Cloudflare R2/CDN without changing public event rendering contracts.
 
 Asset metadata should include:
 
@@ -220,6 +222,10 @@ Asset metadata should include:
 - original source URL when available
 - usage such as `poster`, `registration_qr`, `cover`, or `article_image`
 - owning source post or event draft
+
+Environment:
+
+- `BLOB_READ_WRITE_TOKEN`
 
 ## Vercel
 

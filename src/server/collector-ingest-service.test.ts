@@ -28,6 +28,7 @@ class MemoryIngestStore implements CollectorIngestStore {
   publishedDrafts: Array<{
     title: string;
     scheduleText?: string;
+    posterImageUrl?: string;
     publishedAt: string;
   }> = [];
 
@@ -81,6 +82,7 @@ class MemoryIngestStore implements CollectorIngestStore {
     this.publishedDrafts.push({
       title: input.payload.title ?? "",
       scheduleText: input.payload.scheduleText,
+      posterImageUrl: input.payload.posterImageUrl,
       publishedAt: input.publishedAt,
     });
     return { id: `event-${this.publishedDrafts.length}` };
@@ -195,6 +197,7 @@ describe("collector ingest service", () => {
       {
         title: "Policy Event",
         scheduleText: "5月30日至31日每日10:30-18:00",
+        posterImageUrl: "https://cdn.example.com/posters/policy.png",
         publishedAt: "2026-05-28T08:00:00.000Z",
       },
     ]);
@@ -222,6 +225,7 @@ describe("collector ingest service", () => {
       {
         title: "Policy Event",
         scheduleText: undefined,
+        posterImageUrl: "https://cdn.example.com/posters/policy.png",
         publishedAt: "2026-05-28T08:00:00.000Z",
       },
     ]);
@@ -302,6 +306,9 @@ function completeDraftEnvelope(
       venueName: "Cultural Center Hall",
       city: "Beijing",
       reservationStatus: "required",
+      posterImageUrl: "https://cdn.example.com/posters/policy.png",
+      posterImageAlt: "Policy Event poster",
+      posterImageSourceUrl: "https://example.com/source-poster.png",
       signals: ["ready_for_review"],
       evidenceAssetIds: [],
       fieldEvidence: {},

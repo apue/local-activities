@@ -35,6 +35,9 @@ export type CanonicalEventRow = {
   registration_action: string | null;
   registration_url: string | null;
   source_url: string;
+  poster_image_url: string | null;
+  poster_image_alt: string | null;
+  poster_image_source_url: string | null;
   summary: string | null;
   schedule_text?: string | null;
   entry_notes: string | null;
@@ -56,6 +59,9 @@ export type PublicEvent = {
   registrationAction?: string;
   registrationUrl?: string;
   sourceUrl: string;
+  posterImageUrl?: string;
+  posterImageAlt?: string;
+  posterImageSourceUrl?: string;
   summary?: string;
   scheduleText?: string;
   entryNotes?: string;
@@ -76,6 +82,9 @@ const publicEventColumns = [
   "registration_action",
   "registration_url",
   "source_url",
+  "poster_image_url",
+  "poster_image_alt",
+  "poster_image_source_url",
   "summary",
   "entry_notes",
   "status",
@@ -158,11 +167,20 @@ export function shapePublicEvent(row: CanonicalEventRow): PublicEvent {
     registrationAction: row.registration_action ?? undefined,
     registrationUrl: row.registration_url ?? undefined,
     sourceUrl: row.source_url,
+    posterImageUrl: row.poster_image_url ?? undefined,
+    posterImageAlt: row.poster_image_alt ?? undefined,
+    posterImageSourceUrl: row.poster_image_source_url ?? undefined,
     summary: row.summary ?? undefined,
     scheduleText: row.schedule_text ?? undefined,
     entryNotes: row.entry_notes ?? undefined,
     status: "published",
   };
+}
+
+export function formatReservationStatus(
+  status: PublicEvent["reservationStatus"],
+) {
+  return status === "required" ? "需要预约" : "无需预约";
 }
 
 export function formatPublicEventTime(

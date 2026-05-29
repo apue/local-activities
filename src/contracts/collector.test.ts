@@ -23,6 +23,9 @@ describe("collector contracts", () => {
         timezone: "Asia/Shanghai",
         city: "Beijing",
         reservationStatus: "unknown",
+        posterImageUrl: "https://cdn.example.com/posters/event.png",
+        posterImageAlt: "Italian Design Weekend poster",
+        posterImageSourceUrl: "https://mp.weixin.qq.com/poster.png",
         signals: ["image_dominant", "registration_evidence_required"],
         evidenceAssetIds: ["asset-poster-1", "asset-qr-1"],
         fieldEvidence: {
@@ -34,6 +37,9 @@ describe("collector contracts", () => {
     });
 
     expect(result.payload.title).toBeUndefined();
+    expect(result.payload.posterImageUrl).toBe(
+      "https://cdn.example.com/posters/event.png",
+    );
     expect(result.payload.signals).toContain("registration_evidence_required");
   });
 

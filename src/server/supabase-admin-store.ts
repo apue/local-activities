@@ -57,6 +57,9 @@ type EventDraftRow = {
   registration_action: string | null;
   registration_url: string | null;
   schedule_text?: string | null;
+  poster_image_url?: string | null;
+  poster_image_alt?: string | null;
+  poster_image_source_url?: string | null;
   summary: string | null;
   entry_notes: string | null;
   confidence: number;
@@ -187,6 +190,9 @@ class SupabaseAdminStore implements AdminStore {
           registration_action: input.draft.registrationAction ?? null,
           registration_url: input.draft.registrationUrl ?? null,
           source_url: input.draft.articleUrl,
+          poster_image_url: input.draft.posterImageUrl ?? null,
+          poster_image_alt: input.draft.posterImageAlt ?? null,
+          poster_image_source_url: input.draft.posterImageSourceUrl ?? null,
           summary: input.draft.summary ?? null,
           entry_notes: input.draft.entryNotes ?? null,
           status: "published",
@@ -277,6 +283,9 @@ function toDraftRecord(row: EventDraftRow): AdminEventDraftRecord {
     registrationAction: row.registration_action ?? undefined,
     registrationUrl: row.registration_url ?? undefined,
     scheduleText: row.schedule_text ?? undefined,
+    posterImageUrl: row.poster_image_url ?? undefined,
+    posterImageAlt: row.poster_image_alt ?? undefined,
+    posterImageSourceUrl: row.poster_image_source_url ?? undefined,
     summary: row.summary ?? undefined,
     entryNotes: row.entry_notes ?? undefined,
     confidence: row.confidence,

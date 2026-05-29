@@ -25,6 +25,9 @@ export type AdminEventDraftRecord = {
   registrationAction?: string;
   registrationUrl?: string;
   scheduleText?: string;
+  posterImageUrl?: string;
+  posterImageAlt?: string;
+  posterImageSourceUrl?: string;
   summary?: string;
   entryNotes?: string;
   confidence: number;
