@@ -1303,6 +1303,20 @@ async function uploadAgentPayloads({
     uploadedIds.articleSnapshotId = articleSnapshot.id;
   }
 
+  if (payloads.eventDraft && config.eventCandidateLookupEnabled) {
+    const lookup = await lookupEventCandidates({
+      config,
+      fetchImpl,
+      eventDraft: payloads.eventDraft.payload,
+    });
+    if (lookup.ok) {
+      uploadedIds.eventCandidateCount = lookup.candidates.length;
+    } else {
+      uploadedIds.eventCandidateLookupError = lookup.error;
+    }
+    payloads.eventCandidates = lookup.ok ? lookup.candidates : undefined;
+  }
+
   if (payloads.eventDraft) {
     const eventDraft = await postJson({
       baseUrl: config.baseUrl,
@@ -1343,7 +1357,44 @@ async function uploadAgentPayloads({
     kind: "uploaded",
     runId,
     uploadedIds,
+    ...(payloads.eventCandidates
+      ? { eventCandidates: payloads.eventCandidates }
+      : {}),
   };
+}
+
+async function lookupEventCandidates({ config, fetchImpl, eventDraft }) {
+  try {
+    const data = await postJson({
+      baseUrl: config.baseUrl,
+      path: "/api/collector/event-candidates",
+      headers: config.headers,
+      fetchImpl,
+      body: buildEventCandidateLookupRequest(eventDraft),
+    });
+    return {
+      ok: true,
+      candidates: Array.isArray(data.candidates) ? data.candidates : [],
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function buildEventCandidateLookupRequest(eventDraft) {
+  return removeUndefined({
+    title: eventDraft.title,
+    organizer: eventDraft.organizer,
+    startsAt: eventDraft.startsAt,
+    endsAt: eventDraft.endsAt,
+    venueName: eventDraft.venueName,
+    venueAddress: eventDraft.venueAddress,
+    sourceUrl: eventDraft.articleUrl,
+    limit: 10,
+  });
 }
 
 function buildJobReport({ collectorId, runId, uploadedIds }) {
@@ -1428,6 +1479,7 @@ function readAgentConfig(env) {
     }),
     browserSmokeOnly,
     browserRunner,
+    eventCandidateLookupEnabled: env.AGENT_EVENT_CANDIDATE_LOOKUP === "true",
     sandboxSetupStartedAt: parseTimestampMs(env.SANDBOX_SETUP_STARTED_AT),
     sandboxBrowserReadyAt: parseTimestampMs(env.SANDBOX_BROWSER_READY_AT),
     agentProvider,

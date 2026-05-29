@@ -70,6 +70,7 @@ export const targets = {
       "OPENAI_BASE_URL",
       "AGENT_TIMEOUT_SECONDS",
       "AGENT_MAX_ATTEMPTS",
+      "AGENT_EVENT_CANDIDATE_LOOKUP",
     ],
   },
   collector: {
@@ -105,6 +106,7 @@ export const targets = {
       "EDITOR_AGENT_API_STYLE",
       "AGENT_TIMEOUT_SECONDS",
       "AGENT_MAX_ATTEMPTS",
+      "AGENT_EVENT_CANDIDATE_LOOKUP",
     ],
   },
 };
