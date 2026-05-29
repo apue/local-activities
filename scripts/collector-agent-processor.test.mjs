@@ -90,6 +90,50 @@ describe("collector agent processor", () => {
     );
   });
 
+  it("supports OpenAI-compatible chat completions providers", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({
+        url,
+        headers: init.headers ?? {},
+        body: init.body ? JSON.parse(init.body) : {},
+      });
+      if (url === "https://api.deepseek.example/v1/chat/completions") {
+        return jsonResponse(chatCompletionResponse(agentSuccessResponse()));
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorAgent({
+      env: {
+        ...agentEnv(),
+        OPENAI_BASE_URL: "https://api.deepseek.example/v1",
+        OPENAI_MODEL: "deepseek-reasoner",
+        AGENT_API_STYLE: "chat_completions",
+      },
+      seedUrl: "https://mp.weixin.qq.com/s/chat",
+      runId: "agent-chat",
+      fetchImpl,
+      browserObserver: async () => pageObservation(),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(calls[0]).toMatchObject({
+      url: "https://api.deepseek.example/v1/chat/completions",
+      headers: {
+        authorization: "Bearer openai-secret",
+      },
+      body: {
+        model: "deepseek-reasoner",
+        response_format: { type: "json_object" },
+      },
+    });
+    expect(calls[0].body.messages).toHaveLength(2);
+    expect(calls[0].body.messages[0].role).toBe("system");
+    expect(calls[0].body.messages[1].role).toBe("user");
+    expect(result.uploadedIds.eventDraftId).toBe("id-6");
+  });
+
   it("runs a browser-only smoke path without OpenAI credentials", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {
@@ -433,6 +477,18 @@ function agentSuccessResponse() {
 function openaiResponse(payload) {
   return {
     output_text: JSON.stringify(payload),
+  };
+}
+
+function chatCompletionResponse(payload) {
+  return {
+    choices: [
+      {
+        message: {
+          content: JSON.stringify(payload),
+        },
+      },
+    ],
   };
 }
 

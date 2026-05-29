@@ -502,39 +502,22 @@ async function requestOpenAI({
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
-    const response = await fetchImpl(`${config.openaiBaseUrl}/responses`, {
+    const request = buildAgentModelRequest({
+      config,
+      seedUrl,
+      runId,
+      vercelJobId,
+      observation,
+      attempt,
+    });
+    const response = await fetchImpl(request.url, {
       method: "POST",
       signal: controller.signal,
       headers: {
         authorization: `Bearer ${config.openaiApiKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify(
-        removeUndefined({
-          model: config.openaiModel,
-          text: {
-            format: collectorAgentResponseTextFormat(),
-          },
-          input: [
-            {
-              role: "system",
-              content:
-                "Extract admin-curated Beijing activity data. Return only JSON matching the collector agent response contract. Preserve multi-day or repeated daily hours in eventDraft.scheduleText when the source describes them.",
-            },
-            {
-              role: "user",
-              content: JSON.stringify({
-                seedUrl,
-                runId,
-                collectorId: config.collectorId,
-                vercelJobId,
-                attempt,
-                observation,
-              }),
-            },
-          ],
-        }),
-      ),
+      body: JSON.stringify(request.body),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -553,6 +536,73 @@ async function requestOpenAI({
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function buildAgentModelRequest({
+  config,
+  seedUrl,
+  runId,
+  vercelJobId,
+  observation,
+  attempt,
+}) {
+  const messages = buildAgentMessages({
+    config,
+    seedUrl,
+    runId,
+    vercelJobId,
+    observation,
+    attempt,
+  });
+  if (config.agentApiStyle === "chat_completions") {
+    return {
+      url: `${config.openaiBaseUrl}/chat/completions`,
+      body: removeUndefined({
+        model: config.openaiModel,
+        response_format: { type: "json_object" },
+        messages,
+      }),
+    };
+  }
+
+  return {
+    url: `${config.openaiBaseUrl}/responses`,
+    body: removeUndefined({
+      model: config.openaiModel,
+      text: {
+        format: collectorAgentResponseTextFormat(),
+      },
+      input: messages,
+    }),
+  };
+}
+
+function buildAgentMessages({
+  config,
+  seedUrl,
+  runId,
+  vercelJobId,
+  observation,
+  attempt,
+}) {
+  return [
+    {
+      role: "system",
+      content:
+        "Extract admin-curated Beijing activity data. Return only JSON matching the collector agent response contract. Preserve multi-day or repeated daily hours in eventDraft.scheduleText when the source describes them.",
+    },
+    {
+      role: "user",
+      content: JSON.stringify({
+        seedUrl,
+        runId,
+        collectorId: config.collectorId,
+        vercelJobId,
+        attempt,
+        observation,
+      }),
+    },
+  ];
 }
 
 function collectorAgentResponseTextFormat() {
@@ -610,6 +660,13 @@ function parseOpenAIJson(data) {
 }
 
 function extractOpenAIOutputText(data) {
+  if (Array.isArray(data?.choices)) {
+    for (const choice of data.choices) {
+      if (typeof choice?.message?.content === "string") {
+        return choice.message.content;
+      }
+    }
+  }
   if (!Array.isArray(data?.output)) return undefined;
   for (const item of data.output) {
     if (!Array.isArray(item?.content)) continue;
@@ -1347,6 +1404,10 @@ function readAgentConfig(env) {
   const agentProvider = env.AGENT_PROVIDER?.trim();
   const openaiApiKey = env.OPENAI_API_KEY?.trim();
   const openaiModel = env.OPENAI_MODEL?.trim();
+  const agentApiStyle =
+    env.AGENT_API_STYLE?.trim() === "chat_completions"
+      ? "chat_completions"
+      : "responses";
   if (!baseUrl || !collectorId || !collectorApiKey) {
     throw new Error("missing_collector_config");
   }
@@ -1370,6 +1431,7 @@ function readAgentConfig(env) {
     sandboxSetupStartedAt: parseTimestampMs(env.SANDBOX_SETUP_STARTED_AT),
     sandboxBrowserReadyAt: parseTimestampMs(env.SANDBOX_BROWSER_READY_AT),
     agentProvider,
+    agentApiStyle,
     openaiBaseUrl: normalizeBaseUrl(
       env.OPENAI_BASE_URL || "https://api.openai.com/v1",
     ),
