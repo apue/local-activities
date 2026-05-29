@@ -61,6 +61,8 @@ export function buildEditorCaptureEnv(env = {}) {
     COLLECTOR_ID: clean(env.COLLECTOR_ID) ?? "local-editor",
     COLLECTOR_BROWSER_RUNNER:
       clean(env.COLLECTOR_BROWSER_RUNNER) ?? "agent_browser",
+    AGENT_EVENT_CANDIDATE_LOOKUP:
+      clean(env.AGENT_EVENT_CANDIDATE_LOOKUP) ?? "true",
     AGENT_PROVIDER: clean(env.AGENT_PROVIDER) ?? "openai",
     ...(editorApiBaseUrl ? { OPENAI_BASE_URL: editorApiBaseUrl } : {}),
     ...(editorApiKey ? { OPENAI_API_KEY: editorApiKey } : {}),
@@ -95,6 +97,9 @@ export async function runEditorCapture({
     seedUrl,
     runId,
     uploadedIds,
+    ...(result.eventCandidates
+      ? { eventCandidates: result.eventCandidates }
+      : {}),
   };
 }
 
@@ -195,6 +200,7 @@ function formatSingleCaptureFields(result) {
     "articleSnapshotId",
     "eventDraftId",
     "failureId",
+    "eventCandidateCount",
   ]) {
     if (uploaded[key]) parts.push(`${key}=${uploaded[key]}`);
   }

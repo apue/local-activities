@@ -134,6 +134,116 @@ describe("collector agent processor", () => {
     expect(result.uploadedIds.eventDraftId).toBe("id-6");
   });
 
+  it("looks up event candidates for editor-agent captures before uploading drafts", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({
+        url,
+        headers: init.headers ?? {},
+        body: init.body ? JSON.parse(init.body) : {},
+      });
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(openaiResponse(agentSuccessResponse()));
+      }
+      if (url === "https://local-activities.example/api/collector/event-candidates") {
+        return jsonResponse({
+          ok: true,
+          candidates: [
+            {
+              eventId: "event-1",
+              title: "Agent Event",
+              startsAt: "2026-06-06T06:00:00.000Z",
+              timezone: "Asia/Shanghai",
+              city: "Beijing",
+              sourceUrl: "https://mp.weixin.qq.com/s/previous",
+              status: "published",
+            },
+          ],
+        });
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorAgent({
+      env: {
+        ...agentEnv(),
+        AGENT_EVENT_CANDIDATE_LOOKUP: "true",
+      },
+      seedUrl: "https://mp.weixin.qq.com/s/agent",
+      runId: "agent-run",
+      fetchImpl,
+      browserObserver: async () => pageObservation(),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://api.openai.com/v1/responses",
+      "https://local-activities.example/api/collector/source",
+      "https://local-activities.example/api/collector/source-run",
+      "https://local-activities.example/api/collector/evidence-asset",
+      "https://local-activities.example/api/collector/article-snapshot",
+      "https://local-activities.example/api/collector/event-candidates",
+      "https://local-activities.example/api/collector/event-draft",
+    ]);
+    expect(calls[5].body).toEqual({
+      title: "Agent Event",
+      organizer: "Official Cultural Center",
+      startsAt: "2026-06-06T06:00:00.000Z",
+      sourceUrl: "https://mp.weixin.qq.com/s/agent",
+      limit: 10,
+    });
+    expect(result.eventCandidates).toEqual([
+      {
+        eventId: "event-1",
+        title: "Agent Event",
+        startsAt: "2026-06-06T06:00:00.000Z",
+        timezone: "Asia/Shanghai",
+        city: "Beijing",
+        sourceUrl: "https://mp.weixin.qq.com/s/previous",
+        status: "published",
+      },
+    ]);
+    expect(result.uploadedIds.eventDraftId).toBe("id-7");
+  });
+
+  it("keeps uploading event drafts when candidate lookup fails", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({
+        url,
+        body: init.body ? JSON.parse(init.body) : {},
+      });
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(openaiResponse(agentSuccessResponse()));
+      }
+      if (url === "https://local-activities.example/api/collector/event-candidates") {
+        return jsonResponse({ ok: false, error: "candidate_lookup_down" }, 503);
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorAgent({
+      env: {
+        ...agentEnv(),
+        AGENT_EVENT_CANDIDATE_LOOKUP: "true",
+      },
+      seedUrl: "https://mp.weixin.qq.com/s/agent",
+      runId: "agent-candidate-fail",
+      fetchImpl,
+      browserObserver: async () => pageObservation(),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(calls.map((call) => call.url)).toContain(
+      "https://local-activities.example/api/collector/event-draft",
+    );
+    expect(result.uploadedIds).toMatchObject({
+      eventDraftId: "id-7",
+      eventCandidateLookupError:
+        "upload_failed:/api/collector/event-candidates:503",
+    });
+  });
+
   it("runs a browser-only smoke path without OpenAI credentials", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {
