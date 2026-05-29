@@ -18,7 +18,7 @@ type CanonicalEventCandidateRow = {
   venue_name: string | null;
   venue_address: string | null;
   source_url: string;
-  schedule_text: string | null;
+  schedule_text?: string | null;
   status: "draft" | "published" | "cancelled" | "withdrawn";
   published_at: string | null;
 };
@@ -34,7 +34,6 @@ const candidateColumns = [
   "venue_name",
   "venue_address",
   "source_url",
-  "schedule_text",
   "status",
   "published_at",
 ].join(",");

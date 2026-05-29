@@ -56,7 +56,7 @@ type EventDraftRow = {
   reservation_status: "required" | "not_required" | "unknown" | null;
   registration_action: string | null;
   registration_url: string | null;
-  schedule_text: string | null;
+  schedule_text?: string | null;
   summary: string | null;
   entry_notes: string | null;
   confidence: number;
@@ -187,7 +187,6 @@ class SupabaseAdminStore implements AdminStore {
           registration_action: input.draft.registrationAction ?? null,
           registration_url: input.draft.registrationUrl ?? null,
           source_url: input.draft.articleUrl,
-          schedule_text: input.draft.scheduleText ?? null,
           summary: input.draft.summary ?? null,
           entry_notes: input.draft.entryNotes ?? null,
           status: "published",
