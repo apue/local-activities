@@ -61,14 +61,47 @@ The command covers:
 Fixture smoke writes data. Use disposable environments or manually clean up
 generated fixture drafts/events before launch.
 
+### Real Agent Job Smoke
+
+Use this after Vercel production has real Sandbox and Agent credentials:
+
+```bash
+pnpm smoke:agent-job --env-file .env.local --seed-url "https://mp.weixin.qq.com/s/example"
+```
+
+The command creates a real admin collector job with
+`preferredRunner=vercel_sandbox`, polls admin job state by `jobId`, and verifies
+reported IDs in Supabase. It does not publish drafts.
+
+The command treats these outcomes as explainable smoke results:
+
+- a draft is created and is reviewable, such as `ready_for_review`,
+  `needs_review`, `needs_info`, or `possible_duplicate`
+- the job reports `not_activity`
+- the job uploads a structured collector failure with failure IDs
+- the job completes or partially completes with a terminal state
+
+The command fails when:
+
+- job creation fails or returns non-JSON
+- the job is not visible in admin polling
+- the job remains non-terminal beyond the polling window
+- the job reports IDs that are missing from Supabase
+- the job fails without structured failure details
+
+Optional polling controls:
+
+```bash
+AGENT_JOB_SMOKE_MAX_POLLS=40
+AGENT_JOB_SMOKE_POLL_INTERVAL_MS=15000
+```
+
 ## Not Yet Covered
 
 These cases are still useful but are not automated in the current smoke layer:
 
 - Browser-level admin portal interaction: fill token, click Load state, verify
   rendered success/error message.
-- Vercel Sandbox Agent job smoke using real `AGENT_API_BASE_URL`,
-  `AGENT_API_KEY`, and `VERCEL_SANDBOX_API_KEY`.
 - Local collector fallback after a forced fallback-eligible Sandbox failure.
 - Health endpoint expected-success smoke after all production env vars are
   configured.
