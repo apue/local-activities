@@ -158,9 +158,9 @@ The published list is a sanity surface for public events that are already visibl
 
 The MVP focus is quality control, not historical reporting.
 
-### Add Seed URL
+### Add URL Or Shared Text
 
-The add-seed flow accepts an official WeChat article URL or official webpage URL and an optional operator note. It queues backend validation and collection work. The portal must not assume a pasted URL is a valid source, a valid activity, or safe to publish.
+The add-seed flow accepts a public activity URL or pasted shared text that contains a URL. It queues backend validation and collection work. The portal must not assume pasted text is a valid source, a valid activity, or safe to publish before backend validation succeeds.
 
 Production seed URL collection should create Vercel collector jobs with
 `vercel_sandbox` as the default runner. The home-machine collector claims only

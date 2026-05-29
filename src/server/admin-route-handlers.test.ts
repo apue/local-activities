@@ -154,6 +154,41 @@ describe("admin route handlers", () => {
     });
   });
 
+  it("accepts shared text that contains a seed URL", async () => {
+    const response = await handleAdminCreateCollectorJob(
+      request({
+        seedUrl:
+          "活动分享：准备好感受泰国农业精品 https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg 。",
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      job: {
+        seedUrl: "https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg",
+      },
+    });
+  });
+
+  it("rejects shared text without any URL", async () => {
+    const response = await handleAdminCreateCollectorJob(
+      request({ seedUrl: "只有活动介绍，没有链接" }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+
+    expect(response.status).toBe(400);
+  await expect(response.json()).resolves.toMatchObject({
+    ok: false,
+    error: "invalid_seed_url",
+  });
+});
+
   it("does not start Sandbox for explicitly local collector jobs", async () => {
     const startedJobs: CollectorJobRecord[] = [];
     const response = await handleAdminCreateCollectorJob(

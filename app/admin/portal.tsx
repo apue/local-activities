@@ -8,6 +8,7 @@ import {
   getReviewStateLabel,
   isDraftPublishableForDisplay,
 } from "../../src/client/admin-portal-utils";
+import { extractFirstHttpUrl } from "../../src/shared/seed-url";
 import styles from "./portal.module.css";
 
 type CollectorJob = {
@@ -38,6 +39,7 @@ type EventDraft = {
   venueAddress?: string;
   reservationStatus?: string;
   registrationUrl?: string;
+  scheduleText?: string;
   summary?: string;
   entryNotes?: string;
   confidence: number;
@@ -121,14 +123,19 @@ export function AdminPortal() {
 
   async function createSeedJob(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!seedUrl.trim()) return;
+    const extractedSeedUrl = extractFirstHttpUrl(seedUrl);
+    if (!extractedSeedUrl) {
+      setStatus("error");
+      setMessage("Paste a URL or shared text that contains a URL.");
+      return;
+    }
 
     setStatus("loading");
     setMessage("Creating collector job...");
     try {
       await api("/api/admin/collector-jobs", {
         method: "POST",
-        body: JSON.stringify({ seedUrl }),
+        body: JSON.stringify({ seedUrl: extractedSeedUrl }),
       });
       setSeedUrl("");
       await refresh();
@@ -197,11 +204,11 @@ export function AdminPortal() {
 
         <form className={styles.seedForm} onSubmit={createSeedJob}>
           <label className={styles.field}>
-            <span>Seed URL</span>
+            <span>URL or shared text</span>
             <textarea
               value={seedUrl}
               onChange={(event) => setSeedUrl(event.target.value)}
-              placeholder="https://mp.weixin.qq.com/s/..."
+              placeholder="https://mp.weixin.qq.com/s/... or pasted share text"
               rows={4}
             />
           </label>
@@ -217,7 +224,7 @@ export function AdminPortal() {
         <header className={styles.header}>
           <div>
             <p className={styles.eyebrow}>Solo operator workflow</p>
-            <h1>Review incoming official activity leads</h1>
+            <h1>Review incoming activity leads</h1>
           </div>
           <div className={styles.metrics}>
             <div>
@@ -263,7 +270,9 @@ export function AdminPortal() {
                 >
                   <span>
                     <strong>{draft.title ?? "Untitled draft"}</strong>
-                    <small>{draft.venueName ?? "Venue missing"}</small>
+                    <small>
+                      {draft.venueName ?? draft.venueAddress ?? "Venue missing"}
+                    </small>
                   </span>
                   <em>{getReviewStateLabel(draft.reviewState)}</em>
                 </button>
@@ -301,7 +310,10 @@ export function AdminPortal() {
                 <dl>
                   <div>
                     <dt>Time</dt>
-                    <dd>{formatDateTime(selectedDraft.startsAt)}</dd>
+                    <dd>
+                      {selectedDraft.scheduleText ??
+                        formatDateTime(selectedDraft.startsAt)}
+                    </dd>
                   </div>
                   <div>
                     <dt>Organizer</dt>
@@ -309,7 +321,11 @@ export function AdminPortal() {
                   </div>
                   <div>
                     <dt>Venue</dt>
-                    <dd>{selectedDraft.venueName ?? "Missing"}</dd>
+                    <dd>
+                      {selectedDraft.venueName ??
+                        selectedDraft.venueAddress ??
+                        "Missing"}
+                    </dd>
                   </div>
                   <div>
                     <dt>Reservation</dt>

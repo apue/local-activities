@@ -311,7 +311,7 @@ async function requestOpenAI({
             {
               role: "system",
               content:
-                "Extract Beijing official cultural activity data. Return only JSON matching the collector agent response contract.",
+                "Extract admin-curated Beijing activity data. Return only JSON matching the collector agent response contract. Preserve multi-day or repeated daily hours in eventDraft.scheduleText when the source describes them.",
             },
             {
               role: "user",
@@ -646,6 +646,7 @@ function normalizeEventDraft(input, missingFields) {
     registrationUrl: isUrl(input.registrationUrl)
       ? input.registrationUrl
       : undefined,
+    scheduleText: nonEmpty(input.scheduleText),
     summary: nonEmpty(input.summary),
     entryNotes: nonEmpty(input.entryNotes),
     signals: [...signals],

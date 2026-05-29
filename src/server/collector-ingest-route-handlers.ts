@@ -166,7 +166,7 @@ function readDraftBackendPolicy(env: CollectorEnv) {
     env.BACKEND_AUTO_PUBLISH_CONFIDENCE_THRESHOLD ?? "",
   );
   return {
-    autoPublishEnabled: env.BACKEND_AUTO_PUBLISH_ENABLED === "true",
+    autoPublishEnabled: env.BACKEND_AUTO_PUBLISH_ENABLED !== "false",
     autoPublishConfidenceThreshold: Number.isFinite(threshold)
       ? threshold
       : undefined,

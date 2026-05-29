@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Build a tool that helps users in Beijing discover official cultural activities in time to plan their weekend. The product should reduce missed opportunities caused by fragmented WeChat official-account announcements and other official pages.
+Build a tool that helps users in Beijing discover admin-curated activities in time to plan their weekend. The initial wedge remains embassy, cultural-center, and official international-organization events, but the MVP can publish any operator-reviewed Beijing activity URL that yields the minimum public fields.
 
 ## Target User Behavior
 
@@ -10,7 +10,7 @@ The primary user checks the product on Thursday or Friday to decide what to do o
 
 ## MVP User-Facing Requirements
 
-- Show upcoming official cultural activities, with emphasis on the next 3 to 10 days.
+- Show upcoming admin-curated activities, with emphasis on the next 3 to 10 days.
 - Prioritize weekend planning over historical search.
 - Use a cultural-calendar homepage grouped by time, not a generic news feed.
 - Default public browsing should emphasize actionable upcoming events:
@@ -47,8 +47,9 @@ The primary user checks the product on Thursday or Friday to decide what to do o
 
 Detailed admin portal behavior is defined in [Admin Portal Requirements](admin-portal-requirements.md).
 
-- Add a seed URL from an official WeChat article or official webpage.
+- Add a seed URL or pasted shared text from a public activity page.
 - Parse the seed article into a candidate activity and candidate source.
+- Auto-publish parsed activity drafts when the backend can validate the minimum public fields: title, start time, source URL, and either venue name or venue address.
 - Track source health using a small state model:
   - `checking`
   - `healthy`
@@ -73,7 +74,9 @@ Detailed admin portal behavior is defined in [Admin Portal Requirements](admin-p
 
 ## Collector Requirements
 
-- A local collector checks tracked sources every 4 hours.
+- Vercel Sandbox is the default MVP collector runner for admin-created seed jobs.
+- A local collector remains a fallback for Sandbox quota exhaustion or source pages that fail in Sandbox.
+- Future tracked-source polling should check supported sources at a low cadence, initially every 4 hours.
 - The collector uploads normalized results to the backend instead of writing directly to the database.
 - The backend receives:
   - source run reports
@@ -100,7 +103,7 @@ Detailed admin portal behavior is defined in [Admin Portal Requirements](admin-p
 - Event matching must support no-ID deduplication using title, time, location, organizer, registration URL, and text evidence.
 - Updates and cancellations must create revision proposals or status changes with source evidence.
 - Event drafts should keep field-level provenance sufficient for admin review, but canonical public events should expose only user-facing fields.
-- Secondary mentions in a source article should not automatically become public events. They should become related mentions or low-confidence drafts until review confirms their event boundary.
+- Secondary mentions in a source article should not automatically become public events unless the parser can clearly extract a standalone activity with the minimum public fields.
 - Expired source posts may be retained for source health and matching history, but expired canonical events should be hidden from the default public homepage.
 
 ## Source Page Pattern Examples
@@ -114,8 +117,8 @@ Recent seed-page analysis established the following MVP fixture patterns:
 
 ## Non-Goals For MVP
 
-- Do not build a generic city-events platform.
-- Do not cover all Beijing cultural events.
+- Do not build an open user-submitted city-events platform.
+- Do not promise complete coverage of all Beijing cultural events.
 - Do not make a WeChat mini program first.
 - Do not rely on a formal WeChat API for third-party official-account feeds.
 - Do not guarantee every WeChat source can be continuously tracked.
@@ -124,8 +127,8 @@ Recent seed-page analysis established the following MVP fixture patterns:
 
 ## Success Criteria
 
-- A user can open the mobile web app and quickly understand what official cultural activities are relevant for the coming weekend.
-- An admin can paste one seed URL and get a source plus activity candidate.
-- Healthy sources are checked automatically every 4 hours.
+- A user can open the mobile web app and quickly understand what admin-curated activities are relevant for the coming weekend.
+- An admin can paste one seed URL or shared text and get a published activity when parsing succeeds.
+- Sandbox quota exhaustion can be handled by a local collector fallback without changing the ingestion contract.
 - Failures are visible and actionable in the admin UI.
 - Duplicate or updated events do not create confusing public listings.

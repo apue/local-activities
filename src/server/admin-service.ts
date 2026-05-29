@@ -1,4 +1,5 @@
 import type { CollectorJobRecord } from "./collector-job-service";
+import { extractFirstHttpUrl } from "../shared/seed-url";
 
 export type AdminReviewState =
   | "needs_review"
@@ -23,6 +24,7 @@ export type AdminEventDraftRecord = {
   reservationStatus?: "required" | "not_required" | "unknown";
   registrationAction?: string;
   registrationUrl?: string;
+  scheduleText?: string;
   summary?: string;
   entryNotes?: string;
   confidence: number;
@@ -67,19 +69,13 @@ export async function createAdminCollectorJob(
   store: AdminStore,
   now = new Date(),
 ) {
-  let seedUrl: URL;
-  try {
-    seedUrl = new URL(input.seedUrl);
-  } catch {
-    throw new Error("invalid_seed_url");
-  }
-
-  if (seedUrl.protocol !== "http:" && seedUrl.protocol !== "https:") {
+  const extractedSeedUrl = extractFirstHttpUrl(input.seedUrl);
+  if (!extractedSeedUrl) {
     throw new Error("invalid_seed_url");
   }
 
   return store.createCollectorJob({
-    seedUrl: seedUrl.toString(),
+    seedUrl: extractedSeedUrl,
     requestedAt: now.toISOString(),
     preferredRunner: input.preferredRunner ?? "vercel_sandbox",
   });
@@ -138,9 +134,8 @@ export async function publishAdminEventDraft(
 function isDraftPublishable(draft: AdminEventDraftRecord) {
   return Boolean(
     draft.title &&
-      draft.organizer &&
       draft.startsAt &&
-      draft.venueName &&
-      draft.reservationStatus,
+      draft.articleUrl &&
+      (draft.venueName || draft.venueAddress),
   );
 }

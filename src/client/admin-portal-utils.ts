@@ -3,16 +3,15 @@ export type AdminPortalDraftLike = {
   organizer?: string;
   startsAt?: string;
   venueName?: string;
+  venueAddress?: string;
   reservationStatus?: string;
   reviewState?: string;
 };
 
 export type DraftBlockingReason =
   | "missing_title"
-  | "missing_organizer"
   | "missing_start_time"
-  | "missing_venue"
-  | "missing_reservation_status";
+  | "missing_venue";
 
 export function getDraftBlockingReasons(
   draft: AdminPortalDraftLike,
@@ -20,10 +19,8 @@ export function getDraftBlockingReasons(
   const reasons: DraftBlockingReason[] = [];
 
   if (!draft.title) reasons.push("missing_title");
-  if (!draft.organizer) reasons.push("missing_organizer");
   if (!draft.startsAt) reasons.push("missing_start_time");
-  if (!draft.venueName) reasons.push("missing_venue");
-  if (!draft.reservationStatus) reasons.push("missing_reservation_status");
+  if (!draft.venueName && !draft.venueAddress) reasons.push("missing_venue");
 
   return reasons;
 }

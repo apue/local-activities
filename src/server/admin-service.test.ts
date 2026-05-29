@@ -122,6 +122,21 @@ describe("admin service", () => {
     });
   });
 
+  it("extracts seed URLs from shared text before creating jobs", async () => {
+    const store = new MemoryAdminStore();
+
+    const result = await createAdminCollectorJob(
+      {
+        seedUrl:
+          "复制这段小红书分享文案打开 App 查看 https://xhslink.com/a/abc123 ，周末活动见",
+      },
+      store,
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+
+    expect(result.seedUrl).toBe("https://xhslink.com/a/abc123");
+  });
+
   it("rejects invalid seed URLs", async () => {
     await expect(
       createAdminCollectorJob(
@@ -182,6 +197,29 @@ describe("admin service", () => {
     expect(store.publishedEvents).toEqual([
       { draftId: "draft-1", title: "Italian Design Weekend" },
     ]);
+  });
+
+  it("publishes drafts with only minimum public fields", async () => {
+    const store = new MemoryAdminStore([
+      {
+        ...completeDraft,
+        id: "draft-minimum",
+        organizer: undefined,
+        venueName: undefined,
+        venueAddress: "北京市朝阳区朝阳公园",
+        reservationStatus: undefined,
+      },
+    ]);
+
+    await expect(
+      publishAdminEventDraft(
+        "draft-minimum",
+        store,
+        new Date("2026-05-28T08:00:00.000Z"),
+      ),
+    ).resolves.toMatchObject({
+      status: "published",
+    });
   });
 
   it("rejects publishing drafts that lack public required fields", async () => {

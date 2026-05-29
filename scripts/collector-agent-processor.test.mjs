@@ -62,6 +62,9 @@ describe("collector agent processor", () => {
       eventDraftIds: ["id-6"],
       suggestedDisposition: "ready_for_review",
     });
+    expect(calls[5].body.payload).toMatchObject({
+      scheduleText: "6月6日 14:00-16:00",
+    });
     expect(JSON.stringify(calls.map((call) => call.body))).not.toContain(
       "openai-secret",
     );
@@ -294,6 +297,7 @@ function agentSuccessResponse() {
       city: "Beijing",
       reservationStatus: "required",
       registrationUrl: "https://example.org/register",
+      scheduleText: "6月6日 14:00-16:00",
       summary: "Agent extracted event.",
       signals: ["qr_registration"],
       evidenceAssetIds: ["asset-poster"],
