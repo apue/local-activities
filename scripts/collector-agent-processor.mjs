@@ -512,6 +512,9 @@ async function requestOpenAI({
       body: JSON.stringify(
         removeUndefined({
           model: config.openaiModel,
+          text: {
+            format: collectorAgentResponseTextFormat(),
+          },
           input: [
             {
               role: "system",
@@ -552,6 +555,47 @@ async function requestOpenAI({
   }
 }
 
+function collectorAgentResponseTextFormat() {
+  return {
+    type: "json_schema",
+    name: "collector_agent_response",
+    description:
+      "Normalized collector response for one Beijing activity source page.",
+    strict: false,
+    schema: {
+      type: "object",
+      additionalProperties: true,
+      required: ["status", "disposition"],
+      properties: {
+        status: { type: "string", enum: ["success", "failure"] },
+        disposition: { type: "string", enum: [...dispositions] },
+        confidence: { type: "number", minimum: 0, maximum: 1 },
+        missingFields: { type: "array", items: { type: "string" } },
+        sourceCandidate: {
+          type: "object",
+          additionalProperties: true,
+        },
+        articleSnapshot: {
+          type: "object",
+          additionalProperties: true,
+        },
+        evidenceAssets: {
+          type: "array",
+          items: { type: "object", additionalProperties: true },
+        },
+        eventDraft: {
+          type: "object",
+          additionalProperties: true,
+        },
+        failure: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+  };
+}
+
 function parseOpenAIJson(data) {
   const text =
     typeof data?.output_text === "string"
@@ -578,6 +622,7 @@ function extractOpenAIOutputText(data) {
 }
 
 function parseAgentResponse(data) {
+  data = normalizeAgentResponseEnvelope(data);
   if (!data || typeof data !== "object") {
     return invalidAgentResponse("Agent response was not an object.");
   }
@@ -637,6 +682,39 @@ function parseAgentResponse(data) {
         failure: data.failure,
     },
   };
+}
+
+function normalizeAgentResponseEnvelope(data) {
+  if (!data || typeof data !== "object") return data;
+  const normalized = { ...data };
+  if (!normalized.status) {
+    if (normalized.failure) {
+      normalized.status = "failure";
+    } else if (normalized.articleSnapshot || normalized.eventDraft) {
+      normalized.status = "success";
+    }
+  }
+  if (
+    normalized.status === "success" &&
+    !dispositions.has(normalized.disposition)
+  ) {
+    normalized.disposition = normalized.eventDraft
+      ? "ready_for_review"
+      : "not_activity";
+  }
+  if (
+    normalized.status === "success" &&
+    !isNumberInRange(normalized.confidence, 0, 1)
+  ) {
+    if (isNumberInRange(normalized.eventDraft?.confidence, 0, 1)) {
+      normalized.confidence = normalized.eventDraft.confidence;
+    } else if (isNumberInRange(normalized.sourceCandidate?.confidence, 0, 1)) {
+      normalized.confidence = normalized.sourceCandidate.confidence;
+    } else {
+      normalized.confidence = 0.5;
+    }
+  }
+  return normalized;
 }
 
 function normalizePageObservation(input, { seedUrl, now }) {
