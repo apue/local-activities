@@ -91,6 +91,19 @@ The command fails when:
 - the job reports IDs that are missing from Supabase
 - the job fails without structured failure details
 
+Browser runner benchmark:
+
+```bash
+node scripts/browser-runner-benchmark.mjs \
+  --seed-url https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg
+```
+
+The benchmark uses the same page-observation code as the Sandbox agent and
+prints comparable timing diagnostics for `playwright` and `agent_browser`.
+Local timing is useful for regressions, but the production runner should be
+chosen from Sandbox job diagnostics because Sandbox setup time counts against
+the monthly quota.
+
 Optional polling controls:
 
 ```bash

@@ -82,13 +82,16 @@ describe("vercel sandbox runner", () => {
       OPENAI_API_KEY: "openai-secret",
       OPENAI_MODEL: "gpt-5-mini",
       OPENAI_BASE_URL: "https://api.openai.com/v1",
+      COLLECTOR_BROWSER_RUNNER: "playwright",
       COLLECTOR_REPOSITORY_URL: "https://github.com/apue/local-activities.git",
       COLLECTOR_GIT_REF: "abc123",
     });
     expect(command.command).toBe("bash");
     expect(command.args.join(" ")).toContain("git clone");
     expect(command.args.join(" ")).toContain("pnpm install");
-    expect(command.args.join(" ")).toContain("pnpm exec playwright install chromium");
+    expect(command.args.join(" ")).toContain("playwright install --with-deps chromium");
+    expect(command.args.join(" ")).toContain("sandbox_browser_preflight");
+    expect(command.args.join(" ")).toContain("SANDBOX_SETUP_STARTED_AT");
     expect(JSON.stringify(command)).not.toContain(
       "long-lived-collector-secret",
     );
@@ -142,6 +145,9 @@ describe("vercel sandbox runner", () => {
         input: {
           name: "collector-job-1",
           tags: { collectorJobId: "job-1", runner: "vercel_sandbox" },
+          runtime: "node24",
+          resources: { vcpus: 2, memory: 4096 },
+          timeout: 1_200_000,
         },
       },
       {

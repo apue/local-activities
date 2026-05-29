@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { promisify } from "node:util";
 
 import { createCollectorHeaders } from "./collector-fixture-run.mjs";
 
+const execFileAsync = promisify(execFile);
 const payloadVersion = "2026-05-collector-v1";
 const captureModes = new Set([
   "text_complete",
@@ -82,11 +85,13 @@ export async function runCollectorAgent({
   const config = readAgentConfig(env);
   if (!seedUrl) throw new Error("missing_seed_url");
   if (!runId) throw new Error("missing_run_id");
+  const runStartedAt = Date.now();
 
   const observationResult = await observePageWithFailure({
     seedUrl,
     browserObserver,
     now,
+    config,
   });
   if (!observationResult.ok) {
     const payloads = buildAgentFailurePayloads({
@@ -98,6 +103,8 @@ export async function runCollectorAgent({
       message: observationResult.message,
       retryable: observationResult.retryable,
       now,
+      diagnostics: observationResult.diagnostics,
+      runStartedAt,
     });
     return uploadAgentPayloads({
       config,
@@ -115,6 +122,8 @@ export async function runCollectorAgent({
       runId,
       observation: observationResult.observation,
       now,
+      diagnostics: observationResult.diagnostics,
+      runStartedAt,
     });
     return uploadAgentPayloads({
       config,
@@ -125,6 +134,7 @@ export async function runCollectorAgent({
     });
   }
 
+  const agentStartedAt = Date.now();
   const response = await requestModelWithRetries({
     config,
     seedUrl,
@@ -133,6 +143,14 @@ export async function runCollectorAgent({
     observation: observationResult.observation,
     fetchImpl,
   });
+  const agentElapsedDiagnostic = {
+    key: "timing_agent_request_elapsed_ms",
+    value: String(Date.now() - agentStartedAt),
+  };
+  const diagnostics = [
+    ...observationResult.diagnostics,
+    agentElapsedDiagnostic,
+  ];
   const payloads = response.ok
     ? buildAgentSuccessPayloads({
         config,
@@ -141,6 +159,8 @@ export async function runCollectorAgent({
         response: response.data,
         observation: observationResult.observation,
         now,
+        diagnostics,
+        runStartedAt,
       })
     : buildAgentFailurePayloads({
         config,
@@ -152,6 +172,8 @@ export async function runCollectorAgent({
         message: response.message,
         retryable: response.retryable,
         now,
+        diagnostics,
+        runStartedAt,
       });
 
   return uploadAgentPayloads({
@@ -163,10 +185,69 @@ export async function runCollectorAgent({
   });
 }
 
-async function observePageWithFailure({ seedUrl, browserObserver, now }) {
+export async function observePageForBenchmark({
+  seedUrl,
+  runner = "playwright",
+  browserObserver,
+  now = new Date(),
+}) {
+  if (!seedUrl) throw new Error("missing_seed_url");
+  const startedAt = Date.now();
+  const result = await observePageWithFailure({
+    seedUrl,
+    browserObserver,
+    now,
+    config: {
+      browserRunner: runner === "agent_browser" ? "agent_browser" : "playwright",
+    },
+  });
+  const elapsedMs = Date.now() - startedAt;
+  return result.ok
+    ? {
+        runner,
+        ok: true,
+        elapsedMs,
+        finalUrl: result.observation.finalUrl,
+        title: result.observation.title,
+        visibleTextLength: result.observation.visibleText?.length ?? 0,
+        imageCandidateCount: result.observation.imageCandidates?.length ?? 0,
+        diagnostics: [
+          ...result.diagnostics,
+          { key: "benchmark_total_elapsed_ms", value: String(elapsedMs) },
+        ],
+      }
+    : {
+        runner,
+        ok: false,
+        elapsedMs,
+        reason: result.reason,
+        stage: result.stage,
+        message: result.message,
+        retryable: result.retryable,
+        diagnostics: [
+          ...result.diagnostics,
+          { key: "benchmark_total_elapsed_ms", value: String(elapsedMs) },
+        ],
+      };
+}
+
+async function observePageWithFailure({ seedUrl, browserObserver, now, config }) {
+  const startedAt = Date.now();
   try {
-    const observation = await observePage({ seedUrl, browserObserver, now });
-    return { ok: true, observation };
+    const result = await observePage({ seedUrl, browserObserver, now, config });
+    return {
+      ok: true,
+      observation: result.observation,
+      diagnostics: [
+        { key: "browser_runner", value: config.browserRunner },
+        {
+          key: "timing_page_observe_elapsed_ms",
+          value: String(Date.now() - startedAt),
+        },
+        ...sandboxSetupDiagnostics(config),
+        ...(result.diagnostics ?? []),
+      ],
+    };
   } catch (error) {
     return {
       ok: false,
@@ -174,23 +255,47 @@ async function observePageWithFailure({ seedUrl, browserObserver, now }) {
       stage: error?.stage ?? "page_fetch",
       message: error instanceof Error ? error.message : String(error),
       retryable: error?.retryable !== false,
+      diagnostics: [
+        { key: "browser_runner", value: config.browserRunner },
+        {
+          key: "timing_page_observe_elapsed_ms",
+          value: String(Date.now() - startedAt),
+        },
+        ...sandboxSetupDiagnostics(config),
+      ],
     };
   }
 }
 
-async function observePage({ seedUrl, browserObserver, now }) {
+async function observePage({ seedUrl, browserObserver, now, config }) {
   if (browserObserver) {
-    return normalizePageObservation(await browserObserver({ seedUrl, now }), {
-      seedUrl,
-      now,
-    });
+    return {
+      observation: normalizePageObservation(
+        await browserObserver({ seedUrl, now }),
+        {
+          seedUrl,
+          now,
+        },
+      ),
+      diagnostics: [],
+    };
   }
 
+  if (config.browserRunner === "agent_browser") {
+    return observePageWithAgentBrowser({ seedUrl, now });
+  }
+
+  return observePageWithPlaywright({ seedUrl, now });
+}
+
+async function observePageWithPlaywright({ seedUrl, now }) {
   const { chromium } = await import("playwright");
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 1200 } });
+    const pageLoadStartedAt = Date.now();
     await page.goto(seedUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    const pageLoadElapsedMs = Date.now() - pageLoadStartedAt;
     await autoScroll(page);
     const raw = await page.evaluate(() => {
       const meta = (name) =>
@@ -218,10 +323,110 @@ async function observePage({ seedUrl, browserObserver, now }) {
         imageCandidates: images.slice(0, 24),
       };
     });
-    return normalizePageObservation(raw, { seedUrl, now });
+    return {
+      observation: normalizePageObservation(raw, { seedUrl, now }),
+      diagnostics: [
+        { key: "timing_page_load_elapsed_ms", value: String(pageLoadElapsedMs) },
+      ],
+    };
   } finally {
     await browser.close();
   }
+}
+
+async function observePageWithAgentBrowser({ seedUrl, now }) {
+  const session = `collector-${process.pid}-${Date.now()}`;
+  const pageLoadStartedAt = Date.now();
+  await runAgentBrowser(["--session", session, "open", seedUrl, "--json"]);
+  await runAgentBrowser([
+    "--session",
+    session,
+    "wait",
+    "--load",
+    "domcontentloaded",
+    "--json",
+  ]);
+  const pageLoadElapsedMs = Date.now() - pageLoadStartedAt;
+  await runAgentBrowser(["--session", session, "eval", autoScrollScript(), "--json"]);
+  const extracted = await runAgentBrowser([
+    "--session",
+    session,
+    "eval",
+    pageExtractionScript(),
+    "--json",
+  ]);
+  const raw = extracted?.data?.result ?? extracted?.result ?? {};
+  return {
+    observation: normalizePageObservation(raw, { seedUrl, now }),
+    diagnostics: [
+      { key: "timing_page_load_elapsed_ms", value: String(pageLoadElapsedMs) },
+    ],
+  };
+}
+
+async function runAgentBrowser(args) {
+  try {
+    const { stdout } = await execFileAsync("agent-browser", args, {
+      timeout: 60_000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    const data = JSON.parse(stdout || "{}");
+    if (data?.success === false) {
+      throw new Error(data.error ?? "agent_browser_command_failed");
+    }
+    return data;
+  } catch (error) {
+    throw Object.assign(
+      new Error(`agent_browser_failed:${error instanceof Error ? error.message : String(error)}`),
+      {
+        reason: "fetch_blocked",
+        stage: "page_fetch",
+        retryable: true,
+      },
+    );
+  }
+}
+
+function autoScrollScript() {
+  return `(async () => {
+  const delay = (ms) => new Promise((innerResolve) => setTimeout(innerResolve, ms));
+  const step = Math.max(400, Math.floor(window.innerHeight * 0.8));
+  for (let y = 0; y < document.body.scrollHeight; y += step) {
+    window.scrollTo(0, y);
+    await delay(150);
+  }
+  window.scrollTo(0, 0);
+  return true;
+})()`;
+}
+
+function pageExtractionScript() {
+  return `(() => {
+  const meta = (name) =>
+    document.querySelector(\`meta[property="\${name}"], meta[name="\${name}"]\`)
+      ?.getAttribute("content") || undefined;
+  const images = [...document.images]
+    .map((image) => ({
+      url: image.currentSrc || image.src,
+      width: image.naturalWidth || image.width || undefined,
+      height: image.naturalHeight || image.height || undefined,
+    }))
+    .filter((image) => image.url);
+  return {
+    canonicalUrl:
+      document.querySelector('link[rel="canonical"]')?.href || location.href,
+    finalUrl: location.href,
+    title: document.title || meta("og:title"),
+    authorName:
+      meta("article:author") ||
+      document.querySelector("#js_name")?.textContent?.trim(),
+    publishedAt:
+      meta("article:published_time") ||
+      document.querySelector("#publish_time")?.textContent?.trim(),
+    visibleText: document.body?.innerText || "",
+    imageCandidates: images.slice(0, 24),
+  };
+})()`;
 }
 
 async function autoScroll(page) {
@@ -658,7 +863,15 @@ function normalizeEventDraft(input, missingFields) {
   });
 }
 
-function buildBrowserSmokePayloads({ config, seedUrl, runId, observation, now }) {
+function buildBrowserSmokePayloads({
+  config,
+  seedUrl,
+  runId,
+  observation,
+  now,
+  diagnostics = [],
+  runStartedAt,
+}) {
   const observedAt = now.toISOString();
   return removeUndefined({
     sourceCandidate: observation.sourceCandidate
@@ -685,6 +898,7 @@ function buildBrowserSmokePayloads({ config, seedUrl, runId, observation, now })
         diagnostics: [
           { key: "processor", value: "sandbox-browser" },
           { key: "mode", value: "browser_smoke_only" },
+          ...withTotalElapsedDiagnostic(diagnostics, runStartedAt),
         ],
       },
     }),
@@ -704,6 +918,8 @@ function buildAgentSuccessPayloads({
   response,
   observation,
   now,
+  diagnostics = [],
+  runStartedAt,
 }) {
   const observedAt = now.toISOString();
   const sourceRun = envelope({
@@ -726,6 +942,7 @@ function buildAgentSuccessPayloads({
         { key: "processor", value: "sandbox-agent" },
         { key: "disposition", value: response.disposition },
         { key: "confidence", value: String(response.confidence) },
+        ...withTotalElapsedDiagnostic(diagnostics, runStartedAt),
       ],
     },
   });
@@ -757,9 +974,10 @@ function buildAgentSuccessPayloads({
         reason: response.disposition === "not_activity"
           ? "not_activity"
           : "activity_fields_missing",
-        message: response.failure?.message ?? "Agent did not return a draft.",
-        retryable: false,
-      });
+      message: response.failure?.message ?? "Agent did not return a draft.",
+      retryable: false,
+      diagnostics,
+    });
 
   return removeUndefined({
     sourceCandidate: (response.sourceCandidate ?? observation?.sourceCandidate)
@@ -788,6 +1006,8 @@ function buildAgentFailurePayloads({
   message,
   retryable,
   now,
+  diagnostics = [],
+  runStartedAt,
 }) {
   const observedAt = now.toISOString();
   return {
@@ -813,7 +1033,10 @@ function buildAgentFailurePayloads({
         draftCount: 0,
         failureCount: 1,
         failureReason: reason,
-        diagnostics: [{ key: "processor", value: "sandbox-agent" }],
+        diagnostics: [
+          { key: "processor", value: "sandbox-agent" },
+          ...withTotalElapsedDiagnostic(diagnostics, runStartedAt),
+        ],
       },
     }),
     collectorFailure: buildFailureEnvelope({
@@ -825,8 +1048,20 @@ function buildAgentFailurePayloads({
       stage,
       message,
       retryable,
+      diagnostics,
     }),
   };
+}
+
+function withTotalElapsedDiagnostic(diagnostics, runStartedAt) {
+  const values = [...diagnostics];
+  if (runStartedAt) {
+    values.push({
+      key: "timing_total_elapsed_ms",
+      value: String(Date.now() - runStartedAt),
+    });
+  }
+  return values;
 }
 
 function articleSnapshotFromObservation(observation) {
@@ -862,6 +1097,7 @@ function buildFailureEnvelope({
   stage = "agent_extraction",
   message,
   retryable,
+  diagnostics = [],
 }) {
   return envelope({
     collectorId,
@@ -873,6 +1109,7 @@ function buildFailureEnvelope({
       reason: normalizeFailureReason(reason),
       message: String(message ?? "Agent extraction failed.").slice(0, 2_000),
       retryable: retryable !== false,
+      diagnostics,
     },
   });
 }
@@ -1025,6 +1262,10 @@ function readAgentConfig(env) {
   const collectorId = env.COLLECTOR_ID?.trim();
   const collectorApiKey = env.COLLECTOR_API_KEY?.trim();
   const browserSmokeOnly = env.COLLECTOR_BROWSER_SMOKE_ONLY === "true";
+  const browserRunner =
+    env.COLLECTOR_BROWSER_RUNNER?.trim() === "agent_browser"
+      ? "agent_browser"
+      : "playwright";
   const agentProvider = env.AGENT_PROVIDER?.trim();
   const openaiApiKey = env.OPENAI_API_KEY?.trim();
   const openaiModel = env.OPENAI_MODEL?.trim();
@@ -1047,6 +1288,9 @@ function readAgentConfig(env) {
       collectorJobId: env.COLLECTOR_JOB_ID?.trim() || undefined,
     }),
     browserSmokeOnly,
+    browserRunner,
+    sandboxSetupStartedAt: parseTimestampMs(env.SANDBOX_SETUP_STARTED_AT),
+    sandboxBrowserReadyAt: parseTimestampMs(env.SANDBOX_BROWSER_READY_AT),
     agentProvider,
     openaiBaseUrl: normalizeBaseUrl(
       env.OPENAI_BASE_URL || "https://api.openai.com/v1",
@@ -1062,6 +1306,22 @@ function readAgentConfig(env) {
       Number.parseInt(env.AGENT_MAX_ATTEMPTS ?? "3", 10) || 3,
     ),
   };
+}
+
+function sandboxSetupDiagnostics(config) {
+  if (!config.sandboxSetupStartedAt || !config.sandboxBrowserReadyAt) return [];
+  const elapsed = String(
+    config.sandboxBrowserReadyAt - config.sandboxSetupStartedAt,
+  );
+  return [
+    { key: "timing_sandbox_setup_elapsed_ms", value: elapsed },
+    { key: "timing_browser_ready_elapsed_ms", value: elapsed },
+  ];
+}
+
+function parseTimestampMs(value) {
+  const number = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(number) && number > 0 ? number : undefined;
 }
 
 function invalidAgentResponse(message) {
