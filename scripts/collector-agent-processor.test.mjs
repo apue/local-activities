@@ -274,6 +274,41 @@ describe("collector agent processor", () => {
     );
   });
 
+  it("normalizes environment verification failures as captcha required", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(openaiResponse({
+          status: "failure",
+          disposition: "failed",
+          failure: {
+            stage: "agent_extraction",
+            reason: "environment_verification",
+            message: "Weixin redirected to an environment verification page.",
+            retryable: true,
+          },
+        }));
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    await runCollectorAgent({
+      env: agentEnv(),
+      seedUrl: "https://mp.weixin.qq.com/s/wechat-captcha",
+      runId: "agent-wechat-captcha",
+      fetchImpl,
+      browserObserver: async () => pageObservation(),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    const failureCall = calls.find((call) => call.url.endsWith("/failure"));
+    expect(failureCall.body.payload).toMatchObject({
+      reason: "captcha_required",
+      retryable: true,
+    });
+  });
+
   it("measures browser observations for benchmark runs without uploading", async () => {
     const result = await observePageForBenchmark({
       seedUrl: "https://mp.weixin.qq.com/s/benchmark",
