@@ -73,11 +73,13 @@ The command creates a real admin collector job with
 `preferredRunner=vercel_sandbox`, polls admin job state by `jobId`, and verifies
 reported IDs in Supabase. The Sandbox runner opens the seed URL in a browser,
 passes the page observation to the configured provider, uploads normalized
-collector results, and does not publish drafts.
+collector results, auto-publishes when minimum public fields are present, and
+verifies the public list/detail pages.
 
 The command treats these outcomes as explainable smoke results:
 
-- a draft is created and is reviewable, such as `ready_for_review`,
+- a draft is created and auto-published as `approved`
+- a draft is created and remains reviewable, such as `ready_for_review`,
   `needs_review`, `needs_info`, or `possible_duplicate`
 - the job reports `not_activity`
 - the job uploads a structured collector failure with failure IDs
