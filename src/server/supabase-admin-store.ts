@@ -167,6 +167,29 @@ class SupabaseAdminStore implements AdminStore {
     publishedAt: string;
   }): Promise<PublishedAdminEvent> {
     const eventId = `event-${randomUUID()}`;
+    const eventRow = {
+      event_id: eventId,
+      title: input.draft.title,
+      organizer: input.draft.organizer ?? null,
+      starts_at: input.draft.startsAt,
+      ends_at: input.draft.endsAt ?? null,
+      timezone: input.draft.timezone,
+      city: input.draft.city,
+      venue_name: input.draft.venueName ?? null,
+      venue_address: input.draft.venueAddress ?? null,
+      reservation_status: input.draft.reservationStatus ?? "unknown",
+      registration_action: input.draft.registrationAction ?? null,
+      registration_url: input.draft.registrationUrl ?? null,
+      source_url: input.draft.articleUrl,
+      poster_image_url: input.draft.posterImageUrl ?? null,
+      poster_image_alt: input.draft.posterImageAlt ?? null,
+      poster_image_source_url: input.draft.posterImageSourceUrl ?? null,
+      summary: input.draft.summary ?? null,
+      entry_notes: input.draft.entryNotes ?? null,
+      status: "published",
+      review_state: "approved",
+      published_at: input.publishedAt,
+    };
     const event = await this.writeOne<{
       id: number;
       event_id: string;
@@ -176,31 +199,18 @@ class SupabaseAdminStore implements AdminStore {
     }>(
       this.client
         .from("canonical_events")
-        .insert({
-          event_id: eventId,
-          title: input.draft.title,
-          organizer: input.draft.organizer ?? null,
-          starts_at: input.draft.startsAt,
-          ends_at: input.draft.endsAt ?? null,
-          timezone: input.draft.timezone,
-          city: input.draft.city,
-          venue_name: input.draft.venueName ?? null,
-          venue_address: input.draft.venueAddress ?? null,
-          reservation_status: input.draft.reservationStatus ?? "unknown",
-          registration_action: input.draft.registrationAction ?? null,
-          registration_url: input.draft.registrationUrl ?? null,
-          source_url: input.draft.articleUrl,
-          poster_image_url: input.draft.posterImageUrl ?? null,
-          poster_image_alt: input.draft.posterImageAlt ?? null,
-          poster_image_source_url: input.draft.posterImageSourceUrl ?? null,
-          summary: input.draft.summary ?? null,
-          entry_notes: input.draft.entryNotes ?? null,
-          status: "published",
-          review_state: "approved",
-          published_at: input.publishedAt,
-        })
+        .insert(eventRow)
         .select("id,event_id,title,status,published_at")
         .single(),
+      {
+        retryWithoutOptionalPosterColumns: (rowPayload) =>
+          this.client
+            .from("canonical_events")
+            .insert(rowPayload)
+            .select("id,event_id,title,status,published_at")
+            .single(),
+        originalPayload: eventRow,
+      },
     );
 
     await this.writeMany(
@@ -223,8 +233,23 @@ class SupabaseAdminStore implements AdminStore {
 
   private async writeOne<T>(
     request: PromiseLike<{ data: T | null; error: unknown }>,
+    options?: {
+      originalPayload: Record<string, unknown>;
+      retryWithoutOptionalPosterColumns: (
+        payload: Record<string, unknown>,
+      ) => PromiseLike<{ data: T | null; error: unknown }>;
+    },
   ) {
-    const { data, error } = await request;
+    let { data, error } = await request;
+    if (
+      error &&
+      options &&
+      isMissingOptionalPosterColumnError(error)
+    ) {
+      ({ data, error } = await options.retryWithoutOptionalPosterColumns(
+        withoutOptionalPosterColumns(options.originalPayload),
+      ));
+    }
     if (error || !data) throw new Error("admin_write_failed");
     return data;
   }
@@ -233,6 +258,28 @@ class SupabaseAdminStore implements AdminStore {
     const { error } = await request;
     if (error) throw new Error("admin_write_failed");
   }
+}
+
+function withoutOptionalPosterColumns(payload: Record<string, unknown>) {
+  const {
+    poster_image_url: _posterImageUrl,
+    poster_image_alt: _posterImageAlt,
+    poster_image_source_url: _posterImageSourceUrl,
+    ...rest
+  } = payload;
+  return rest;
+}
+
+function isMissingOptionalPosterColumnError(error: unknown) {
+  const message =
+    typeof error === "object" && error && "message" in error
+      ? String(error.message)
+      : String(error ?? "");
+  return (
+    message.includes("poster_image_url") ||
+    message.includes("poster_image_alt") ||
+    message.includes("poster_image_source_url")
+  );
 }
 
 function toJobRecord(row: CollectorJobRow): CollectorJobRecord {

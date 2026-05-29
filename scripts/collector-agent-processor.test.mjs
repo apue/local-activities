@@ -134,6 +134,90 @@ describe("collector agent processor", () => {
     expect(result.uploadedIds.eventDraftId).toBe("id-6");
   });
 
+  it("does not upload source-site image URLs as public poster URLs", async () => {
+    const calls = [];
+    const sourcePosterUrl = "https://mmbiz.qpic.cn/source-poster.png";
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({
+        url,
+        body: init.body ? JSON.parse(init.body) : {},
+      });
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(
+          openaiResponse({
+            ...agentSuccessResponse(),
+            eventDraft: {
+              ...agentSuccessResponse().eventDraft,
+              posterImageUrl: sourcePosterUrl,
+              posterImageAlt: "Agent Event poster",
+            },
+          }),
+        );
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    await runCollectorAgent({
+      env: agentEnv(),
+      seedUrl: "https://mp.weixin.qq.com/s/agent",
+      runId: "agent-run",
+      fetchImpl,
+      browserObserver: async () => pageObservation(),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    const eventDraftUpload = calls.find((call) =>
+      call.url.endsWith("/api/collector/event-draft"),
+    );
+    expect(eventDraftUpload.body.payload.posterImageUrl).toBeUndefined();
+    expect(eventDraftUpload.body.payload.posterImageSourceUrl).toBe(
+      sourcePosterUrl,
+    );
+    expect(eventDraftUpload.body.payload.posterImageAlt).toBe(
+      "Agent Event poster",
+    );
+  });
+
+  it("keeps app-owned public asset URLs as poster image URLs", async () => {
+    const calls = [];
+    const blobPosterUrl =
+      "https://local-activities.public.blob.vercel-storage.com/event-posters/agent.png";
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({
+        url,
+        body: init.body ? JSON.parse(init.body) : {},
+      });
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(
+          openaiResponse({
+            ...agentSuccessResponse(),
+            eventDraft: {
+              ...agentSuccessResponse().eventDraft,
+              posterImageUrl: blobPosterUrl,
+              posterImageAlt: "Agent Event poster",
+            },
+          }),
+        );
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    await runCollectorAgent({
+      env: agentEnv(),
+      seedUrl: "https://mp.weixin.qq.com/s/agent",
+      runId: "agent-run",
+      fetchImpl,
+      browserObserver: async () => pageObservation(),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    const eventDraftUpload = calls.find((call) =>
+      call.url.endsWith("/api/collector/event-draft"),
+    );
+    expect(eventDraftUpload.body.payload.posterImageUrl).toBe(blobPosterUrl);
+    expect(eventDraftUpload.body.payload.posterImageSourceUrl).toBeUndefined();
+  });
+
   it("looks up event candidates for editor-agent captures before uploading drafts", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {

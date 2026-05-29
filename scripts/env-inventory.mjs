@@ -41,6 +41,7 @@ export const targets = {
       "LOCAL_TEST_HTTP_PROXY",
       "LOCAL_TEST_HTTPS_PROXY",
       "BLOB_READ_WRITE_TOKEN",
+      "PUBLIC_ASSET_URL_PREFIXES",
     ],
   },
   vercel: {
@@ -74,6 +75,7 @@ export const targets = {
       "AGENT_EVENT_CANDIDATE_LOOKUP",
       "AGENT_EVENT_RESOLUTION_ENABLED",
       "BLOB_READ_WRITE_TOKEN",
+      "PUBLIC_ASSET_URL_PREFIXES",
     ],
   },
   collector: {
@@ -112,6 +114,7 @@ export const targets = {
       "AGENT_EVENT_CANDIDATE_LOOKUP",
       "AGENT_EVENT_RESOLUTION_ENABLED",
       "BLOB_READ_WRITE_TOKEN",
+      "PUBLIC_ASSET_URL_PREFIXES",
     ],
   },
 };
