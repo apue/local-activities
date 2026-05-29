@@ -25,7 +25,13 @@ type CollectorJobRow = {
   last_heartbeat_at: string | null;
   last_heartbeat_stage: CollectorJobRecord["lastHeartbeatStage"] | null;
   suggested_disposition: CollectorJobRecord["suggestedDisposition"] | null;
+  source_run_id: string | null;
+  article_snapshot_ids: string[] | null;
+  event_draft_ids: string[] | null;
+  evidence_asset_ids: string[] | null;
+  failure_ids: string[] | null;
   result_message: string | null;
+  finished_at: string | null;
   preferred_runner: CollectorJobRecord["preferredRunner"];
   actual_runner: CollectorJobRecord["actualRunner"] | null;
   runner_state: CollectorJobRecord["runnerState"];
@@ -237,7 +243,13 @@ function toJobRecord(row: CollectorJobRow): CollectorJobRecord {
     lastHeartbeatAt: row.last_heartbeat_at ?? undefined,
     lastHeartbeatStage: row.last_heartbeat_stage ?? undefined,
     suggestedDisposition: row.suggested_disposition ?? undefined,
+    sourceRunId: row.source_run_id ?? undefined,
+    articleSnapshotIds: row.article_snapshot_ids ?? [],
+    eventDraftIds: row.event_draft_ids ?? [],
+    evidenceAssetIds: row.evidence_asset_ids ?? [],
+    failureIds: row.failure_ids ?? [],
     resultMessage: row.result_message ?? undefined,
+    finishedAt: row.finished_at ?? undefined,
     preferredRunner: row.preferred_runner,
     actualRunner: row.actual_runner ?? undefined,
     runnerState: row.runner_state,
