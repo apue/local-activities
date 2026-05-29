@@ -40,6 +40,7 @@ export const targets = {
       "DATABASE_URL",
       "LOCAL_TEST_HTTP_PROXY",
       "LOCAL_TEST_HTTPS_PROXY",
+      "BLOB_READ_WRITE_TOKEN",
     ],
   },
   vercel: {
@@ -72,6 +73,7 @@ export const targets = {
       "AGENT_MAX_ATTEMPTS",
       "AGENT_EVENT_CANDIDATE_LOOKUP",
       "AGENT_EVENT_RESOLUTION_ENABLED",
+      "BLOB_READ_WRITE_TOKEN",
     ],
   },
   collector: {
@@ -109,6 +111,7 @@ export const targets = {
       "AGENT_MAX_ATTEMPTS",
       "AGENT_EVENT_CANDIDATE_LOOKUP",
       "AGENT_EVENT_RESOLUTION_ENABLED",
+      "BLOB_READ_WRITE_TOKEN",
     ],
   },
 };

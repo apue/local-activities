@@ -119,6 +119,9 @@ Produce a concise normalized draft with these fields when available:
     "startsAt": "2026-06-01T20:00:00+08:00",
     "endsAt": "2026-06-01T22:00:00+08:00",
     "registrationUrl": "https://example.com/register",
+    "posterImageUrl": "https://blob.example.com/event-posters/poster.png",
+    "posterImageAlt": "Event poster",
+    "posterImageSourceUrl": "https://example.com/source-poster.png",
     "organizerName": "Organizer",
     "language": "zh",
     "confidence": 0.8,
@@ -130,6 +133,20 @@ Produce a concise normalized draft with these fields when available:
   }
 }
 ```
+
+Poster handling:
+
+- Treat an image as a poster when it contains the activity title, date, venue,
+  or main campaign visual, or when the article clearly presents it as the event
+  promotional poster.
+- Do not treat QR-only images, account avatars, decorative dividers, emoji art,
+  or unrelated article photos as posters.
+- If a poster image is selected and `BLOB_READ_WRITE_TOKEN` is available, fetch
+  the image bytes and upload them with `putPublicEventImage` from
+  `src/server/public-asset-store.ts`. Use the returned URL as
+  `posterImageUrl`.
+- If Blob upload is unavailable, leave `posterImageUrl` empty rather than
+  storing a hotlinked source image as the public poster.
 
 If a field is not supported by the existing collector contract, adapt it to the
 nearest existing event draft or evidence field before upload.

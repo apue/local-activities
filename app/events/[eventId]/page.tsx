@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import styles from "../../public-event-ui.module.css";
 import {
+  formatReservationStatus,
   formatPublicEventTime,
   getPublicEvent,
 } from "../../../src/server/public-events";
@@ -28,6 +29,15 @@ export default async function EventDetailPage({
           <h1>{event.title}</h1>
         </section>
 
+        {event.posterImageUrl ? (
+          <figure className={styles.posterFigure}>
+            <img
+              src={event.posterImageUrl}
+              alt={event.posterImageAlt ?? `${event.title} poster`}
+            />
+          </figure>
+        ) : null}
+
         <section className={styles.detailGrid}>
           <article className={styles.panel}>
             <h2>Activity details</h2>
@@ -39,7 +49,7 @@ export default async function EventDetailPage({
             ) : null}
             {event.registrationUrl ? (
               <a className={styles.actionButton} href={event.registrationUrl}>
-                {event.registrationAction ?? "Open reservation"}
+                {event.registrationAction ?? "查看报名方式"}
               </a>
             ) : null}
           </article>
@@ -57,7 +67,7 @@ export default async function EventDetailPage({
             </div>
             <div className={styles.field}>
               <span>Reservation</span>
-              <strong>{event.reservationStatus}</strong>
+              <strong>{formatReservationStatus(event.reservationStatus)}</strong>
             </div>
             <div className={styles.field}>
               <span>Official source</span>

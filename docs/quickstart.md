@@ -34,6 +34,7 @@ Minimum groups to prepare:
 
 - app/admin secrets: `ADMIN_ACCESS_TOKEN`, `COLLECTOR_API_KEY`, `INTERNAL_API_SECRET`
 - Supabase/Postgres: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `DATABASE_URL`
+- runtime public assets: `BLOB_READ_WRITE_TOKEN` when uploading event posters to Vercel Blob
 - Supabase CLI/local compatibility: `SUPA_API_URL`, `SUPA_DB_URL`, `SUPA_ANON_KEY`, `SUPA_SERVICE_KEY`
 - map/geocoding: `NEXT_PUBLIC_AMAP_JS_API_KEY`, `AMAP_WEB_SERVICE_API_KEY`
 - sandbox extraction provider: `AGENT_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_MODEL`, optional `OPENAI_BASE_URL`

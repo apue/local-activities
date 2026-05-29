@@ -27,6 +27,9 @@ describe("supabase collector ingest store", () => {
             venueName: "北京朝阳公园",
             city: "Beijing",
             scheduleText: "5月30日至31日每日10:30-18:00",
+            posterImageUrl: "https://cdn.example.com/posters/thai.png",
+            posterImageAlt: "Thai Festival poster",
+            posterImageSourceUrl: "https://mp.weixin.qq.com/poster.png",
             signals: ["ready_for_review"],
             evidenceAssetIds: [],
             fieldEvidence: {},
@@ -50,6 +53,9 @@ describe("supabase collector ingest store", () => {
           venueName: "北京朝阳公园",
           city: "Beijing",
           scheduleText: "5月30日至31日每日10:30-18:00",
+          posterImageUrl: "https://cdn.example.com/posters/thai.png",
+          posterImageAlt: "Thai Festival poster",
+          posterImageSourceUrl: "https://mp.weixin.qq.com/poster.png",
           signals: ["ready_for_review"],
           evidenceAssetIds: [],
           fieldEvidence: {},
@@ -69,6 +75,18 @@ describe("supabase collector ingest store", () => {
       .toHaveProperty("schedule_text");
     expect(upserts.find((entry) => entry.table === "canonical_events")?.payload)
       .not.toHaveProperty("schedule_text");
+    expect(upserts.find((entry) => entry.table === "event_drafts")?.payload)
+      .toMatchObject({
+        poster_image_url: "https://cdn.example.com/posters/thai.png",
+        poster_image_alt: "Thai Festival poster",
+        poster_image_source_url: "https://mp.weixin.qq.com/poster.png",
+      });
+    expect(upserts.find((entry) => entry.table === "canonical_events")?.payload)
+      .toMatchObject({
+        poster_image_url: "https://cdn.example.com/posters/thai.png",
+        poster_image_alt: "Thai Festival poster",
+        poster_image_source_url: "https://mp.weixin.qq.com/poster.png",
+      });
   });
 });
 

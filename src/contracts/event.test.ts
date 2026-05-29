@@ -20,12 +20,18 @@ describe("event contracts", () => {
       venueAddress: "Sanlitun, Beijing",
       reservationStatus: "required",
       registrationUrl: "https://example.com/register",
+      posterImageUrl: "https://cdn.example.com/posters/event.png",
+      posterImageAlt: "Italian Design Weekend poster",
+      posterImageSourceUrl: "https://mp.weixin.qq.com/poster.png",
       sourceUrl: "https://mp.weixin.qq.com/s/example",
       status: "published",
       reviewState: "approved",
     });
 
     expect(result.status).toBe("published");
+    expect(result.posterImageUrl).toBe(
+      "https://cdn.example.com/posters/event.png",
+    );
     expect(result.reviewState).toBe("approved");
   });
 
