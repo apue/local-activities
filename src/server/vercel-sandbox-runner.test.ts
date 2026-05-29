@@ -82,7 +82,7 @@ describe("vercel sandbox runner", () => {
       OPENAI_API_KEY: "openai-secret",
       OPENAI_MODEL: "gpt-5-mini",
       OPENAI_BASE_URL: "https://api.openai.com/v1",
-      COLLECTOR_BROWSER_RUNNER: "playwright",
+      COLLECTOR_BROWSER_RUNNER: "agent_browser",
       COLLECTOR_REPOSITORY_URL: "https://github.com/apue/local-activities.git",
       COLLECTOR_GIT_REF: "abc123",
     });

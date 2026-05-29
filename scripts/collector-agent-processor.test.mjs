@@ -70,7 +70,7 @@ describe("collector agent processor", () => {
     });
     expect(calls[2].body.payload.diagnostics).toEqual(
       expect.arrayContaining([
-        { key: "browser_runner", value: "playwright" },
+        { key: "browser_runner", value: "agent_browser" },
         { key: "timing_total_elapsed_ms", value: expect.any(String) },
         { key: "timing_page_observe_elapsed_ms", value: expect.any(String) },
         { key: "timing_agent_request_elapsed_ms", value: expect.any(String) },
@@ -231,7 +231,7 @@ describe("collector agent processor", () => {
     });
     expect(calls[3].body.payload.diagnostics).toEqual(
       expect.arrayContaining([
-        { key: "browser_runner", value: "playwright" },
+        { key: "browser_runner", value: "agent_browser" },
       ]),
     );
   });

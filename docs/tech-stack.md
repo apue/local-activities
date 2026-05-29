@@ -255,7 +255,7 @@ Environment:
 - `AGENT_PROVIDER`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
-- `COLLECTOR_BROWSER_RUNNER` (`playwright` by default; `agent_browser` for comparison runs)
+- `COLLECTOR_BROWSER_RUNNER` (`agent_browser` by default; `playwright` for comparison runs)
 
 ## Supabase
 
