@@ -102,6 +102,7 @@ export const targets = {
       "EDITOR_AGENT_API_BASE_URL",
       "EDITOR_AGENT_API_KEY",
       "EDITOR_AGENT_MODEL",
+      "EDITOR_AGENT_API_STYLE",
       "AGENT_TIMEOUT_SECONDS",
       "AGENT_MAX_ATTEMPTS",
     ],

@@ -38,6 +38,8 @@ export function buildEditorCaptureEnv(env = {}) {
     clean(env.EDITOR_AGENT_API_KEY) ?? clean(env.OPENAI_API_KEY);
   const editorModel =
     clean(env.EDITOR_AGENT_MODEL) ?? clean(env.OPENAI_MODEL);
+  const editorApiStyle =
+    clean(env.EDITOR_AGENT_API_STYLE) ?? clean(env.AGENT_API_STYLE);
 
   return {
     ...env,
@@ -49,6 +51,7 @@ export function buildEditorCaptureEnv(env = {}) {
     ...(editorApiBaseUrl ? { OPENAI_BASE_URL: editorApiBaseUrl } : {}),
     ...(editorApiKey ? { OPENAI_API_KEY: editorApiKey } : {}),
     ...(editorModel ? { OPENAI_MODEL: editorModel } : {}),
+    ...(editorApiStyle ? { AGENT_API_STYLE: editorApiStyle } : {}),
   };
 }
 
@@ -63,6 +66,7 @@ export async function runEditorCapture({
 
   const runId = buildRunId(seedUrl, now);
   const captureEnv = buildEditorCaptureEnv(env);
+  validateEditorCaptureEnv(captureEnv);
   const result = await runCollectorAgentImpl({
     env: captureEnv,
     seedUrl,
@@ -78,6 +82,29 @@ export async function runEditorCapture({
     runId,
     uploadedIds,
   };
+}
+
+function validateEditorCaptureEnv(env) {
+  const missingCollector = [];
+  if (!clean(env.COLLECTOR_BASE_URL)) {
+    missingCollector.push("COLLECTOR_BASE_URL|APP_BASE_URL|NEXT_PUBLIC_APP_URL");
+  }
+  if (!clean(env.COLLECTOR_ID)) missingCollector.push("COLLECTOR_ID");
+  if (!clean(env.COLLECTOR_API_KEY)) missingCollector.push("COLLECTOR_API_KEY");
+  if (missingCollector.length > 0) {
+    throw new Error(`missing_editor_collector_config:${missingCollector.join(",")}`);
+  }
+
+  const missingAgent = [];
+  if (!clean(env.OPENAI_API_KEY)) {
+    missingAgent.push("EDITOR_AGENT_API_KEY|OPENAI_API_KEY");
+  }
+  if (!clean(env.OPENAI_MODEL)) {
+    missingAgent.push("EDITOR_AGENT_MODEL|OPENAI_MODEL");
+  }
+  if (missingAgent.length > 0) {
+    throw new Error(`missing_editor_agent_config:${missingAgent.join(",")}`);
+  }
 }
 
 export function formatEditorCaptureSummary(result) {

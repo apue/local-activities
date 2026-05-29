@@ -25,6 +25,7 @@ describe("editor agent capture", () => {
         EDITOR_AGENT_API_BASE_URL: "https://api.deepseek.example/v1",
         EDITOR_AGENT_API_KEY: "provider-secret",
         EDITOR_AGENT_MODEL: "deepseek-reasoner",
+        EDITOR_AGENT_API_STYLE: "chat_completions",
       }),
     ).toMatchObject({
       COLLECTOR_BASE_URL: "https://local-activities.example",
@@ -34,6 +35,7 @@ describe("editor agent capture", () => {
       OPENAI_BASE_URL: "https://api.deepseek.example/v1",
       OPENAI_API_KEY: "provider-secret",
       OPENAI_MODEL: "deepseek-reasoner",
+      AGENT_API_STYLE: "chat_completions",
       COLLECTOR_BROWSER_RUNNER: "agent_browser",
     });
   });
@@ -83,6 +85,24 @@ describe("editor agent capture", () => {
         eventDraftId: "301",
       },
     });
+  });
+
+  it("reports missing local provider config before invoking the processor", async () => {
+    await expect(
+      runEditorCapture({
+        input: "https://mp.weixin.qq.com/s/missing",
+        env: {
+          COLLECTOR_BASE_URL: "https://local-activities.example",
+          COLLECTOR_ID: "home-1",
+          COLLECTOR_API_KEY: "collector-secret",
+        },
+        runCollectorAgentImpl: async () => {
+          throw new Error("should_not_run");
+        },
+      }),
+    ).rejects.toThrow(
+      "missing_editor_agent_config:EDITOR_AGENT_API_KEY|OPENAI_API_KEY,EDITOR_AGENT_MODEL|OPENAI_MODEL",
+    );
   });
 
   it("summarizes structured failures for operator use", () => {
