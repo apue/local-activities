@@ -112,7 +112,9 @@ export function parseArgs(argv) {
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === "--env-file") {
+    if (arg === "--" && result.inputParts.length === 0) {
+      continue;
+    } else if (arg === "--env-file") {
       result.envFile = argv[index + 1];
       index += 1;
     } else if (arg === "--json") {
