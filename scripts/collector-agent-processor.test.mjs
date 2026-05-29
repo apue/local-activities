@@ -37,6 +37,12 @@ describe("collector agent processor", () => {
       },
       body: {
         model: "gpt-5-mini",
+        text: {
+          format: {
+            type: "json_schema",
+            name: "collector_agent_response",
+          },
+        },
       },
     });
     expect(JSON.stringify(calls[0].body)).toContain("Agent Event");
@@ -154,6 +160,38 @@ describe("collector agent processor", () => {
 
     expect(calls.filter((call) => call.url.endsWith("/responses"))).toHaveLength(2);
     expect(result.uploadedIds.eventDraftId).toBe("id-7");
+  });
+
+  it("normalizes complete draft responses that miss top-level status fields", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(
+          openaiResponse(withoutTopLevelStatus(agentSuccessResponse())),
+        );
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorAgent({
+      env: agentEnv(),
+      seedUrl: "https://mp.weixin.qq.com/s/wrapperless",
+      runId: "agent-wrapperless",
+      fetchImpl,
+      browserObserver: async () => pageObservation(),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(calls.filter((call) => call.url.endsWith("/responses"))).toHaveLength(
+      1,
+    );
+    expect(result.uploadedIds.eventDraftId).toBe("id-6");
+    expect(calls[2].body.payload.diagnostics).toEqual(
+      expect.arrayContaining([
+        { key: "disposition", value: "ready_for_review" },
+      ]),
+    );
   });
 
   it("uploads a structured failure after OpenAI schema retry exhaustion", async () => {
@@ -361,6 +399,14 @@ function openaiResponse(payload) {
   return {
     output_text: JSON.stringify(payload),
   };
+}
+
+function withoutTopLevelStatus(payload) {
+  const copy = { ...payload };
+  delete copy.status;
+  delete copy.disposition;
+  delete copy.confidence;
+  return copy;
 }
 
 function jsonResponse(body, status = 200) {
