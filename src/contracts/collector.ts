@@ -157,6 +157,7 @@ export const eventDraftUploadSchema = z
     reservationStatus: z.enum(["required", "not_required", "unknown"]).optional(),
     registrationAction: z.string().min(1).optional(),
     registrationUrl: z.string().url().optional(),
+    scheduleText: z.string().min(1).max(1_000).optional(),
     summary: z.string().min(1).max(4_000).optional(),
     entryNotes: z.string().min(1).max(4_000).optional(),
     signals: z.array(draftSignalSchema),

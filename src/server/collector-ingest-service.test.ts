@@ -27,6 +27,7 @@ class MemoryIngestStore implements CollectorIngestStore {
   sourceCandidates = new Map<string, string>();
   publishedDrafts: Array<{
     title: string;
+    scheduleText?: string;
     publishedAt: string;
   }> = [];
 
@@ -79,6 +80,7 @@ class MemoryIngestStore implements CollectorIngestStore {
   }) {
     this.publishedDrafts.push({
       title: input.payload.title ?? "",
+      scheduleText: input.payload.scheduleText,
       publishedAt: input.publishedAt,
     });
     return { id: `event-${this.publishedDrafts.length}` };
@@ -169,24 +171,33 @@ describe("collector ingest service", () => {
     expect(store.publishedDrafts).toEqual([]);
   });
 
-  it("routes low-confidence complete drafts to review instead of auto-publish", async () => {
+  it("auto-publishes admin-curated drafts when minimum public fields are present", async () => {
     const store = new MemoryIngestStore();
     const envelope = completeDraftEnvelope({
-      confidence: 0.76,
+      confidence: 0.51,
+      venueName: undefined,
+      venueAddress: "北京市朝阳区朝阳公园",
+      scheduleText: "5月30日至31日每日10:30-18:00",
     });
 
     await expect(
       ingestEventDraft(envelope, store, {
         autoPublishEnabled: true,
-        autoPublishConfidenceThreshold: 0.9,
         now: new Date("2026-05-28T08:00:00.000Z"),
       }),
     ).resolves.toMatchObject({
       id: "draft-1",
-      reviewState: "ready_for_review",
-      autoPublished: false,
+      reviewState: "approved",
+      autoPublished: true,
+      publishedEventId: "event-1",
     });
-    expect(store.publishedDrafts).toEqual([]);
+    expect(store.publishedDrafts).toEqual([
+      {
+        title: "Policy Event",
+        scheduleText: "5月30日至31日每日10:30-18:00",
+        publishedAt: "2026-05-28T08:00:00.000Z",
+      },
+    ]);
   });
 
   it("auto-publishes high-confidence complete drafts through backend policy", async () => {
@@ -210,6 +221,7 @@ describe("collector ingest service", () => {
     expect(store.publishedDrafts).toEqual([
       {
         title: "Policy Event",
+        scheduleText: undefined,
         publishedAt: "2026-05-28T08:00:00.000Z",
       },
     ]);

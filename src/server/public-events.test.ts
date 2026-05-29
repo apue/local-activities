@@ -24,6 +24,7 @@ const baseEvent: CanonicalEventRow = {
   registration_url: "https://example.com/register",
   source_url: "https://mp.weixin.qq.com/s/example",
   summary: "A weekend programme about Italian design.",
+  schedule_text: "6月6日 14:00-16:00",
   entry_notes: null,
   status: "published",
   published_at: "2026-05-28T08:00:00.000Z",
@@ -88,6 +89,7 @@ describe("public event helpers", () => {
       registrationUrl: "https://example.com/register",
       sourceUrl: "https://mp.weixin.qq.com/s/example",
       summary: "A weekend programme about Italian design.",
+      scheduleText: "6月6日 14:00-16:00",
       entryNotes: undefined,
       status: "published",
     });

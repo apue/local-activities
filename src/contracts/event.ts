@@ -19,7 +19,7 @@ export const canonicalEventSchema = z
   .object({
     id: z.string().min(1),
     title: z.string().min(1),
-    organizer: z.string().min(1),
+    organizer: z.string().min(1).optional(),
     startsAt: z.string().datetime({ offset: true }),
     endsAt: z.string().datetime({ offset: true }).optional(),
     timezone: z.literal("Asia/Shanghai"),
@@ -30,6 +30,7 @@ export const canonicalEventSchema = z
     registrationAction: z.string().min(1).optional(),
     registrationUrl: z.string().url().optional(),
     sourceUrl: z.string().url(),
+    scheduleText: z.string().min(1).max(1_000).optional(),
     summary: z.string().min(1).max(4_000).optional(),
     entryNotes: z.string().min(1).max(4_000).optional(),
     status: publicEventStatusSchema,

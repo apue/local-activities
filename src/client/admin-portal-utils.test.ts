@@ -23,6 +23,18 @@ describe("admin portal utils", () => {
     expect(getDraftBlockingReasons(draft)).toEqual([]);
   });
 
+  it("accepts venue address as the minimum venue field", () => {
+    expect(
+      isDraftPublishableForDisplay({
+        ...draft,
+        organizer: undefined,
+        venueName: undefined,
+        venueAddress: "北京市朝阳区朝阳公园",
+        reservationStatus: undefined,
+      }),
+    ).toBe(true);
+  });
+
   it("explains missing publish fields", () => {
     expect(
       getDraftBlockingReasons({
@@ -30,6 +42,7 @@ describe("admin portal utils", () => {
         title: undefined,
         startsAt: undefined,
         venueName: undefined,
+        venueAddress: undefined,
       }),
     ).toEqual(["missing_title", "missing_start_time", "missing_venue"]);
   });

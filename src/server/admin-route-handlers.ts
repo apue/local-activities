@@ -39,7 +39,7 @@ export type SandboxJobStarter = (
 
 const createCollectorJobSchema = z
   .object({
-    seedUrl: z.string().url(),
+    seedUrl: z.string().min(1),
     preferredRunner: z
       .enum(["vercel_sandbox", "local_collector"])
       .optional(),

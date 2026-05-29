@@ -4,13 +4,13 @@ This document records the intended MVP stack for future implementation PRs. It i
 
 ## Product Slice
 
-The app remains a mobile-first guide to official cultural activities in Beijing. The end-to-end user experience should stay simple:
+The app remains a mobile-first guide to admin-curated activities in Beijing. The end-to-end user experience should stay simple:
 
-1. A collector finds official event announcements.
+1. An admin submits a public activity URL or shared text.
 2. The backend validates and normalizes candidate events.
-3. Admin review resolves uncertain extraction, duplicates, and updates.
+3. Parsed drafts auto-publish when the minimum public fields are present; review remains for failures, duplicates, and future updates.
 4. Public users browse actionable upcoming events, usually for weekend planning.
-5. Event detail pages expose official source links, map actions, and calendar actions.
+5. Event detail pages expose source links, map actions, and calendar actions.
 
 ## User-Facing Experience
 
@@ -37,7 +37,7 @@ An event detail page should prioritize:
 - Time and date
 - Venue name and address
 - Reservation status and deadline
-- Official source link
+- Source link
 - Reservation/action link
 - Registration QR code section when QR is the action mechanism
 - Map open button

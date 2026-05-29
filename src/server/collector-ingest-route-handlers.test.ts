@@ -260,4 +260,42 @@ describe("collector ingest route handlers", () => {
       publishedEventId: "event-1",
     });
   });
+
+  it("auto-publishes by default for admin-curated complete drafts", async () => {
+    class PublishingStore extends RouteIngestStore {
+      async publishEventDraft() {
+        return { id: "event-1" };
+      }
+    }
+
+    const response = await handleEventDraftIngest(
+      post({
+        ...envelopeBase,
+        payload: {
+          articleUrl: "https://mp.weixin.qq.com/s/example",
+          extractionAttemptId: "attempt-001",
+          captureMode: "text_complete",
+          title: "Thai Festival Beijing 2026",
+          startsAt: "2026-05-30T02:30:00.000Z",
+          timezone: "Asia/Shanghai",
+          venueAddress: "北京市朝阳区朝阳公园",
+          city: "Beijing",
+          signals: [],
+          evidenceAssetIds: [],
+          fieldEvidence: {},
+          confidence: 0.51,
+        },
+      }),
+      new PublishingStore(),
+      { COLLECTOR_API_KEY: "collector-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      reviewState: "approved",
+      autoPublished: true,
+      publishedEventId: "event-1",
+    });
+  });
 });

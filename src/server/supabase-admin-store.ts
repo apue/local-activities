@@ -56,6 +56,7 @@ type EventDraftRow = {
   reservation_status: "required" | "not_required" | "unknown" | null;
   registration_action: string | null;
   registration_url: string | null;
+  schedule_text: string | null;
   summary: string | null;
   entry_notes: string | null;
   confidence: number;
@@ -175,17 +176,18 @@ class SupabaseAdminStore implements AdminStore {
         .insert({
           event_id: eventId,
           title: input.draft.title,
-          organizer: input.draft.organizer,
+          organizer: input.draft.organizer ?? null,
           starts_at: input.draft.startsAt,
           ends_at: input.draft.endsAt ?? null,
           timezone: input.draft.timezone,
           city: input.draft.city,
-          venue_name: input.draft.venueName,
+          venue_name: input.draft.venueName ?? null,
           venue_address: input.draft.venueAddress ?? null,
-          reservation_status: input.draft.reservationStatus,
+          reservation_status: input.draft.reservationStatus ?? "unknown",
           registration_action: input.draft.registrationAction ?? null,
           registration_url: input.draft.registrationUrl ?? null,
           source_url: input.draft.articleUrl,
+          schedule_text: input.draft.scheduleText ?? null,
           summary: input.draft.summary ?? null,
           entry_notes: input.draft.entryNotes ?? null,
           status: "published",
@@ -275,6 +277,7 @@ function toDraftRecord(row: EventDraftRow): AdminEventDraftRecord {
     reservationStatus: row.reservation_status ?? undefined,
     registrationAction: row.registration_action ?? undefined,
     registrationUrl: row.registration_url ?? undefined,
+    scheduleText: row.schedule_text ?? undefined,
     summary: row.summary ?? undefined,
     entryNotes: row.entry_notes ?? undefined,
     confidence: row.confidence,

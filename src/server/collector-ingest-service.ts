@@ -136,7 +136,7 @@ export function createStableCollectorObjectId(prefix: string, parts: string[]) {
 }
 
 export function computeDraftReviewState(payload: EventDraftUpload) {
-  if (!payload.title || !payload.startsAt || !payload.venueName) {
+  if (!hasMinimumPublishFields(payload)) {
     return "needs_info" as const;
   }
 
@@ -159,8 +159,7 @@ export function computeDraftBackendRouting(
   const reviewState = computeDraftReviewState(payload);
   if (
     !policy.autoPublishEnabled ||
-    reviewState !== "ready_for_review" ||
-    payload.confidence < (policy.autoPublishConfidenceThreshold ?? 0.95) ||
+    !hasMinimumPublishFields(payload) ||
     hasBlockingSignal(payload)
   ) {
     return {
@@ -177,13 +176,15 @@ export function computeDraftBackendRouting(
 
 function hasBlockingSignal(payload: EventDraftUpload) {
   return payload.signals.some((signal) =>
-    [
-      "missing_required_public_field",
-      "secondary_mention",
-      "possible_duplicate",
-      "image_dominant",
-      "qr_registration",
-      "registration_evidence_required",
-    ].includes(signal),
+    ["missing_required_public_field"].includes(signal),
+  );
+}
+
+function hasMinimumPublishFields(payload: EventDraftUpload) {
+  return Boolean(
+    payload.title &&
+      payload.startsAt &&
+      payload.articleUrl &&
+      (payload.venueName || payload.venueAddress),
   );
 }

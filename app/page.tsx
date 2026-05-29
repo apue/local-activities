@@ -16,11 +16,10 @@ export default async function HomePage() {
       <div className={styles.shell}>
         <section className={styles.hero}>
           <div>
-            <p className={styles.eyebrow}>Beijing official culture calendar</p>
+            <p className={styles.eyebrow}>Beijing activity calendar</p>
             <h1>Local Activities</h1>
             <p>
-              Embassy, cultural-center, and official international-organization
-              activities worth planning for the coming days.
+              Admin-curated activities worth planning for the coming days.
             </p>
           </div>
         </section>
@@ -33,14 +32,14 @@ export default async function HomePage() {
               href={`/events/${event.eventId}`}
             >
               <div className={styles.dateBlock}>
-                {formatPublicEventTime(event)}
+                {event.scheduleText ?? formatPublicEventTime(event)}
               </div>
               <div>
                 <h2>{event.title}</h2>
-                <p>{event.summary ?? event.organizer}</p>
+                <p>{event.summary ?? event.organizer ?? event.sourceUrl}</p>
                 <div className={styles.meta}>
-                  <span>{event.organizer}</span>
-                  <span>{event.venueName ?? "Venue TBA"}</span>
+                  <span>{event.organizer ?? "Organizer TBA"}</span>
+                  <span>{event.venueName ?? event.venueAddress ?? "Venue TBA"}</span>
                 </div>
               </div>
               <span className={styles.statusPill}>

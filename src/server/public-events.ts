@@ -24,7 +24,7 @@ type PublicEventsClient = {
 export type CanonicalEventRow = {
   event_id: string;
   title: string;
-  organizer: string;
+  organizer: string | null;
   starts_at: string;
   ends_at: string | null;
   timezone: "Asia/Shanghai";
@@ -36,6 +36,7 @@ export type CanonicalEventRow = {
   registration_url: string | null;
   source_url: string;
   summary: string | null;
+  schedule_text: string | null;
   entry_notes: string | null;
   status: "draft" | "published" | "cancelled" | "withdrawn";
   published_at: string | null;
@@ -44,7 +45,7 @@ export type CanonicalEventRow = {
 export type PublicEvent = {
   eventId: string;
   title: string;
-  organizer: string;
+  organizer?: string;
   startsAt: string;
   endsAt?: string;
   timezone: "Asia/Shanghai";
@@ -56,6 +57,7 @@ export type PublicEvent = {
   registrationUrl?: string;
   sourceUrl: string;
   summary?: string;
+  scheduleText?: string;
   entryNotes?: string;
   status: "published";
 };
@@ -75,6 +77,7 @@ const publicEventColumns = [
   "registration_url",
   "source_url",
   "summary",
+  "schedule_text",
   "entry_notes",
   "status",
   "published_at",
@@ -145,7 +148,7 @@ export function shapePublicEvent(row: CanonicalEventRow): PublicEvent {
   return {
     eventId: row.event_id,
     title: row.title,
-    organizer: row.organizer,
+    organizer: row.organizer ?? undefined,
     startsAt: row.starts_at,
     endsAt: row.ends_at ?? undefined,
     timezone: row.timezone,
@@ -157,6 +160,7 @@ export function shapePublicEvent(row: CanonicalEventRow): PublicEvent {
     registrationUrl: row.registration_url ?? undefined,
     sourceUrl: row.source_url,
     summary: row.summary ?? undefined,
+    scheduleText: row.schedule_text ?? undefined,
     entryNotes: row.entry_notes ?? undefined,
     status: "published",
   };

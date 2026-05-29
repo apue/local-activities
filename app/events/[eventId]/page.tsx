@@ -24,7 +24,7 @@ export default async function EventDetailPage({
         </Link>
 
         <section className={styles.detailHero}>
-          <p className={styles.eyebrow}>{event.organizer}</p>
+          <p className={styles.eyebrow}>{event.organizer ?? "Organizer TBA"}</p>
           <h1>{event.title}</h1>
         </section>
 
@@ -48,11 +48,11 @@ export default async function EventDetailPage({
             <h2>Plan</h2>
             <div className={styles.field}>
               <span>Time</span>
-              <strong>{formatPublicEventTime(event)}</strong>
+              <strong>{event.scheduleText ?? formatPublicEventTime(event)}</strong>
             </div>
             <div className={styles.field}>
               <span>Venue</span>
-              <strong>{event.venueName ?? "Venue TBA"}</strong>
+              <strong>{event.venueName ?? event.venueAddress ?? "Venue TBA"}</strong>
               {event.venueAddress ? <small>{event.venueAddress}</small> : null}
             </div>
             <div className={styles.field}>
