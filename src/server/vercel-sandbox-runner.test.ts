@@ -25,9 +25,10 @@ describe("vercel sandbox runner", () => {
     const payload = buildSandboxAgentRunnerPayload({
       job,
       appBaseUrl: "https://local-activities.example",
-      agentBaseUrl: "https://agent.example/v1",
-      agentApiKey: "sandbox-agent-key",
-      agentModel: "agent-model",
+      agentProvider: "openai",
+      openaiApiKey: "openai-secret",
+      openaiModel: "gpt-5-mini",
+      openaiBaseUrl: "https://api.openai.com/v1",
       collectorId: "sandbox-job-1",
       scopedIngestToken: "scoped-ingest-token",
       scopedIngestTokenExpiresAt: "2026-05-28T08:20:00.000Z",
@@ -51,10 +52,10 @@ describe("vercel sandbox runner", () => {
         token: "scoped-ingest-token",
         tokenExpiresAt: "2026-05-28T08:20:00.000Z",
       },
-      agent: {
-        baseUrl: "https://agent.example/v1",
-        token: "sandbox-agent-key",
-        model: "agent-model",
+      provider: {
+        name: "openai",
+        openaiBaseUrl: "https://api.openai.com/v1",
+        openaiModel: "gpt-5-mini",
       },
     });
 
@@ -75,15 +76,17 @@ describe("vercel sandbox runner", () => {
       COLLECTOR_ID: "sandbox-job-1",
       COLLECTOR_API_KEY: "scoped-ingest-token",
       COLLECTOR_JOB_ID: "job-1",
-      AGENT_API_BASE_URL: "https://agent.example/v1",
-      AGENT_API_KEY: "sandbox-agent-key",
-      AGENT_MODEL: "agent-model",
+      AGENT_PROVIDER: "openai",
+      OPENAI_API_KEY: "openai-secret",
+      OPENAI_MODEL: "gpt-5-mini",
+      OPENAI_BASE_URL: "https://api.openai.com/v1",
       COLLECTOR_REPOSITORY_URL: "https://github.com/apue/local-activities.git",
       COLLECTOR_GIT_REF: "abc123",
     });
     expect(command.command).toBe("bash");
     expect(command.args.join(" ")).toContain("git clone");
     expect(command.args.join(" ")).toContain("pnpm install");
+    expect(command.args.join(" ")).toContain("pnpm exec playwright install chromium");
     expect(JSON.stringify(command)).not.toContain(
       "long-lived-collector-secret",
     );
@@ -159,9 +162,10 @@ function buildPayload() {
   return buildSandboxAgentRunnerPayload({
     job,
     appBaseUrl: "https://local-activities.example",
-    agentBaseUrl: "https://agent.example/v1",
-    agentApiKey: "sandbox-agent-key",
-    agentModel: "agent-model",
+    agentProvider: "openai",
+    openaiApiKey: "openai-secret",
+    openaiModel: "gpt-5-mini",
+    openaiBaseUrl: "https://api.openai.com/v1",
     repositoryUrl: "https://github.com/apue/local-activities.git",
     gitRef: "abc123",
     collectorId: "sandbox-job-1",

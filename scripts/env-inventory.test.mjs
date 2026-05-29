@@ -31,11 +31,12 @@ describe("env inventory", () => {
       COLLECTOR_API_KEY: "replace-with-random-collector-api-key",
       COLLECTOR_ID: "home-192-168-0-16",
       COLLECTOR_INTERVAL_HOURS: "4",
-      AGENT_API_BASE_URL: "https://agent.example/v1",
-      AGENT_API_KEY: "sk-real-secret",
+      AGENT_PROVIDER: "openai",
+      OPENAI_API_KEY: "sk-real-secret",
+      OPENAI_MODEL: "gpt-5-mini",
     });
 
-    expect(result.present).toContain("AGENT_API_KEY");
+    expect(result.present).toContain("OPENAI_API_KEY");
     expect(result.placeholders).toContain("COLLECTOR_API_KEY");
     expect(result.missing).not.toContain("COLLECTOR_API_KEY");
     expect(result.ok).toBe(false);
@@ -71,8 +72,9 @@ describe("env inventory", () => {
       COLLECTOR_API_KEY: "collector-secret",
       COLLECTOR_SCOPED_TOKEN_SECRET: "scoped-secret",
       INTERNAL_API_SECRET: "internal-secret",
-      AGENT_API_BASE_URL: "https://agent.example/v1",
-      AGENT_API_KEY: "agent-secret",
+      AGENT_PROVIDER: "openai",
+      OPENAI_API_KEY: "openai-secret",
+      OPENAI_MODEL: "gpt-5-mini",
       NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_value",
       SUPABASE_SECRET_KEY: "sb_secret_value",
@@ -82,7 +84,6 @@ describe("env inventory", () => {
       VERCEL_WEB_ANALYTICS_ENABLED: "true",
       VERCEL_SPEED_INSIGHTS_ENABLED: "true",
       VERCEL_SANDBOX_ENABLED: "true",
-      VERCEL_SANDBOX_API_KEY: "sandbox-api-key",
     });
 
     expect(result.ok).toBe(true);

@@ -338,36 +338,38 @@ describe("local collector console runtime", () => {
     const calls = [];
     const fetchImpl = async (url, init) => {
       calls.push({ url, init, body: JSON.parse(init.body) });
-      if (url === "https://agent.example/v1/extract") {
+      if (url === "https://api.openai.com/v1/responses") {
         return jsonResponse({
-          status: "success",
-          disposition: "ready_for_review",
-          confidence: 0.9,
-          articleSnapshot: {
-            canonicalUrl: "https://mp.weixin.qq.com/s/text",
-            finalUrl: "https://mp.weixin.qq.com/s/text",
-            capturedAt: "2026-05-28T10:00:00.000Z",
-            languageHints: ["zh-CN"],
-            captureMode: "text_complete",
-            evidenceAssetIds: [],
-            contentHash: "hash-agent",
-          },
-          eventDraft: {
-            articleUrl: "https://mp.weixin.qq.com/s/text",
-            extractionAttemptId: "agent-runtime-agent",
+          output_text: JSON.stringify({
+            status: "success",
             disposition: "ready_for_review",
-            captureMode: "text_complete",
-            title: "Agent Runtime Event",
-            organizer: "Official Cultural Center",
-            startsAt: "2026-06-06T06:00:00.000Z",
-            timezone: "Asia/Shanghai",
-            city: "Beijing",
-            reservationStatus: "unknown",
-            signals: ["ready_for_review"],
-            evidenceAssetIds: [],
-            fieldEvidence: { title: ["visibleText"] },
             confidence: 0.9,
-          },
+            articleSnapshot: {
+              canonicalUrl: "https://mp.weixin.qq.com/s/text",
+              finalUrl: "https://mp.weixin.qq.com/s/text",
+              capturedAt: "2026-05-28T10:00:00.000Z",
+              languageHints: ["zh-CN"],
+              captureMode: "text_complete",
+              evidenceAssetIds: [],
+              contentHash: "hash-agent",
+            },
+            eventDraft: {
+              articleUrl: "https://mp.weixin.qq.com/s/text",
+              extractionAttemptId: "agent-runtime-agent",
+              disposition: "ready_for_review",
+              captureMode: "text_complete",
+              title: "Agent Runtime Event",
+              organizer: "Official Cultural Center",
+              startsAt: "2026-06-06T06:00:00.000Z",
+              timezone: "Asia/Shanghai",
+              city: "Beijing",
+              reservationStatus: "unknown",
+              signals: ["ready_for_review"],
+              evidenceAssetIds: [],
+              fieldEvidence: { title: ["visibleText"] },
+              confidence: 0.9,
+            },
+          }),
         });
       }
       return jsonResponse({ ok: true, id: `id-${calls.length}` });
@@ -379,20 +381,31 @@ describe("local collector console runtime", () => {
         COLLECTOR_ID: "home-1",
         COLLECTOR_API_KEY: "collector-secret",
         LOCAL_COLLECTOR_PROCESSOR: "agent",
-        AGENT_API_BASE_URL: "https://agent.example/v1",
-        AGENT_API_KEY: "agent-secret",
-        AGENT_MODEL: "agent-model",
+        AGENT_PROVIDER: "openai",
+        OPENAI_API_KEY: "openai-secret",
+        OPENAI_MODEL: "gpt-5-mini",
+        OPENAI_BASE_URL: "https://api.openai.com/v1",
       }),
     });
     runtime.config.fetchImpl = fetchImpl;
+    runtime.config.browserObserver = async () => ({
+      canonicalUrl: "https://mp.weixin.qq.com/s/text",
+      finalUrl: "https://mp.weixin.qq.com/s/text",
+      title: "Agent Runtime Event",
+      authorName: "Official Cultural Center",
+      capturedAt: "2026-05-28T10:00:00.000Z",
+      visibleText: "Agent Runtime Event",
+      languageHints: ["zh-CN"],
+    });
     runtime.config.env = {
       ...runtime.config.env,
       COLLECTOR_BASE_URL: "https://local-activities.example",
       COLLECTOR_ID: "home-1",
       COLLECTOR_API_KEY: "collector-secret",
-      AGENT_API_BASE_URL: "https://agent.example/v1",
-      AGENT_API_KEY: "agent-secret",
-      AGENT_MODEL: "agent-model",
+      AGENT_PROVIDER: "openai",
+      OPENAI_API_KEY: "openai-secret",
+      OPENAI_MODEL: "gpt-5-mini",
+      OPENAI_BASE_URL: "https://api.openai.com/v1",
     };
 
     const result = await processNextRun({
@@ -403,19 +416,21 @@ describe("local collector console runtime", () => {
     expect(result).toMatchObject({
       state: "uploaded",
       uploadedIds: {
-        sourceRunId: "id-2",
-        articleSnapshotId: "id-3",
-        eventDraftId: "id-4",
+        sourceId: "id-2",
+        sourceRunId: "id-3",
+        articleSnapshotId: "id-4",
+        eventDraftId: "id-5",
       },
     });
     expect(calls.map((call) => call.url)).toEqual([
-      "https://agent.example/v1/extract",
+      "https://api.openai.com/v1/responses",
+      "https://local-activities.example/api/collector/source",
       "https://local-activities.example/api/collector/source-run",
       "https://local-activities.example/api/collector/article-snapshot",
       "https://local-activities.example/api/collector/event-draft",
     ]);
     expect(JSON.stringify(calls.map((call) => call.body))).not.toContain(
-      "agent-secret",
+      "openai-secret",
     );
   });
 
@@ -787,7 +802,7 @@ describe("local collector console runtime", () => {
     expect(help).toContain("pnpm collector:console");
     expect(help).toContain("LOCAL_COLLECTOR_PROCESSOR=fixture");
     expect(help).toContain("LOCAL_COLLECTOR_PROCESSOR=agent");
-    expect(help).toContain("AGENT_API_BASE_URL");
+    expect(help).toContain("OPENAI_API_KEY");
     expect(help).toContain("COLLECTOR_POLLING_ENABLED");
     expect(help).toContain("COLLECTOR_POLL_INTERVAL_SECONDS");
     expect(help).toContain("COLLECTOR_CAPABILITIES");

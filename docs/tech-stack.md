@@ -251,10 +251,10 @@ Environment:
 - `VERCEL_WORKFLOW_ENABLED`
 - `VERCEL_QUEUE_ENABLED`
 - `VERCEL_SANDBOX_ENABLED`
-- `VERCEL_SANDBOX_API_KEY`
 - `COLLECTOR_SCOPED_TOKEN_SECRET`
-- `AGENT_API_BASE_URL`
-- `AGENT_API_KEY`
+- `AGENT_PROVIDER`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
 
 ## Supabase
 
@@ -310,9 +310,9 @@ Environment:
 
 Do not add Sentry, Datadog, New Relic, or OpenTelemetry drains unless a later implementation issue explicitly adopts them.
 
-## Agent API Extraction
+## Provider Extraction
 
-Use a collector-side Agent API boundary for real extraction.
+Use a collector-side provider boundary for real extraction.
 
 Planned uses:
 
@@ -324,15 +324,17 @@ Planned uses:
 
 Environment:
 
-- `AGENT_API_BASE_URL`
-- `AGENT_API_KEY`
-- `AGENT_MODEL`
+- `AGENT_PROVIDER`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `OPENAI_BASE_URL`
 - `AGENT_TIMEOUT_SECONDS`
 - `AGENT_MAX_ATTEMPTS`
 
-The collector sends seed URL and run context to the Agent API. It must not send
-collector, admin, Supabase, or Vercel secrets to the Agent. The Agent response is
-validated locally before upload, and Vercel validates all uploaded payloads
+The collector opens seed URLs with the repo-local browser agent, then sends page
+observation and run context to the configured provider. It must not send
+collector, admin, Supabase, or Vercel secrets to the provider. The provider
+response is validated locally before upload, and Vercel validates all uploaded payloads
 again before storage or publication routing.
 
 Persist prompt version, model name, and extraction confidence with outputs for reproducibility.

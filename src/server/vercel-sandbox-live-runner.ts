@@ -13,9 +13,10 @@ type SandboxRunnerEnv = {
   VERCEL_SANDBOX_ENABLED?: string;
   NEXT_PUBLIC_APP_URL?: string;
   COLLECTOR_SCOPED_TOKEN_SECRET?: string;
-  AGENT_API_BASE_URL?: string;
-  AGENT_API_KEY?: string;
-  AGENT_MODEL?: string;
+  AGENT_PROVIDER?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_MODEL?: string;
+  OPENAI_BASE_URL?: string;
   VERCEL_GIT_COMMIT_SHA?: string;
   VERCEL_GIT_REPO_OWNER?: string;
   VERCEL_GIT_REPO_SLUG?: string;
@@ -59,9 +60,10 @@ export function createVercelSandboxJobStarter(input: {
       payload: buildSandboxAgentRunnerPayload({
         job,
         appBaseUrl: config.value.appBaseUrl,
-        agentBaseUrl: config.value.agentBaseUrl,
-        agentApiKey: config.value.agentApiKey,
-        agentModel: config.value.agentModel,
+        agentProvider: config.value.agentProvider,
+        openaiApiKey: config.value.openaiApiKey,
+        openaiModel: config.value.openaiModel,
+        openaiBaseUrl: config.value.openaiBaseUrl,
         repositoryUrl: config.value.repositoryUrl,
         gitRef: config.value.gitRef,
         collectorId,
@@ -117,9 +119,10 @@ function readSandboxRunnerConfig(env: SandboxRunnerEnv):
       value: {
         appBaseUrl: string;
         scopedTokenSecret: string;
-        agentBaseUrl: string;
-        agentApiKey: string;
-        agentModel?: string;
+        agentProvider: "openai";
+        openaiApiKey: string;
+        openaiModel: string;
+        openaiBaseUrl?: string;
         repositoryUrl: string;
         gitRef?: string;
       };
@@ -130,16 +133,21 @@ function readSandboxRunnerConfig(env: SandboxRunnerEnv):
     } {
   const appBaseUrl = readRequiredEnv(env.NEXT_PUBLIC_APP_URL);
   const scopedTokenSecret = readRequiredEnv(env.COLLECTOR_SCOPED_TOKEN_SECRET);
-  const agentBaseUrl = readRequiredEnv(env.AGENT_API_BASE_URL);
-  const agentApiKey = readRequiredEnv(env.AGENT_API_KEY);
+  const agentProvider = readRequiredEnv(env.AGENT_PROVIDER);
+  const openaiApiKey = readRequiredEnv(env.OPENAI_API_KEY);
+  const openaiModel = readRequiredEnv(env.OPENAI_MODEL);
   const missing = [
     appBaseUrl ? undefined : "NEXT_PUBLIC_APP_URL",
     scopedTokenSecret ? undefined : "COLLECTOR_SCOPED_TOKEN_SECRET",
-    agentBaseUrl ? undefined : "AGENT_API_BASE_URL",
-    agentApiKey ? undefined : "AGENT_API_KEY",
+    agentProvider ? undefined : "AGENT_PROVIDER",
+    openaiApiKey ? undefined : "OPENAI_API_KEY",
+    openaiModel ? undefined : "OPENAI_MODEL",
   ].filter((key): key is string => Boolean(key));
-  if (!appBaseUrl || !scopedTokenSecret || !agentBaseUrl || !agentApiKey) {
+  if (!appBaseUrl || !scopedTokenSecret || !agentProvider || !openaiApiKey || !openaiModel) {
     return { ok: false, missing };
+  }
+  if (agentProvider !== "openai") {
+    return { ok: false, missing: ["AGENT_PROVIDER"] };
   }
 
   return {
@@ -147,9 +155,10 @@ function readSandboxRunnerConfig(env: SandboxRunnerEnv):
     value: {
       appBaseUrl,
       scopedTokenSecret,
-      agentBaseUrl,
-      agentApiKey,
-      agentModel: env.AGENT_MODEL?.trim() || undefined,
+      agentProvider,
+      openaiApiKey,
+      openaiModel,
+      openaiBaseUrl: env.OPENAI_BASE_URL?.trim() || undefined,
       repositoryUrl: buildRepositoryUrl(env),
       gitRef: env.VERCEL_GIT_COMMIT_SHA?.trim() || undefined,
     },

@@ -3,12 +3,16 @@ import { describe, expect, it } from "vitest";
 import { runCollectorAgent } from "./collector-agent-processor.mjs";
 
 describe("collector agent processor", () => {
-  it("calls the Agent API and uploads validated normalized payloads", async () => {
+  it("observes the page, calls OpenAI, and uploads validated normalized payloads", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {
-      calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
-      if (url === "https://agent.example/v1/extract") {
-        return jsonResponse(agentSuccessResponse());
+      calls.push({
+        url,
+        headers: init.headers ?? {},
+        body: init.body ? JSON.parse(init.body) : {},
+      });
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(openaiResponse(agentSuccessResponse()));
       }
       return jsonResponse({ ok: true, id: `id-${calls.length}` });
     };
@@ -19,49 +23,104 @@ describe("collector agent processor", () => {
       runId: "agent-run",
       vercelJobId: "job-1",
       fetchImpl,
+      browserObserver: async () => pageObservation(),
       now: new Date("2026-05-28T10:00:00.000Z"),
     });
 
     expect(calls[0]).toMatchObject({
-      url: "https://agent.example/v1/extract",
+      url: "https://api.openai.com/v1/responses",
+      headers: {
+        authorization: "Bearer openai-secret",
+      },
       body: {
-        seedUrl: "https://mp.weixin.qq.com/s/agent",
-        runId: "agent-run",
-        collectorId: "home-1",
-        vercelJobId: "job-1",
-        model: "agent-model",
+        model: "gpt-5-mini",
       },
     });
+    expect(JSON.stringify(calls[0].body)).toContain("Agent Event");
+    expect(JSON.stringify(calls[0].body)).toContain("意大利驻华使馆文化处");
     expect(result.uploadedIds).toEqual({
-      sourceRunId: "id-2",
-      evidenceAssetIds: ["id-3"],
-      articleSnapshotId: "id-4",
-      eventDraftId: "id-5",
+      sourceId: "id-2",
+      sourceRunId: "id-3",
+      evidenceAssetIds: ["id-4"],
+      articleSnapshotId: "id-5",
+      eventDraftId: "id-6",
     });
     expect(calls.map((call) => call.url)).toEqual([
-      "https://agent.example/v1/extract",
+      "https://api.openai.com/v1/responses",
+      "https://local-activities.example/api/collector/source",
       "https://local-activities.example/api/collector/source-run",
       "https://local-activities.example/api/collector/evidence-asset",
       "https://local-activities.example/api/collector/article-snapshot",
       "https://local-activities.example/api/collector/event-draft",
+      "https://local-activities.example/api/collector/jobs/job-1/report",
     ]);
+    expect(calls[6].body).toMatchObject({
+      collectorId: "home-1",
+      localRunId: "agent-run",
+      status: "completed",
+      sourceRunId: "id-3",
+      eventDraftIds: ["id-6"],
+      suggestedDisposition: "ready_for_review",
+    });
     expect(JSON.stringify(calls.map((call) => call.body))).not.toContain(
-      "agent-secret",
+      "openai-secret",
     );
     expect(JSON.stringify(calls.map((call) => call.body))).not.toContain(
       "collector-secret",
     );
   });
 
-  it("retries invalid Agent responses before uploading a valid response", async () => {
+  it("runs a browser-only smoke path without OpenAI credentials", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {
       calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
-      if (url === "https://agent.example/v1/extract" && calls.length === 1) {
-        return jsonResponse({ status: "success" });
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorAgent({
+      env: {
+        COLLECTOR_BASE_URL: "https://local-activities.example",
+        COLLECTOR_API_KEY: "collector-secret",
+        COLLECTOR_ID: "sandbox-job-1",
+        COLLECTOR_BROWSER_SMOKE_ONLY: "true",
+      },
+      seedUrl: "https://mp.weixin.qq.com/s/browser-smoke",
+      runId: "browser-smoke-run",
+      fetchImpl,
+      browserObserver: async () =>
+        pageObservation({
+          finalUrl: "https://mp.weixin.qq.com/s/browser-smoke",
+          canonicalUrl: "https://mp.weixin.qq.com/s/browser-smoke",
+        }),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://local-activities.example/api/collector/source",
+      "https://local-activities.example/api/collector/source-run",
+      "https://local-activities.example/api/collector/article-snapshot",
+    ]);
+    expect(result.uploadedIds).toEqual({
+      sourceId: "id-1",
+      sourceRunId: "id-2",
+      articleSnapshotId: "id-3",
+    });
+    expect(calls[1].body.payload).toMatchObject({
+      status: "partial",
+      draftCount: 0,
+      failureCount: 0,
+    });
+  });
+
+  it("retries invalid OpenAI responses before uploading a valid response", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
+      if (url === "https://api.openai.com/v1/responses" && calls.length === 1) {
+        return jsonResponse(openaiResponse({ status: "success" }));
       }
-      if (url === "https://agent.example/v1/extract") {
-        return jsonResponse(agentSuccessResponse());
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(openaiResponse(agentSuccessResponse()));
       }
       return jsonResponse({ ok: true, id: `id-${calls.length}` });
     };
@@ -71,19 +130,20 @@ describe("collector agent processor", () => {
       seedUrl: "https://mp.weixin.qq.com/s/retry",
       runId: "agent-retry",
       fetchImpl,
+      browserObserver: async () => pageObservation(),
       now: new Date("2026-05-28T10:00:00.000Z"),
     });
 
-    expect(calls.filter((call) => call.url.endsWith("/extract"))).toHaveLength(2);
-    expect(result.uploadedIds.eventDraftId).toBe("id-6");
+    expect(calls.filter((call) => call.url.endsWith("/responses"))).toHaveLength(2);
+    expect(result.uploadedIds.eventDraftId).toBe("id-7");
   });
 
-  it("uploads a structured failure after Agent schema retry exhaustion", async () => {
+  it("uploads a structured failure after OpenAI schema retry exhaustion", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {
       calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
-      if (url === "https://agent.example/v1/extract") {
-        return jsonResponse({ status: "success" });
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(openaiResponse({ status: "success" }));
       }
       return jsonResponse({ ok: true, id: `id-${calls.length}` });
     };
@@ -96,15 +156,17 @@ describe("collector agent processor", () => {
       seedUrl: "https://mp.weixin.qq.com/s/bad",
       runId: "agent-bad",
       fetchImpl,
+      browserObserver: async () => pageObservation(),
       now: new Date("2026-05-28T10:00:00.000Z"),
     });
 
-    expect(calls.filter((call) => call.url.endsWith("/extract"))).toHaveLength(2);
+    expect(calls.filter((call) => call.url.endsWith("/responses"))).toHaveLength(2);
     expect(result.uploadedIds).toEqual({
-      sourceRunId: "id-3",
-      failureId: "id-4",
+      sourceId: "id-3",
+      sourceRunId: "id-4",
+      failureId: "id-5",
     });
-    expect(calls[3].body.payload).toMatchObject({
+    expect(calls[4].body.payload).toMatchObject({
       articleUrl: "https://mp.weixin.qq.com/s/bad",
       stage: "agent_extraction",
       reason: "agent_response_invalid_schema",
@@ -112,12 +174,12 @@ describe("collector agent processor", () => {
     });
   });
 
-  it("uploads Agent-reported structured failures without retrying non-retryable responses", async () => {
+  it("uploads model-reported structured failures without retrying non-retryable responses", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {
       calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
-      if (url === "https://agent.example/v1/extract") {
-        return jsonResponse({
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(openaiResponse({
           status: "failure",
           failure: {
             stage: "agent_extraction",
@@ -125,7 +187,7 @@ describe("collector agent processor", () => {
             message: "Captcha required by source page.",
             retryable: false,
           },
-        });
+        }));
       }
       return jsonResponse({ ok: true, id: `id-${calls.length}` });
     };
@@ -135,15 +197,17 @@ describe("collector agent processor", () => {
       seedUrl: "https://mp.weixin.qq.com/s/captcha",
       runId: "agent-captcha",
       fetchImpl,
+      browserObserver: async () => pageObservation(),
       now: new Date("2026-05-28T10:00:00.000Z"),
     });
 
-    expect(calls.filter((call) => call.url.endsWith("/extract"))).toHaveLength(1);
+    expect(calls.filter((call) => call.url.endsWith("/responses"))).toHaveLength(1);
     expect(result.uploadedIds).toEqual({
-      sourceRunId: "id-2",
-      failureId: "id-3",
+      sourceId: "id-2",
+      sourceRunId: "id-3",
+      failureId: "id-4",
     });
-    expect(calls[2].body.payload).toMatchObject({
+    expect(calls[3].body.payload).toMatchObject({
       reason: "captcha_required",
       retryable: false,
     });
@@ -155,9 +219,41 @@ function agentEnv() {
     COLLECTOR_BASE_URL: "https://local-activities.example",
     COLLECTOR_API_KEY: "collector-secret",
     COLLECTOR_ID: "home-1",
-    AGENT_API_BASE_URL: "https://agent.example/v1",
-    AGENT_API_KEY: "agent-secret",
-    AGENT_MODEL: "agent-model",
+    AGENT_PROVIDER: "openai",
+    OPENAI_API_KEY: "openai-secret",
+    OPENAI_MODEL: "gpt-5-mini",
+    OPENAI_BASE_URL: "https://api.openai.com/v1",
+  };
+}
+
+function pageObservation(overrides = {}) {
+  return {
+    canonicalUrl: "https://mp.weixin.qq.com/s/agent",
+    finalUrl: "https://mp.weixin.qq.com/s/agent",
+    title: "Agent Event",
+    authorName: "意大利驻华使馆文化处",
+    publishedAt: "2026-05-27T08:00:00.000Z",
+    capturedAt: "2026-05-28T10:00:00.000Z",
+    visibleText: "Agent Event\\n2026-06-06\\nCultural Center Hall",
+    languageHints: ["zh-CN"],
+    imageCandidates: [
+      {
+        url: "https://example.org/poster.png",
+        width: 800,
+        height: 1200,
+      },
+    ],
+    sourceCandidate: {
+      sourceKey: "wechat:italian-cultural-institute-beijing",
+      name: "意大利驻华使馆文化处",
+      seedUrl: "https://mp.weixin.qq.com/s/agent",
+      platform: "wechat_official_account",
+      confidence: 0.82,
+      diagnostics: [
+        { key: "source_name_evidence", value: "article author name" },
+      ],
+    },
+    ...overrides,
   };
 }
 
@@ -206,6 +302,12 @@ function agentSuccessResponse() {
       },
       confidence: 0.93,
     },
+  };
+}
+
+function openaiResponse(payload) {
+  return {
+    output_text: JSON.stringify(payload),
   };
 }
 

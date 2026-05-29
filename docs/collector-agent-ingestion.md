@@ -37,8 +37,8 @@ Example pattern:
 
 Agent/collector behavior:
 
-- Agent API analyzes the source page and returns structured event fields.
-- Collector stores a bounded article snapshot returned by the Agent.
+- The browser agent observes the source page and the provider returns structured event fields.
+- Collector stores a bounded article snapshot returned by the browser agent.
 - Collector uploads cover or important images as optional evidence when returned.
 - Collector validates the Agent response before uploading event drafts.
 
@@ -427,16 +427,17 @@ Build a local collector command that can process a seed URL and emit normalized 
 Expected output:
 
 - local CLI or script entry point
-- Agent API configuration through collector-machine `AGENT_*` variables
+- provider configuration through collector-machine `AGENT_PROVIDER`,
+  `OPENAI_API_KEY`, and `OPENAI_MODEL` variables
 - run report upload
 - fixture mode for deterministic smoke data
 
-### Slice 5: Agent API Adapter
+### Slice 5: Provider Adapter
 
-Implement a collector-side Agent API adapter:
+Implement a collector-side provider adapter:
 
-- send seed URL and run context to the Agent API
-- validate structured Agent responses before upload
+- send page observation and run context to the provider
+- validate structured provider responses before upload
 - retry invalid Agent responses locally
 - upload structured `agent_response_invalid_schema` failure after retry exhaustion
 - keep collector, admin, Vercel, and Supabase secrets out of Agent requests

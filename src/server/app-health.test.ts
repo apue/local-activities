@@ -10,8 +10,9 @@ describe("checkAppHealth", () => {
       COLLECTOR_API_KEY: "collector-secret",
       COLLECTOR_SCOPED_TOKEN_SECRET: "scoped-secret",
       INTERNAL_API_SECRET: "internal-secret",
-      AGENT_API_BASE_URL: "https://agent.example/v1",
-      AGENT_API_KEY: "agent-secret",
+      AGENT_PROVIDER: "openai",
+      OPENAI_API_KEY: "openai-secret",
+      OPENAI_MODEL: "gpt-5-mini",
       NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_value",
       SUPABASE_SECRET_KEY: "sb_secret_value",
@@ -21,7 +22,6 @@ describe("checkAppHealth", () => {
       VERCEL_WEB_ANALYTICS_ENABLED: "true",
       VERCEL_SPEED_INSIGHTS_ENABLED: "true",
       VERCEL_SANDBOX_ENABLED: "true",
-      VERCEL_SANDBOX_API_KEY: "sandbox-secret",
       VERCEL_ENV: "production",
       VERCEL_GIT_COMMIT_SHA: "abc123",
       VERCEL_GIT_COMMIT_REF: "main",
@@ -39,8 +39,9 @@ describe("checkAppHealth", () => {
       env: {
         configured: expect.arrayContaining([
           "ADMIN_ACCESS_TOKEN",
-          "AGENT_API_KEY",
-          "VERCEL_SANDBOX_API_KEY",
+          "AGENT_PROVIDER",
+          "OPENAI_API_KEY",
+          "OPENAI_MODEL",
         ]),
         missing: [],
         placeholders: [],
@@ -49,8 +50,7 @@ describe("checkAppHealth", () => {
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain("admin-secret");
     expect(serialized).not.toContain("collector-secret");
-    expect(serialized).not.toContain("agent-secret");
-    expect(serialized).not.toContain("sandbox-secret");
+    expect(serialized).not.toContain("openai-secret");
     expect(serialized).not.toContain("sb_secret_value");
   });
 
@@ -70,18 +70,14 @@ describe("checkAppHealth", () => {
       VERCEL_WEB_ANALYTICS_ENABLED: "true",
       VERCEL_SPEED_INSIGHTS_ENABLED: "true",
       VERCEL_SANDBOX_ENABLED: "true",
-      VERCEL_SANDBOX_API_KEY: "replace-with-vercel-sandbox-api-key",
     });
 
     expect(result).toMatchObject({
       ok: false,
       status: 500,
       env: {
-        missing: ["AGENT_API_BASE_URL", "AGENT_API_KEY"],
-        placeholders: [
-          "NEXT_PUBLIC_APP_URL",
-          "VERCEL_SANDBOX_API_KEY",
-        ],
+        missing: ["AGENT_PROVIDER", "OPENAI_API_KEY", "OPENAI_MODEL"],
+        placeholders: ["NEXT_PUBLIC_APP_URL"],
       },
     });
   });

@@ -14,10 +14,11 @@ export type SandboxAgentRunnerPayload = {
     token: string;
     tokenExpiresAt: string;
   };
-  agent: {
-    baseUrl: string;
-    token: string;
-    model?: string;
+  provider: {
+    name: "openai";
+    openaiApiKey: string;
+    openaiModel: string;
+    openaiBaseUrl?: string;
   };
   repository: {
     url: string;
@@ -59,9 +60,10 @@ export type SandboxJobStore = {
 export function buildSandboxAgentRunnerPayload(input: {
   job: CollectorJobRecord;
   appBaseUrl: string;
-  agentBaseUrl: string;
-  agentApiKey: string;
-  agentModel?: string;
+  agentProvider: "openai";
+  openaiApiKey: string;
+  openaiModel: string;
+  openaiBaseUrl?: string;
   repositoryUrl?: string;
   gitRef?: string;
   collectorId: string;
@@ -83,10 +85,13 @@ export function buildSandboxAgentRunnerPayload(input: {
       token: input.scopedIngestToken,
       tokenExpiresAt: input.scopedIngestTokenExpiresAt,
     },
-    agent: {
-      baseUrl: normalizeBaseUrl(input.agentBaseUrl),
-      token: input.agentApiKey,
-      model: input.agentModel,
+    provider: {
+      name: input.agentProvider,
+      openaiApiKey: input.openaiApiKey,
+      openaiModel: input.openaiModel,
+      openaiBaseUrl: input.openaiBaseUrl
+        ? normalizeBaseUrl(input.openaiBaseUrl)
+        : undefined,
     },
     repository: {
       url:
@@ -114,6 +119,7 @@ await runCollectorAgent({
     'if [ -n "${COLLECTOR_GIT_REF:-}" ]; then git fetch --depth 1 origin "$COLLECTOR_GIT_REF" && git checkout FETCH_HEAD; fi',
     "corepack enable",
     "pnpm install --frozen-lockfile",
+    "pnpm exec playwright install chromium",
     `node --input-type=module -e ${shellQuote(code)}`,
   ].join("\n");
 
@@ -132,9 +138,12 @@ await runCollectorAgent({
       COLLECTOR_JOB_ID: payload.job.jobId,
       COLLECTOR_SEED_URL: payload.job.seedUrl,
       COLLECTOR_RUN_ID: `sandbox-${payload.job.jobId}-${payload.job.attemptNumber}`,
-      AGENT_API_BASE_URL: payload.agent.baseUrl,
-      AGENT_API_KEY: payload.agent.token,
-      ...(payload.agent.model ? { AGENT_MODEL: payload.agent.model } : {}),
+      AGENT_PROVIDER: payload.provider.name,
+      OPENAI_API_KEY: payload.provider.openaiApiKey,
+      OPENAI_MODEL: payload.provider.openaiModel,
+      ...(payload.provider.openaiBaseUrl
+        ? { OPENAI_BASE_URL: payload.provider.openaiBaseUrl }
+        : {}),
     },
   };
 }

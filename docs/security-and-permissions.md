@@ -64,7 +64,7 @@ Required:
 Allowed:
 
 - run bounded hosted Agent attempts for assigned collector jobs
-- call the Agent API using server-provided Agent runtime credentials
+- call the configured provider using server-side provider credentials
 - upload normalized collector payloads through Vercel collector ingest APIs
 
 Not allowed:
@@ -127,7 +127,7 @@ Server-side secrets:
 
 Collector-machine-only secrets:
 
-- `AGENT_API_KEY`
+- `OPENAI_API_KEY`
 - agent API keys or local agent credentials
 - `LOCAL_COLLECTOR_CONSOLE_TOKEN`
 

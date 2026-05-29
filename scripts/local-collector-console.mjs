@@ -457,9 +457,10 @@ Required collector environment:
   COLLECTOR_ID
 
 Agent processor environment:
-  AGENT_API_BASE_URL
-  AGENT_API_KEY
-  AGENT_MODEL is optional
+  AGENT_PROVIDER=openai
+  OPENAI_API_KEY
+  OPENAI_MODEL
+  OPENAI_BASE_URL defaults to https://api.openai.com/v1
   AGENT_TIMEOUT_SECONDS defaults to 120
   AGENT_MAX_ATTEMPTS defaults to 3
 
@@ -549,6 +550,8 @@ function createProcessor(config) {
       runCollectorAgent({
         env: config.env,
         fetchImpl: config.fetchImpl ?? fetch,
+        browserObserver: config.browserObserver,
+        reportVercelJob: false,
         seedUrl,
         runId: localRunId,
         vercelJobId,

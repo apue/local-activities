@@ -44,6 +44,18 @@ export const collectorEnvelopeSchema = <Payload extends z.ZodType>(
 
 export const sourceRunStatusSchema = z.enum(["success", "partial", "failed"]);
 
+export const sourceCandidateSchema = z
+  .object({
+    sourceKey: z.string().min(1),
+    name: z.string().min(1).optional(),
+    homepageUrl: z.string().url().optional(),
+    seedUrl: z.string().url().optional(),
+    platform: z.string().min(1),
+    confidence: z.number().min(0).max(1).optional(),
+    diagnostics: z.array(diagnosticSummarySchema).optional(),
+  })
+  .strict();
+
 export const sourceRunReportSchema = z
   .object({
     sourceId: z.string().min(1).optional(),
@@ -180,6 +192,7 @@ export const collectorFailureSchema = z
 export type CollectorEnvelope<T> = z.infer<
   ReturnType<typeof collectorEnvelopeSchema<z.ZodType<T>>>
 >;
+export type SourceCandidate = z.infer<typeof sourceCandidateSchema>;
 export type SourceRunReport = z.infer<typeof sourceRunReportSchema>;
 export type ArticleSnapshot = z.infer<typeof articleSnapshotSchema>;
 export type EvidenceAsset = z.infer<typeof evidenceAssetSchema>;

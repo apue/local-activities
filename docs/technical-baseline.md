@@ -57,7 +57,7 @@ Node.js runtime for fallback source collection.
 
 Initial implementation target:
 
-- Agent API adapter shared by Sandbox and local fallback.
+- Provider adapter shared by Sandbox and local fallback.
 - Persistent local browser/profile only on the home collector machine.
 - Four-hour schedule for tracked-source polling.
 - Upload-only integration with Vercel ingest APIs.

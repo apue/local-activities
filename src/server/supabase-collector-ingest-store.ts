@@ -6,6 +6,7 @@ import type {
   CollectorFailure,
   EventDraftUpload,
   EvidenceAsset,
+  SourceCandidate,
   SourceRunReport,
 } from "../contracts/collector";
 import {
@@ -24,6 +25,29 @@ export function getSupabaseCollectorIngestStore(
 
 class SupabaseCollectorIngestStore implements CollectorIngestStore {
   constructor(private readonly client: SupabaseClient) {}
+
+  async upsertSourceCandidate(envelope: CollectorEnvelope<SourceCandidate>) {
+    const payload = envelope.payload;
+    const row = await this.writeOne<{ id: number }>(
+      this.client
+        .from("sources")
+        .upsert(
+          {
+            source_key: payload.sourceKey,
+            name: payload.name ?? null,
+            homepage_url: payload.homepageUrl ?? null,
+            seed_url: payload.seedUrl ?? null,
+            platform: payload.platform,
+            health_status: "checking",
+          },
+          { onConflict: "source_key" },
+        )
+        .select("id")
+        .single(),
+    );
+
+    return { id: String(row.id) };
+  }
 
   async upsertSourceRun(envelope: CollectorEnvelope<SourceRunReport>) {
     const payload = envelope.payload;

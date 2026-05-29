@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { createHash } from "node:crypto";
+
 import { createCollectorHeaders } from "./collector-fixture-run.mjs";
 
 const payloadVersion = "2026-05-collector-v1";
@@ -73,19 +75,63 @@ export async function runCollectorAgent({
   runId,
   vercelJobId,
   fetchImpl = fetch,
+  browserObserver,
+  reportVercelJob = true,
   now = new Date(),
 }) {
   const config = readAgentConfig(env);
   if (!seedUrl) throw new Error("missing_seed_url");
   if (!runId) throw new Error("missing_run_id");
 
-  const response = await requestAgentWithRetries({
+  const observationResult = await observePageWithFailure({
+    seedUrl,
+    browserObserver,
+    now,
+  });
+  if (!observationResult.ok) {
+    const payloads = buildAgentFailurePayloads({
+      config,
+      seedUrl,
+      runId,
+      reason: observationResult.reason,
+      stage: observationResult.stage,
+      message: observationResult.message,
+      retryable: observationResult.retryable,
+      now,
+    });
+    return uploadAgentPayloads({
+      config,
+      fetchImpl,
+      payloads,
+      runId,
+      vercelJobId: reportVercelJob ? vercelJobId : undefined,
+    });
+  }
+
+  if (config.browserSmokeOnly) {
+    const payloads = buildBrowserSmokePayloads({
+      config,
+      seedUrl,
+      runId,
+      observation: observationResult.observation,
+      now,
+    });
+    return uploadAgentPayloads({
+      config,
+      fetchImpl,
+      payloads,
+      runId,
+      vercelJobId: reportVercelJob ? vercelJobId : undefined,
+    });
+  }
+
+  const response = await requestModelWithRetries({
     config,
     seedUrl,
     runId,
     vercelJobId,
+    observation: observationResult.observation,
     fetchImpl,
-    now,
   });
   const payloads = response.ok
     ? buildAgentSuccessPayloads({
@@ -93,12 +139,14 @@ export async function runCollectorAgent({
         seedUrl,
         runId,
         response: response.data,
+        observation: observationResult.observation,
         now,
       })
     : buildAgentFailurePayloads({
         config,
         seedUrl,
         runId,
+        sourceCandidate: observationResult.observation.sourceCandidate,
         reason: response.reason,
         stage: response.stage,
         message: response.message,
@@ -106,14 +154,94 @@ export async function runCollectorAgent({
         now,
       });
 
-  return uploadAgentPayloads({ config, fetchImpl, payloads, runId });
+  return uploadAgentPayloads({
+    config,
+    fetchImpl,
+    payloads,
+    runId,
+    vercelJobId: reportVercelJob ? vercelJobId : undefined,
+  });
 }
 
-async function requestAgentWithRetries({
+async function observePageWithFailure({ seedUrl, browserObserver, now }) {
+  try {
+    const observation = await observePage({ seedUrl, browserObserver, now });
+    return { ok: true, observation };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error?.reason ?? "fetch_blocked",
+      stage: error?.stage ?? "page_fetch",
+      message: error instanceof Error ? error.message : String(error),
+      retryable: error?.retryable !== false,
+    };
+  }
+}
+
+async function observePage({ seedUrl, browserObserver, now }) {
+  if (browserObserver) {
+    return normalizePageObservation(await browserObserver({ seedUrl, now }), {
+      seedUrl,
+      now,
+    });
+  }
+
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 1200 } });
+    await page.goto(seedUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
+    await autoScroll(page);
+    const raw = await page.evaluate(() => {
+      const meta = (name) =>
+        document.querySelector(`meta[property="${name}"], meta[name="${name}"]`)
+          ?.getAttribute("content") || undefined;
+      const images = [...document.images]
+        .map((image) => ({
+          url: image.currentSrc || image.src,
+          width: image.naturalWidth || image.width || undefined,
+          height: image.naturalHeight || image.height || undefined,
+        }))
+        .filter((image) => image.url);
+      return {
+        canonicalUrl:
+          document.querySelector('link[rel="canonical"]')?.href || location.href,
+        finalUrl: location.href,
+        title: document.title || meta("og:title"),
+        authorName:
+          meta("article:author") ||
+          document.querySelector("#js_name")?.textContent?.trim(),
+        publishedAt:
+          meta("article:published_time") ||
+          document.querySelector("#publish_time")?.textContent?.trim(),
+        visibleText: document.body?.innerText || "",
+        imageCandidates: images.slice(0, 24),
+      };
+    });
+    return normalizePageObservation(raw, { seedUrl, now });
+  } finally {
+    await browser.close();
+  }
+}
+
+async function autoScroll(page) {
+  await page.evaluate(async () => {
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const step = Math.max(400, Math.floor(window.innerHeight * 0.8));
+    for (let y = 0; y < document.body.scrollHeight; y += step) {
+      window.scrollTo(0, y);
+      await delay(150);
+    }
+    window.scrollTo(0, 0);
+  });
+}
+
+async function requestModelWithRetries({
   config,
   seedUrl,
   runId,
   vercelJobId,
+  observation,
   fetchImpl,
 }) {
   let lastError = {
@@ -125,15 +253,16 @@ async function requestAgentWithRetries({
 
   for (let attempt = 1; attempt <= config.maxAttempts; attempt += 1) {
     try {
-      const data = await requestAgent({
+      const data = await requestOpenAI({
         config,
         seedUrl,
         runId,
         vercelJobId,
+        observation,
         fetchImpl,
         attempt,
       });
-      const parsed = parseAgentResponse(data);
+      const parsed = parseAgentResponse(parseOpenAIJson(data));
       if (parsed.ok) return parsed;
       if (parsed.retryable === false) return parsed;
       lastError = parsed;
@@ -156,32 +285,46 @@ async function requestAgentWithRetries({
   };
 }
 
-async function requestAgent({
+async function requestOpenAI({
   config,
   seedUrl,
   runId,
   vercelJobId,
+  observation,
   fetchImpl,
   attempt,
 }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
-    const response = await fetchImpl(`${config.agentBaseUrl}/extract`, {
+    const response = await fetchImpl(`${config.openaiBaseUrl}/responses`, {
       method: "POST",
       signal: controller.signal,
       headers: {
-        authorization: `Bearer ${config.agentApiKey}`,
+        authorization: `Bearer ${config.openaiApiKey}`,
         "content-type": "application/json",
       },
       body: JSON.stringify(
         removeUndefined({
-          seedUrl,
-          runId,
-          collectorId: config.collectorId,
-          vercelJobId,
-          model: config.agentModel,
-          attempt,
+          model: config.openaiModel,
+          input: [
+            {
+              role: "system",
+              content:
+                "Extract Beijing official cultural activity data. Return only JSON matching the collector agent response contract.",
+            },
+            {
+              role: "user",
+              content: JSON.stringify({
+                seedUrl,
+                runId,
+                collectorId: config.collectorId,
+                vercelJobId,
+                attempt,
+                observation,
+              }),
+            },
+          ],
         }),
       ),
     });
@@ -202,6 +345,31 @@ async function requestAgent({
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function parseOpenAIJson(data) {
+  const text =
+    typeof data?.output_text === "string"
+      ? data.output_text
+      : extractOpenAIOutputText(data);
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+function extractOpenAIOutputText(data) {
+  if (!Array.isArray(data?.output)) return undefined;
+  for (const item of data.output) {
+    if (!Array.isArray(item?.content)) continue;
+    for (const content of item.content) {
+      if (typeof content?.text === "string") return content.text;
+      if (typeof content?.content === "string") return content.content;
+    }
+  }
+  return undefined;
 }
 
 function parseAgentResponse(data) {
@@ -245,6 +413,7 @@ function parseAgentResponse(data) {
       data: {
         disposition: data.disposition,
         confidence: data.confidence,
+        sourceCandidate: normalizeSourceCandidate(data.sourceCandidate),
         articleSnapshot,
         evidenceAssets: normalizeEvidenceAssets(data.evidenceAssets ?? []),
         eventDraft,
@@ -254,14 +423,110 @@ function parseAgentResponse(data) {
 
   return {
     ok: true,
-    data: {
-      disposition: data.disposition,
-      confidence: data.confidence,
-      articleSnapshot,
-      evidenceAssets: normalizeEvidenceAssets(data.evidenceAssets ?? []),
-      failure: data.failure,
+      data: {
+        disposition: data.disposition,
+        confidence: data.confidence,
+        sourceCandidate: normalizeSourceCandidate(data.sourceCandidate),
+        articleSnapshot,
+        evidenceAssets: normalizeEvidenceAssets(data.evidenceAssets ?? []),
+        failure: data.failure,
     },
   };
+}
+
+function normalizePageObservation(input, { seedUrl, now }) {
+  const finalUrl = isUrl(input?.finalUrl) ? input.finalUrl : seedUrl;
+  const canonicalUrl = isUrl(input?.canonicalUrl) ? input.canonicalUrl : finalUrl;
+  const capturedAt = isDateTime(input?.capturedAt)
+    ? input.capturedAt
+    : now.toISOString();
+  const visibleText = String(input?.visibleText ?? "").slice(0, 40_000);
+  const authorName = nonEmpty(input?.authorName);
+  const sourceCandidate =
+    input?.sourceCandidate && typeof input.sourceCandidate === "object"
+      ? normalizeSourceCandidate(input.sourceCandidate, { seedUrl, authorName })
+      : inferSourceCandidate({ seedUrl, authorName });
+
+  return removeUndefined({
+    canonicalUrl,
+    finalUrl,
+    title: nonEmpty(input?.title),
+    authorName,
+    publishedAt: isDateTime(input?.publishedAt) ? input.publishedAt : undefined,
+    capturedAt,
+    visibleText,
+    languageHints: Array.isArray(input?.languageHints)
+      ? input.languageHints.filter(nonEmpty)
+      : inferLanguageHints(visibleText),
+    imageCandidates: Array.isArray(input?.imageCandidates)
+      ? input.imageCandidates
+          .filter((image) => isUrl(image?.url))
+          .slice(0, 24)
+          .map((image) =>
+            removeUndefined({
+              url: image.url,
+              width: positiveInt(image.width),
+              height: positiveInt(image.height),
+            }),
+          )
+      : [],
+    sourceCandidate,
+  });
+}
+
+function normalizeSourceCandidate(input, fallback = {}) {
+  if (!input || typeof input !== "object") return undefined;
+  const sourceKey = nonEmpty(input.sourceKey) ?? sourceKeyFromName(fallback.authorName);
+  const platform = nonEmpty(input.platform) ?? inferPlatform(fallback.seedUrl);
+  if (!sourceKey || !platform) return undefined;
+  return removeUndefined({
+    sourceKey,
+    name: nonEmpty(input.name) ?? nonEmpty(fallback.authorName),
+    homepageUrl: isUrl(input.homepageUrl) ? input.homepageUrl : undefined,
+    seedUrl: isUrl(input.seedUrl)
+      ? input.seedUrl
+      : isUrl(fallback.seedUrl)
+        ? fallback.seedUrl
+        : undefined,
+    platform,
+    confidence: isNumberInRange(input.confidence, 0, 1)
+      ? input.confidence
+      : undefined,
+    diagnostics: Array.isArray(input.diagnostics)
+      ? input.diagnostics
+          .filter((item) => nonEmpty(item?.key) && nonEmpty(item?.value))
+          .map((item) => ({ key: item.key, value: item.value }))
+      : undefined,
+  });
+}
+
+function inferSourceCandidate({ seedUrl, authorName }) {
+  const sourceKey = sourceKeyFromName(authorName);
+  if (!sourceKey) return undefined;
+  return {
+    sourceKey,
+    name: authorName,
+    seedUrl,
+    platform: inferPlatform(seedUrl),
+    confidence: 0.65,
+    diagnostics: [{ key: "source_name_evidence", value: "article author name" }],
+  };
+}
+
+function sourceKeyFromName(name) {
+  const value = nonEmpty(name);
+  if (!value) return undefined;
+  return `wechat:${value.toLowerCase().replace(/\s+/g, "-")}`;
+}
+
+function inferPlatform(url) {
+  return String(url ?? "").includes("mp.weixin.qq.com")
+    ? "wechat_official_account"
+    : "official_website";
+}
+
+function inferLanguageHints(text) {
+  return /[\u4e00-\u9fff]/.test(text) ? ["zh-CN"] : [];
 }
 
 function normalizeArticleSnapshot(input) {
@@ -392,7 +657,53 @@ function normalizeEventDraft(input, missingFields) {
   });
 }
 
-function buildAgentSuccessPayloads({ config, seedUrl, runId, response, now }) {
+function buildBrowserSmokePayloads({ config, seedUrl, runId, observation, now }) {
+  const observedAt = now.toISOString();
+  return removeUndefined({
+    sourceCandidate: observation.sourceCandidate
+      ? envelope({
+          collectorId: config.collectorId,
+          runId,
+          observedAt,
+          payload: observation.sourceCandidate,
+        })
+      : undefined,
+    sourceRun: envelope({
+      collectorId: config.collectorId,
+      runId,
+      observedAt,
+      payload: {
+        seedUrl,
+        status: "partial",
+        startedAt: new Date(now.getTime() - 60_000).toISOString(),
+        finishedAt: observedAt,
+        checkedUrlCount: 1,
+        articleCount: 1,
+        draftCount: 0,
+        failureCount: 0,
+        diagnostics: [
+          { key: "processor", value: "sandbox-browser" },
+          { key: "mode", value: "browser_smoke_only" },
+        ],
+      },
+    }),
+    articleSnapshot: envelope({
+      collectorId: config.collectorId,
+      runId,
+      observedAt,
+      payload: articleSnapshotFromObservation(observation),
+    }),
+  });
+}
+
+function buildAgentSuccessPayloads({
+  config,
+  seedUrl,
+  runId,
+  response,
+  observation,
+  now,
+}) {
   const observedAt = now.toISOString();
   const sourceRun = envelope({
     collectorId: config.collectorId,
@@ -411,7 +722,7 @@ function buildAgentSuccessPayloads({ config, seedUrl, runId, response, now }) {
       failureCount: response.eventDraft ? 0 : 1,
       failureReason: response.eventDraft ? undefined : "not_activity",
       diagnostics: [
-        { key: "processor", value: "agent" },
+        { key: "processor", value: "sandbox-agent" },
         { key: "disposition", value: response.disposition },
         { key: "confidence", value: String(response.confidence) },
       ],
@@ -450,6 +761,14 @@ function buildAgentSuccessPayloads({ config, seedUrl, runId, response, now }) {
       });
 
   return removeUndefined({
+    sourceCandidate: (response.sourceCandidate ?? observation?.sourceCandidate)
+      ? envelope({
+          collectorId: config.collectorId,
+          runId,
+          observedAt,
+          payload: response.sourceCandidate ?? observation.sourceCandidate,
+        })
+      : undefined,
     sourceRun,
     evidenceAssets,
     articleSnapshot,
@@ -462,6 +781,7 @@ function buildAgentFailurePayloads({
   config,
   seedUrl,
   runId,
+  sourceCandidate,
   reason,
   stage,
   message,
@@ -470,6 +790,14 @@ function buildAgentFailurePayloads({
 }) {
   const observedAt = now.toISOString();
   return {
+    sourceCandidate: sourceCandidate
+      ? envelope({
+          collectorId: config.collectorId,
+          runId,
+          observedAt,
+          payload: sourceCandidate,
+        })
+      : undefined,
     sourceRun: envelope({
       collectorId: config.collectorId,
       runId,
@@ -484,7 +812,7 @@ function buildAgentFailurePayloads({
         draftCount: 0,
         failureCount: 1,
         failureReason: reason,
-        diagnostics: [{ key: "processor", value: "agent" }],
+        diagnostics: [{ key: "processor", value: "sandbox-agent" }],
       },
     }),
     collectorFailure: buildFailureEnvelope({
@@ -497,6 +825,30 @@ function buildAgentFailurePayloads({
       message,
       retryable,
     }),
+  };
+}
+
+function articleSnapshotFromObservation(observation) {
+  return {
+    canonicalUrl: observation.canonicalUrl,
+    finalUrl: observation.finalUrl,
+    title: observation.title,
+    authorName: observation.authorName,
+    publishedAt: observation.publishedAt,
+    capturedAt: observation.capturedAt,
+    languageHints: observation.languageHints ?? [],
+    captureMode: "text_complete",
+    visibleText: observation.visibleText,
+    textHash: hashText(observation.visibleText ?? ""),
+    evidenceAssetIds: [],
+    contentHash: hashText(
+      [
+        observation.canonicalUrl,
+        observation.title ?? "",
+        observation.visibleText ?? "",
+        JSON.stringify(observation.imageCandidates ?? []),
+      ].join("\n"),
+    ),
   };
 }
 
@@ -524,7 +876,26 @@ function buildFailureEnvelope({
   });
 }
 
-async function uploadAgentPayloads({ config, fetchImpl, payloads, runId }) {
+async function uploadAgentPayloads({
+  config,
+  fetchImpl,
+  payloads,
+  runId,
+  vercelJobId,
+}) {
+  const uploadedIds = {};
+  if (payloads.sourceCandidate) {
+    const source = await postJson({
+      baseUrl: config.baseUrl,
+      path: "/api/collector/source",
+      headers: config.headers,
+      fetchImpl,
+      body: payloads.sourceCandidate,
+    });
+    uploadedIds.sourceId = source.id;
+    attachSourceId(payloads, source.id);
+  }
+
   const sourceRun = await postJson({
     baseUrl: config.baseUrl,
     path: "/api/collector/source-run",
@@ -532,7 +903,7 @@ async function uploadAgentPayloads({ config, fetchImpl, payloads, runId }) {
     fetchImpl,
     body: payloads.sourceRun,
   });
-  const uploadedIds = { sourceRunId: sourceRun.id };
+  uploadedIds.sourceRunId = sourceRun.id;
 
   for (const asset of payloads.evidenceAssets ?? []) {
     const uploaded = await postJson({
@@ -581,11 +952,57 @@ async function uploadAgentPayloads({ config, fetchImpl, payloads, runId }) {
     uploadedIds.failureId = failure.id;
   }
 
+  if (vercelJobId) {
+    await postJson({
+      baseUrl: config.baseUrl,
+      path: `/api/collector/jobs/${vercelJobId}/report`,
+      headers: config.headers,
+      fetchImpl,
+      body: buildJobReport({
+        collectorId: config.collectorId,
+        runId,
+        uploadedIds,
+      }),
+    });
+  }
+
   return {
     kind: "uploaded",
     runId,
     uploadedIds,
   };
+}
+
+function buildJobReport({ collectorId, runId, uploadedIds }) {
+  const failed = Boolean(uploadedIds.failureId && !uploadedIds.eventDraftId);
+  return removeUndefined({
+    collectorId,
+    localRunId: runId,
+    status: failed ? "failed" : "completed",
+    sourceRunId: uploadedIds.sourceRunId,
+    articleSnapshotIds: uploadedIds.articleSnapshotId
+      ? [uploadedIds.articleSnapshotId]
+      : undefined,
+    eventDraftIds: uploadedIds.eventDraftId
+      ? [uploadedIds.eventDraftId]
+      : undefined,
+    evidenceAssetIds: uploadedIds.evidenceAssetIds,
+    failureIds: uploadedIds.failureId ? [uploadedIds.failureId] : undefined,
+    suggestedDisposition: failed ? "failed" : "ready_for_review",
+  });
+}
+
+function attachSourceId(payloads, sourceId) {
+  for (const key of [
+    "sourceRun",
+    "articleSnapshot",
+    "eventDraft",
+    "collectorFailure",
+  ]) {
+    if (payloads[key]?.payload && !payloads[key].payload.sourceId) {
+      payloads[key].payload.sourceId = sourceId;
+    }
+  }
 }
 
 async function postJson({ baseUrl, path, headers, fetchImpl, body }) {
@@ -606,12 +1023,18 @@ function readAgentConfig(env) {
   const baseUrl = normalizeBaseUrl(env.COLLECTOR_BASE_URL ?? env.APP_BASE_URL);
   const collectorId = env.COLLECTOR_ID?.trim();
   const collectorApiKey = env.COLLECTOR_API_KEY?.trim();
-  const agentBaseUrl = normalizeBaseUrl(env.AGENT_API_BASE_URL);
-  const agentApiKey = env.AGENT_API_KEY?.trim();
+  const browserSmokeOnly = env.COLLECTOR_BROWSER_SMOKE_ONLY === "true";
+  const agentProvider = env.AGENT_PROVIDER?.trim();
+  const openaiApiKey = env.OPENAI_API_KEY?.trim();
+  const openaiModel = env.OPENAI_MODEL?.trim();
   if (!baseUrl || !collectorId || !collectorApiKey) {
     throw new Error("missing_collector_config");
   }
-  if (!agentBaseUrl || !agentApiKey) throw new Error("agent_config_missing");
+  if (!browserSmokeOnly) {
+    if (agentProvider !== "openai" || !openaiApiKey || !openaiModel) {
+      throw new Error("agent_config_missing");
+    }
+  }
 
   return {
     baseUrl,
@@ -622,9 +1045,13 @@ function readAgentConfig(env) {
       collectorApiKey,
       collectorJobId: env.COLLECTOR_JOB_ID?.trim() || undefined,
     }),
-    agentBaseUrl,
-    agentApiKey,
-    agentModel: env.AGENT_MODEL?.trim() || undefined,
+    browserSmokeOnly,
+    agentProvider,
+    openaiBaseUrl: normalizeBaseUrl(
+      env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+    ),
+    openaiApiKey,
+    openaiModel,
     timeoutMs: Math.max(
       1_000,
       Number.parseInt(env.AGENT_TIMEOUT_SECONDS ?? "120", 10) * 1000,
@@ -689,6 +1116,10 @@ function isDateTime(value) {
     /(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
     !Number.isNaN(Date.parse(value))
   );
+}
+
+function hashText(value) {
+  return createHash("sha256").update(String(value)).digest("hex");
 }
 
 function isNumberInRange(value, min, max) {

@@ -6,6 +6,7 @@ import {
   collectorEnvelopeSchema,
   failureReasonSchema,
   eventDraftUploadSchema,
+  sourceCandidateSchema,
 } from "./collector";
 
 describe("collector contracts", () => {
@@ -84,6 +85,31 @@ describe("collector contracts", () => {
       "not_activity",
       "unsupported",
     ]);
+  });
+
+  it("accepts source candidates discovered from a seed article", () => {
+    const result = collectorEnvelopeSchema(sourceCandidateSchema).parse({
+      collectorId: "sandbox-job-1",
+      runId: "run-source-discovery",
+      observedAt: "2026-05-28T07:00:00.000Z",
+      payloadVersion: "2026-05-collector-v1",
+      payload: {
+        sourceKey: "wechat:italian-cultural-institute-beijing",
+        name: "意大利驻华使馆文化处",
+        homepageUrl: "https://mp.weixin.qq.com/s/example-profile",
+        seedUrl: "https://mp.weixin.qq.com/s/example",
+        platform: "wechat_official_account",
+        confidence: 0.82,
+        diagnostics: [
+          { key: "source_name_evidence", value: "article author name" },
+        ],
+      },
+    });
+
+    expect(result.payload.platform).toBe("wechat_official_account");
+    expect(result.payload.sourceKey).toBe(
+      "wechat:italian-cultural-institute-beijing",
+    );
   });
 
   it("accepts structured Agent processor failures", () => {

@@ -104,9 +104,10 @@ polling, a JSON-backed queue, and one-at-a-time worker. Use
 `LOCAL_COLLECTOR_PROCESSOR=fixture` for deterministic source-run,
 article-snapshot, and draft uploads through the existing collector API boundary.
 Use `LOCAL_COLLECTOR_PROCESSOR=agent` for the real extraction path. The local
-collector sends seed URL and run context to the configured Agent API, validates
-the structured Agent response, retries invalid responses locally, and uploads
-only normalized collector payloads to Vercel.
+collector observes the seed URL with the repo-local browser agent, sends page
+observation and run context to the configured provider, validates the structured
+provider response, retries invalid responses locally, and uploads only
+normalized collector payloads to Vercel.
 
 Fixture mode is not a real browser or LLM extractor, and it must not be used as
 a substitute for production collection. Agent mode is the production collector
@@ -379,17 +380,21 @@ Backend rules:
 - Recompute review state and auto-publish eligibility from normalized uploads.
 - Preserve collector disposition as diagnostics for admin review.
 
-## Local Agent API Boundary
+## Local Provider Boundary
 
-The local worker may call an external agent API for classification and extraction. That API is an implementation detail of the home-machine runtime.
+The local worker may call an OpenAI-compatible provider for classification and
+extraction. That provider is an implementation detail of the home-machine
+runtime.
 
-Agent API responses should be converted into normalized collector objects before upload to Vercel. The Vercel app should not depend on a specific agent provider's response format.
+Provider responses should be converted into normalized collector objects before
+upload to Vercel. The Vercel app should not depend on a specific provider's
+response format.
 
 Local worker responsibilities:
 
-- send seed URL and run context to the Agent API
+- send page observation and run context to the configured provider
 - request structured extraction with bounded retry behavior
-- validate the agent response locally before upload
+- validate the provider response locally before upload
 - map agent uncertainty to draft signals and suggested disposition
 
 The agent API must not receive collector API secrets, admin tokens, Supabase

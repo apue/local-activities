@@ -6,12 +6,14 @@ import {
   collectorFailureSchema,
   eventDraftUploadSchema,
   evidenceAssetSchema,
+  sourceCandidateSchema,
   sourceRunReportSchema,
   type ArticleSnapshot,
   type CollectorEnvelope,
   type CollectorFailure,
   type EventDraftUpload,
   type EvidenceAsset,
+  type SourceCandidate,
   type SourceRunReport,
 } from "../contracts/collector";
 import { authenticateCollectorRequest } from "./collector-auth";
@@ -20,6 +22,7 @@ import {
   ingestCollectorFailure,
   ingestEventDraft,
   ingestEvidenceAsset,
+  ingestSourceCandidate,
   ingestSourceRun,
   type CollectorIngestStore,
 } from "./collector-ingest-service";
@@ -40,6 +43,20 @@ export function handleSourceRunIngest(
     env,
     sourceRunReportSchema,
     ingestSourceRun,
+  );
+}
+
+export function handleSourceCandidateIngest(
+  request: Request,
+  store: CollectorIngestStore,
+  env: CollectorEnv,
+) {
+  return handleCollectorIngest(
+    request,
+    store,
+    env,
+    sourceCandidateSchema,
+    ingestSourceCandidate,
   );
 }
 
@@ -179,6 +196,7 @@ function invalidRequestResponse(error: z.ZodError) {
 }
 
 type IngestPayload =
+  | SourceCandidate
   | SourceRunReport
   | ArticleSnapshot
   | EvidenceAsset

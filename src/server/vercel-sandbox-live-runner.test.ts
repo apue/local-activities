@@ -53,9 +53,9 @@ describe("vercel sandbox live runner", () => {
         VERCEL_SANDBOX_ENABLED: "true",
         NEXT_PUBLIC_APP_URL: "https://local-activities.example",
         COLLECTOR_SCOPED_TOKEN_SECRET: "scoped-secret",
-        AGENT_API_BASE_URL: "https://agent.example/v1",
-        AGENT_API_KEY: "agent-secret",
-        AGENT_MODEL: "agent-model",
+        AGENT_PROVIDER: "openai",
+        OPENAI_API_KEY: "openai-secret",
+        OPENAI_MODEL: "gpt-5-mini",
         VERCEL_GIT_COMMIT_SHA: "abc123",
         VERCEL_GIT_REPO_OWNER: "apue",
         VERCEL_GIT_REPO_SLUG: "local-activities",
@@ -78,6 +78,7 @@ describe("vercel sandbox live runner", () => {
     expect(JSON.stringify(run)).toContain("abc123");
     expect(JSON.stringify(run)).not.toContain("long-lived-collector-secret");
     expect(JSON.stringify(run)).not.toContain("admin-secret");
+    expect(JSON.stringify(run)).not.toContain("AGENT_API_BASE_URL");
   });
 
   it("returns a structured failure when required Sandbox config is missing", async () => {
@@ -103,7 +104,7 @@ describe("vercel sandbox live runner", () => {
       status: "failed",
       reason: "sandbox_config_missing",
       message:
-        "Missing required Sandbox runner environment variables: COLLECTOR_SCOPED_TOKEN_SECRET, AGENT_API_BASE_URL, AGENT_API_KEY",
+        "Missing required Sandbox runner environment variables: COLLECTOR_SCOPED_TOKEN_SECRET, AGENT_PROVIDER, OPENAI_API_KEY, OPENAI_MODEL",
     });
   });
 });

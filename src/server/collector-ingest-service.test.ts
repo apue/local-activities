@@ -6,6 +6,7 @@ import type {
   CollectorFailure,
   EventDraftUpload,
   EvidenceAsset,
+  SourceCandidate,
   SourceRunReport,
 } from "../contracts/collector";
 import {
@@ -23,10 +24,20 @@ class MemoryIngestStore implements CollectorIngestStore {
   evidenceAssets = new Map<string, string>();
   eventDrafts = new Map<string, string>();
   failures = new Map<string, string>();
+  sourceCandidates = new Map<string, string>();
   publishedDrafts: Array<{
     title: string;
     publishedAt: string;
   }> = [];
+
+  async upsertSourceCandidate(input: CollectorEnvelope<SourceCandidate>) {
+    const key = input.payload.sourceKey;
+    const id =
+      this.sourceCandidates.get(key) ??
+      `source-${this.sourceCandidates.size + 1}`;
+    this.sourceCandidates.set(key, id);
+    return { id };
+  }
 
   async upsertSourceRun(input: {
     collectorId: string;

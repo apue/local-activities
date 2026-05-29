@@ -6,6 +6,7 @@ import type {
   CollectorFailure,
   EventDraftUpload,
   EvidenceAsset,
+  SourceCandidate,
   SourceRunReport,
 } from "../contracts/collector";
 
@@ -14,6 +15,9 @@ export type StoredCollectorObject = {
 };
 
 export type CollectorIngestStore = {
+  upsertSourceCandidate(
+    input: CollectorEnvelope<SourceCandidate>,
+  ): Promise<StoredCollectorObject>;
   upsertSourceRun(
     input: CollectorEnvelope<SourceRunReport>,
   ): Promise<StoredCollectorObject>;
@@ -48,6 +52,13 @@ export type DraftBackendPolicy = {
   autoPublishConfidenceThreshold?: number;
   now?: Date;
 };
+
+export async function ingestSourceCandidate(
+  envelope: CollectorEnvelope<SourceCandidate>,
+  store: CollectorIngestStore,
+) {
+  return store.upsertSourceCandidate(envelope);
+}
 
 export async function ingestSourceRun(
   envelope: CollectorEnvelope<SourceRunReport>,
