@@ -75,7 +75,15 @@ export function AdminPortal() {
         ...init.headers,
       },
     });
-    const body = (await response.json()) as T & { error?: string };
+    const bodyText = await response.text();
+    let body = { error: `request_failed_${response.status}` } as T & {
+      error?: string;
+    };
+    try {
+      if (bodyText) body = JSON.parse(bodyText) as T & { error?: string };
+    } catch {
+      // Keep the HTTP status visible when an upstream error is not JSON.
+    }
     if (!response.ok) {
       throw new Error(body.error ?? "request_failed");
     }

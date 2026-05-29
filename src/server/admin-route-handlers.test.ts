@@ -4,6 +4,7 @@ import type { AdminEventDraftRecord, AdminStore } from "./admin-service";
 import {
   handleAdminCreateCollectorJob,
   handleAdminDraftAction,
+  handleAdminListCollectorJobs,
   handleAdminListEventDrafts,
 } from "./admin-route-handlers";
 import type { CollectorJobRecord } from "./collector-job-service";
@@ -46,11 +47,11 @@ class RouteAdminStore implements AdminStore {
     };
   }
 
-  async listCollectorJobs() {
+  async listCollectorJobs(): Promise<CollectorJobRecord[]> {
     return [];
   }
 
-  async listEventDrafts() {
+  async listEventDrafts(): Promise<AdminEventDraftRecord[]> {
     return [this.draft];
   }
 
@@ -74,6 +75,16 @@ class RouteAdminStore implements AdminStore {
       status: "published" as const,
       publishedAt: "2026-05-28T08:00:00.000Z",
     };
+  }
+}
+
+class FailingListAdminStore extends RouteAdminStore {
+  async listCollectorJobs(): Promise<CollectorJobRecord[]> {
+    throw new Error("admin_job_list_failed");
+  }
+
+  async listEventDrafts(): Promise<AdminEventDraftRecord[]> {
+    throw new Error("admin_draft_list_failed");
   }
 }
 
@@ -186,6 +197,34 @@ describe("admin route handlers", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       drafts: [expect.objectContaining({ id: "draft-1" })],
+    });
+  });
+
+  it("returns JSON errors when job listing fails", async () => {
+    const response = await handleAdminListCollectorJobs(
+      request(),
+      new FailingListAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "admin_job_list_failed",
+    });
+  });
+
+  it("returns JSON errors when draft listing fails", async () => {
+    const response = await handleAdminListEventDrafts(
+      request(),
+      new FailingListAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "admin_draft_list_failed",
     });
   });
 
