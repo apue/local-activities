@@ -10,14 +10,28 @@ import {
 import { runCollectorAgent } from "./collector-agent-processor.mjs";
 
 const TRAILING_URL_PUNCTUATION = /[。，“”‘’'")\]}>,]+$/u;
+const URL_PATTERN = /https?:\/\/[^\s<>"'，。]+/gu;
 
 export function extractCaptureInputUrl(input) {
-  const match = String(input ?? "")
-    .trim()
-    .match(/https?:\/\/[^\s<>"'，。]+/u);
-  if (!match) return undefined;
+  return extractCaptureInputUrls(input)[0];
+}
 
-  const candidate = match[0].replace(TRAILING_URL_PUNCTUATION, "");
+export function extractCaptureInputUrls(input) {
+  const seen = new Set();
+  const urls = [];
+
+  for (const match of String(input ?? "").trim().matchAll(URL_PATTERN)) {
+    const url = normalizeCaptureUrl(match[0]);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+  }
+
+  return urls;
+}
+
+function normalizeCaptureUrl(value) {
+  const candidate = String(value ?? "").replace(TRAILING_URL_PUNCTUATION, "");
   try {
     const url = new URL(candidate);
     if (!["http:", "https:"].includes(url.protocol)) return undefined;
@@ -84,6 +98,47 @@ export async function runEditorCapture({
   };
 }
 
+export async function runEditorCaptureBatch({
+  input,
+  env = process.env,
+  now = new Date(),
+  runCollectorAgentImpl = runCollectorAgent,
+} = {}) {
+  const seedUrls = extractCaptureInputUrls(input);
+  if (seedUrls.length === 0) throw new Error("missing_capture_url");
+
+  const results = [];
+  for (const seedUrl of seedUrls) {
+    try {
+      const result = await runEditorCapture({
+        input: seedUrl,
+        env,
+        now,
+        runCollectorAgentImpl,
+      });
+      results.push({
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      results.push({
+        ok: false,
+        seedUrl,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const failedCount = results.filter((result) => !result.ok).length;
+  return {
+    kind: "batch",
+    totalCount: results.length,
+    succeededCount: results.length - failedCount,
+    failedCount,
+    results,
+  };
+}
+
 function validateEditorCaptureEnv(env) {
   const missingCollector = [];
   if (!clean(env.COLLECTOR_BASE_URL)) {
@@ -108,9 +163,28 @@ function validateEditorCaptureEnv(env) {
 }
 
 export function formatEditorCaptureSummary(result) {
+  if (result?.kind === "batch") {
+    const lines = [
+      `Editor capture batch finished total=${result.totalCount} succeeded=${result.succeededCount} failed=${result.failedCount}`,
+    ];
+    for (const [index, item] of (result.results ?? []).entries()) {
+      if (item.ok) {
+        lines.push(`[${index + 1}] ok ${formatSingleCaptureFields(item)}`);
+      } else {
+        lines.push(
+          `[${index + 1}] failed seedUrl=${item.seedUrl} error=${item.error}`,
+        );
+      }
+    }
+    return lines.join("\n");
+  }
+
+  return `Editor capture finished ${formatSingleCaptureFields(result)}`;
+}
+
+function formatSingleCaptureFields(result) {
   const uploaded = result.uploadedIds ?? {};
   const parts = [
-    "Editor capture finished",
     `outcome=${result.outcome}`,
     `seedUrl=${result.seedUrl}`,
     `runId=${result.runId}`,
@@ -191,7 +265,10 @@ async function main() {
     process.env,
     args.envFile ? loadEnvFile(args.envFile) : {},
   );
-  const result = await runEditorCapture({ input: args.input, env });
+  const urls = extractCaptureInputUrls(args.input);
+  const result = urls.length > 1
+    ? await runEditorCaptureBatch({ input: args.input, env })
+    : await runEditorCapture({ input: args.input, env });
   console.log(
     args.json
       ? JSON.stringify(result, null, 2)
