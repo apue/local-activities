@@ -4,6 +4,7 @@ import {
   buildEditorCaptureEnv,
   extractCaptureInputUrl,
   formatEditorCaptureSummary,
+  parseArgs,
   runEditorCapture,
 } from "./editor-agent-capture.mjs";
 
@@ -98,5 +99,21 @@ describe("editor agent capture", () => {
     ).toContain(
       "Editor capture finished outcome=structured_failure seedUrl=https://mp.weixin.qq.com/s/captcha runId=editor-run sourceRunId=101 failureId=401",
     );
+  });
+
+  it("parses the documented pnpm argument separator before options", () => {
+    expect(
+      parseArgs([
+        "--",
+        "--env-file",
+        ".env.local",
+        "--json",
+        "https://example.com/event",
+      ]),
+    ).toMatchObject({
+      envFile: ".env.local",
+      json: true,
+      input: "https://example.com/event",
+    });
   });
 });
