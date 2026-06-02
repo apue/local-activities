@@ -1,0 +1,32 @@
+{
+  "classification": {
+    "kind": "activity",
+    "confidence": 0.9,
+    "signals": [],
+    "missingFields": []
+  },
+  "events": [
+    {
+      "title": "Fixture Embassy Weekend Salon",
+      "originalTitle": "Fixture Embassy Weekend Salon",
+      "organizer": "Fixture Cultural Office",
+      "startsAt": "2026-06-06T06:00:00.000Z",
+      "endsAt": "2026-06-06T08:00:00.000Z",
+      "venueName": "Beijing Culture Center",
+      "venueAddress": "Beijing",
+      "reservationStatus": "required",
+      "registrationAction": "Register from source article",
+      "registrationUrl": "https://mp.weixin.qq.com/s/fixture-activity",
+      "summary": "Deterministic fixture for lightweight LLM extraction.",
+      "entryNotes": "Generated from fixture response.",
+      "signals": ["ready_for_review"],
+      "evidenceAssetIds": [],
+      "fieldEvidence": {
+        "title": ["visibleText"],
+        "startsAt": ["visibleText"],
+        "venueName": ["visibleText"]
+      },
+      "confidence": 0.9
+    }
+  ]
+}

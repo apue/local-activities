@@ -1,0 +1,14 @@
+{
+  "canonicalUrl": "https://mp.weixin.qq.com/s/fixture-activity",
+  "finalUrl": "https://mp.weixin.qq.com/s/fixture-activity",
+  "title": "Fixture Embassy Weekend Salon",
+  "authorName": "Fixture Cultural Office",
+  "publishedAt": "2026-06-01T04:00:00.000Z",
+  "capturedAt": "2026-06-02T08:00:00.000Z",
+  "languageHints": ["en", "zh"],
+  "captureMode": "text_complete",
+  "visibleText": "Fixture Embassy Weekend Salon, June 6 14:00-16:00, Beijing Culture Center. Registration required.",
+  "textHash": "fixture-activity-text",
+  "evidenceAssetIds": [],
+  "contentHash": "fixture-activity-content"
+}
