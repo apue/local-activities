@@ -115,6 +115,9 @@ export const targets = {
       "AGENT_EVENT_RESOLUTION_ENABLED",
       "BLOB_READ_WRITE_TOKEN",
       "PUBLIC_ASSET_URL_PREFIXES",
+      "WECHAT2RSS_BASE_URL",
+      "WECHAT2RSS_TOKEN",
+      "WECHAT2RSS_LOOKBACK_DAYS",
     ],
   },
 };
