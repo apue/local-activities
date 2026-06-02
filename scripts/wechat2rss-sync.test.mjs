@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   articleSnapshotSchema,
   collectorEnvelopeSchema,
+  collectorFailureSchema,
+  eventDraftUploadSchema,
+  evidenceAssetSchema,
   sourceRunReportSchema,
 } from "../src/contracts/collector";
 import {
@@ -109,6 +112,164 @@ describe("Wechat2RSS one-shot sync", () => {
     expect(formatWechat2RssSyncSummary(result)).not.toContain("wechat-token");
   });
 
+  it("optionally extracts uploaded Wechat2RSS snapshots into reviewable drafts", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init, body: init?.body ? JSON.parse(init.body) : null });
+      if (url.includes("/login/list")) {
+        return jsonResponse({ accounts: [{ nickname: "reader", status: "正常" }] });
+      }
+      if (url.includes("/api/query")) {
+        return jsonResponse({
+          data: [
+            {
+              title: "Activity",
+              url: "https://mp.weixin.qq.com/s/activity",
+              date: "2026-06-01T12:00:00+08:00",
+              mpName: "Culture Org",
+              digest:
+                "Weekend activity, June 6 14:00-16:00, Beijing Culture Center.",
+            },
+          ],
+        });
+      }
+      if (url === "https://api.openai.com/v1/responses") {
+        return jsonResponse(openaiResponse(activityResponse()));
+      }
+      if (url.endsWith("/api/collector/source-run")) {
+        return jsonResponse({ ok: true, id: "source-run-1" });
+      }
+      if (url.endsWith("/api/collector/article-snapshot")) {
+        return jsonResponse({ ok: true, id: "snapshot-1" });
+      }
+      if (url.endsWith("/api/collector/evidence-asset")) {
+        return jsonResponse({ ok: true, id: "evidence-1" });
+      }
+      if (url.endsWith("/api/collector/event-draft")) {
+        return jsonResponse({ ok: true, id: "draft-1" });
+      }
+      throw new Error(`unexpected_url:${url}`);
+    };
+
+    const result = await runWechat2RssSyncOnce({
+      env: extractionEnv(),
+      fetchImpl,
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "wechat2rss-extract",
+      extract: true,
+    });
+
+    expect(result).toEqual({
+      kind: "uploaded",
+      runId: "wechat2rss-extract",
+      sourceRunId: "source-run-1",
+      articleCount: 1,
+      uploadedArticleCount: 1,
+      uploadedArticleSnapshotIds: ["snapshot-1"],
+      uploadedEvidenceAssetCount: 1,
+      uploadedEventDraftCount: 1,
+      uploadedCollectorFailureCount: 0,
+      after: "20260526",
+    });
+    expect(calls.map((call) => call.url)).toEqual([
+      "http://localhost:4000/login/list?k=wechat-token",
+      "http://localhost:4000/api/query?k=wechat-token&after=20260526&content=0",
+      "https://api.openai.com/v1/responses",
+      "https://activities.example/api/collector/source-run",
+      "https://activities.example/api/collector/article-snapshot",
+      "https://activities.example/api/collector/evidence-asset",
+      "https://activities.example/api/collector/event-draft",
+    ]);
+    expect(calls[3].body.payload).toMatchObject({
+      status: "success",
+      articleCount: 1,
+      draftCount: 1,
+      failureCount: 0,
+    });
+    expect(() =>
+      collectorEnvelopeSchema(evidenceAssetSchema).parse(calls[5].body),
+    ).not.toThrow();
+    expect(() =>
+      collectorEnvelopeSchema(eventDraftUploadSchema).parse(calls[6].body),
+    ).not.toThrow();
+    expect(calls[6].body.payload.fieldEvidence._extraction).toEqual([
+      "prompt:event-extraction-2026-06-02",
+      "schema:event-extraction-schema-v1",
+      "provider:openai",
+      "model:gpt-5-mini",
+    ]);
+    expect(formatWechat2RssSyncSummary(result)).toContain("drafts=1");
+    expect(formatWechat2RssSyncSummary(result)).not.toContain("openai-secret");
+  });
+
+  it("uploads extractor failures as structured collector failures without aborting sync", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init, body: init?.body ? JSON.parse(init.body) : null });
+      if (url.includes("/login/list")) {
+        return jsonResponse({ accounts: [{ nickname: "reader", status: "正常" }] });
+      }
+      if (url.includes("/api/query")) {
+        return jsonResponse({
+          data: [
+            {
+              title: "Activity",
+              url: "https://mp.weixin.qq.com/s/activity",
+              mpName: "Culture Org",
+            },
+          ],
+        });
+      }
+      if (url.endsWith("/api/collector/source-run")) {
+        return jsonResponse({ ok: true, id: "source-run-1" });
+      }
+      if (url.endsWith("/api/collector/article-snapshot")) {
+        return jsonResponse({ ok: true, id: "snapshot-1" });
+      }
+      if (url.endsWith("/api/collector/failure")) {
+        return jsonResponse({ ok: true, id: "failure-1" });
+      }
+      throw new Error(`unexpected_url:${url}`);
+    };
+
+    const result = await runWechat2RssSyncOnce({
+      env: validEnv(),
+      fetchImpl,
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "wechat2rss-extract-missing",
+      extract: true,
+    });
+
+    expect(result).toMatchObject({
+      kind: "uploaded",
+      uploadedArticleCount: 1,
+      uploadedEventDraftCount: 0,
+      uploadedCollectorFailureCount: 1,
+    });
+    expect(calls.map((call) => call.url)).toEqual([
+      "http://localhost:4000/login/list?k=wechat-token",
+      "http://localhost:4000/api/query?k=wechat-token&after=20260526&content=0",
+      "https://activities.example/api/collector/source-run",
+      "https://activities.example/api/collector/article-snapshot",
+      "https://activities.example/api/collector/failure",
+    ]);
+    expect(calls[2].body.payload).toMatchObject({
+      status: "partial",
+      articleCount: 1,
+      draftCount: 0,
+      failureCount: 1,
+      failureReason: "agent_config_missing",
+    });
+    expect(calls[4].body.payload).toMatchObject({
+      stage: "draft_extraction",
+      reason: "agent_config_missing",
+      retryable: true,
+    });
+    expect(() =>
+      collectorEnvelopeSchema(collectorFailureSchema).parse(calls[4].body),
+    ).not.toThrow();
+  });
+
   it("uploads only a failed source run when Wechat2RSS account health needs attention", async () => {
     const calls = [];
     const fetchImpl = async (url, init) => {
@@ -212,6 +373,65 @@ function validEnv() {
     COLLECTOR_ID: "home-1",
     WECHAT2RSS_BASE_URL: "http://localhost:4000",
     WECHAT2RSS_TOKEN: "wechat-token",
+  };
+}
+
+function extractionEnv() {
+  return {
+    ...validEnv(),
+    AGENT_PROVIDER: "openai",
+    OPENAI_API_KEY: "openai-secret",
+    OPENAI_MODEL: "gpt-5-mini",
+    OPENAI_BASE_URL: "https://api.openai.com/v1",
+  };
+}
+
+function activityResponse() {
+  return {
+    classification: {
+      kind: "activity",
+      confidence: 0.9,
+      signals: [],
+      missingFields: [],
+    },
+    events: [
+      {
+        title: "Activity",
+        originalTitle: "Activity",
+        organizer: "Culture Org",
+        startsAt: "2026-06-06T06:00:00.000Z",
+        endsAt: "2026-06-06T08:00:00.000Z",
+        venueName: "Beijing Culture Center",
+        venueAddress: "Beijing",
+        reservationStatus: "required",
+        registrationAction: "Register from source article",
+        registrationUrl: "https://mp.weixin.qq.com/s/activity",
+        summary: "Weekend activity.",
+        signals: ["ready_for_review"],
+        evidenceAssetIds: [],
+        fieldEvidence: {
+          title: ["visibleText"],
+          startsAt: ["visibleText"],
+          venueName: ["visibleText"],
+        },
+        confidence: 0.9,
+      },
+    ],
+  };
+}
+
+function openaiResponse(data) {
+  return {
+    output: [
+      {
+        content: [
+          {
+            type: "output_text",
+            text: JSON.stringify(data),
+          },
+        ],
+      },
+    ],
   };
 }
 

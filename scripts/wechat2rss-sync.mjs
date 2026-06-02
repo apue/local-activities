@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { createCollectorHeaders } from "./collector-fixture-run.mjs";
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
+import { runLlmExtractionOnce } from "./llm-extractor.mjs";
 import {
   createWechat2RssClient,
   deriveWechat2RssHealth,
@@ -18,6 +19,7 @@ export async function runWechat2RssSyncOnce({
   fetchImpl = fetch,
   now = new Date(),
   runId = createRunId(now),
+  extract = false,
 }) {
   const config = readWechat2RssSyncConfig(env);
   if (!config.ok) {
@@ -114,6 +116,30 @@ export async function runWechat2RssSyncOnce({
 
   const query = await client.queryArticles({ after, content: false });
   const articles = dedupeArticles(query.articles);
+  const articleEnvelopes = articles.map((article) =>
+    articleSnapshotEnvelope({
+      collectorId: config.collectorId,
+      runId,
+      observedAt,
+      article,
+    }),
+  );
+  const extractionResults = [];
+  if (extract) {
+    for (const articleEnvelope of articleEnvelopes) {
+      extractionResults.push(
+        await runLlmExtractionOnce({
+          env,
+          articleSnapshot: articleEnvelope.payload,
+          fetchImpl,
+          now,
+          runId,
+          upload: false,
+        }),
+      );
+    }
+  }
+  const extractionCounts = summarizeExtractionResults(extractionResults);
   const sourceRun = await uploadSourceRun({
     config,
     fetchImpl,
@@ -122,38 +148,41 @@ export async function runWechat2RssSyncOnce({
       runId,
       observedAt,
       payload: {
-        status: "success",
+        status: extractionCounts.failureCount > 0 ? "partial" : "success",
         startedAt,
         finishedAt: observedAt,
         checkedUrlCount: articles.length,
         articleCount: articles.length,
-        draftCount: 0,
-        failureCount: 0,
+        draftCount: extractionCounts.eventDraftCount,
+        failureCount: extractionCounts.failureCount,
+        failureReason: extractionCounts.failureReason,
         diagnostics: diagnosticEntries({
           provider: "wechat2rss",
           after,
           accountCount: String(logins.accounts.length),
+          extractionEnabled: extract ? "true" : "false",
         }),
       },
     }),
   });
 
   const uploadedArticleSnapshotIds = [];
-  for (const article of articles) {
+  for (const articleEnvelope of articleEnvelopes) {
     const response = await postCollectorJson({
       baseUrl: config.collectorBaseUrl,
       path: "/api/collector/article-snapshot",
       headers: config.headers,
       fetchImpl,
-      body: articleSnapshotEnvelope({
-        collectorId: config.collectorId,
-        runId,
-        observedAt,
-        article,
-      }),
+      body: articleEnvelope,
     });
     uploadedArticleSnapshotIds.push(response.id);
   }
+
+  const uploadedExtraction = await uploadExtractionResults({
+    config,
+    fetchImpl,
+    extractionResults,
+  });
 
   return {
     kind: "uploaded",
@@ -162,6 +191,7 @@ export async function runWechat2RssSyncOnce({
     articleCount: articles.length,
     uploadedArticleCount: uploadedArticleSnapshotIds.length,
     uploadedArticleSnapshotIds,
+    ...uploadedExtraction,
     after,
   };
 }
@@ -204,6 +234,12 @@ export function formatWechat2RssSyncSummary(result) {
   if (result.articleCount != null) parts.push(`articles=${result.articleCount}`);
   if (result.uploadedArticleCount != null) {
     parts.push(`uploaded=${result.uploadedArticleCount}`);
+  }
+  if (result.uploadedEventDraftCount != null) {
+    parts.push(`drafts=${result.uploadedEventDraftCount}`);
+  }
+  if (result.uploadedCollectorFailureCount != null) {
+    parts.push(`extractFailures=${result.uploadedCollectorFailureCount}`);
   }
   if (result.after) parts.push(`after=${result.after}`);
   if (result.missing?.length) parts.push(`missing=${result.missing.join(",")}`);
@@ -255,6 +291,69 @@ async function uploadSourceRun({ config, fetchImpl, envelope }) {
     fetchImpl,
     body: envelope,
   });
+}
+
+async function uploadExtractionResults({ config, fetchImpl, extractionResults }) {
+  let uploadedEvidenceAssetCount = 0;
+  let uploadedEventDraftCount = 0;
+  let uploadedCollectorFailureCount = 0;
+
+  for (const result of extractionResults) {
+    for (const evidence of result.evidenceAssets ?? []) {
+      await postCollectorJson({
+        baseUrl: config.collectorBaseUrl,
+        path: "/api/collector/evidence-asset",
+        headers: config.headers,
+        fetchImpl,
+        body: evidence,
+      });
+      uploadedEvidenceAssetCount += 1;
+    }
+    for (const draft of result.eventDrafts ?? []) {
+      await postCollectorJson({
+        baseUrl: config.collectorBaseUrl,
+        path: "/api/collector/event-draft",
+        headers: config.headers,
+        fetchImpl,
+        body: draft,
+      });
+      uploadedEventDraftCount += 1;
+    }
+    for (const failure of result.failures ?? []) {
+      await postCollectorJson({
+        baseUrl: config.collectorBaseUrl,
+        path: "/api/collector/failure",
+        headers: config.headers,
+        fetchImpl,
+        body: failure,
+      });
+      uploadedCollectorFailureCount += 1;
+    }
+  }
+
+  if (!extractionResults.length) return {};
+
+  return {
+    uploadedEvidenceAssetCount,
+    uploadedEventDraftCount,
+    uploadedCollectorFailureCount,
+  };
+}
+
+function summarizeExtractionResults(extractionResults) {
+  const eventDraftCount = extractionResults.reduce(
+    (count, result) => count + (result.eventDrafts?.length ?? 0),
+    0,
+  );
+  const failureReasons = extractionResults.flatMap((result) =>
+    (result.failures ?? []).map((failure) => failure.payload.reason),
+  );
+  const failureCount = failureReasons.length;
+  return {
+    eventDraftCount,
+    failureCount,
+    failureReason: failureReasons[0],
+  };
 }
 
 async function postCollectorJson({
@@ -335,17 +434,25 @@ async function main() {
 Runs one local Wechat2RSS collector sync:
   login health -> recent article query -> source run upload -> article snapshot uploads
 
+Add --extract to run the lightweight LLM extractor for each normalized article
+snapshot and upload reviewable draft/failure payloads.
+
 Required env:
   COLLECTOR_BASE_URL or APP_BASE_URL
   COLLECTOR_API_KEY
   COLLECTOR_ID
   WECHAT2RSS_BASE_URL
-  WECHAT2RSS_TOKEN`);
+  WECHAT2RSS_TOKEN
+
+Extra env when --extract is set:
+  AGENT_PROVIDER
+  OPENAI_API_KEY
+  OPENAI_MODEL`);
     return;
   }
 
   const env = mergeEnvs(process.env, loadEnvFile(args.envFile));
-  const result = await runWechat2RssSyncOnce({ env });
+  const result = await runWechat2RssSyncOnce({ env, extract: args.extract });
   console.log(formatWechat2RssSyncSummary(result));
   if (result.kind === "failed") process.exitCode = 1;
 }
@@ -353,6 +460,7 @@ Required env:
 function parseArgs(argv) {
   const args = {
     envFile: undefined,
+    extract: false,
     help: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -361,6 +469,8 @@ function parseArgs(argv) {
       args.help = true;
     } else if (arg === "--env-file") {
       args.envFile = argv[++index];
+    } else if (arg === "--extract") {
+      args.extract = true;
     } else {
       throw new Error(`unknown_arg:${arg}`);
     }
