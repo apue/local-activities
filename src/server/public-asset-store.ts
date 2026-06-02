@@ -1,14 +1,21 @@
-import { put as vercelBlobPut } from "@vercel/blob";
+import { VercelBlobAssetStorage } from "./storage/vercel-blob-storage";
+import type { AssetAccess } from "./storage/asset-storage";
 
 type PutBlob = (
   pathname: string,
   body: Buffer,
   options: {
-    access: "public";
+    access: AssetAccess;
     contentType: string;
-    addRandomSuffix: true;
+    allowOverwrite: true;
   },
-) => Promise<{ url: string }>;
+) => Promise<{
+  url: string;
+  downloadUrl?: string;
+  pathname?: string;
+  contentType?: string;
+  etag?: string;
+}>;
 
 export type PublicEventImageInput = {
   bytes: Buffer;
@@ -24,32 +31,21 @@ export async function putPublicEventImage(
   input: PublicEventImageInput,
   deps: PublicAssetStoreDeps = {},
 ) {
-  const put = deps.put ?? vercelBlobPut;
-  const extension = extensionForContentType(input.contentType);
-  const pathname = `event-posters/${slugify(input.keyHint)}-${Date.now()}${extension}`;
-  const blob = await put(pathname, input.bytes, {
-    access: "public",
-    contentType: input.contentType,
-    addRandomSuffix: true,
+  const storage = new VercelBlobAssetStorage({
+    prefix: "event-posters",
+    put: deps.put,
   });
+  const asset = await storage.put({
+    bytes: input.bytes,
+    contentType: input.contentType,
+    keyHint: input.keyHint,
+    role: "poster",
+    access: "public",
+  });
+  const url = await storage.getPublicUrl(asset);
+  if (!url) {
+    throw new Error("public_asset_url_missing");
+  }
 
-  return { url: blob.url };
-}
-
-function slugify(value: string) {
-  const slug = value
-    .toLowerCase()
-    .replace(/\.[a-z0-9]+$/i, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-
-  return slug || "event-poster";
-}
-
-function extensionForContentType(contentType: string) {
-  if (contentType === "image/jpeg") return ".jpg";
-  if (contentType === "image/webp") return ".webp";
-  if (contentType === "image/gif") return ".gif";
-  return ".png";
+  return { url };
 }
