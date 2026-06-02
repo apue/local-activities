@@ -52,6 +52,20 @@ describe("collector ping smoke", () => {
     });
   });
 
+  it("prefers the deployed app URL over a local collector URL in .env.local", () => {
+    expect(
+      readCollectorPingSmokeConfig({
+        NEXT_PUBLIC_APP_URL: "https://local-activities.example",
+        COLLECTOR_BASE_URL: "http://localhost:3000",
+        COLLECTOR_API_KEY: "collector-secret",
+        COLLECTOR_ID: "home-1",
+      }),
+    ).toMatchObject({
+      ok: true,
+      baseUrl: "https://local-activities.example",
+    });
+  });
+
   it("fails when the ping response is not authenticated or has the wrong shape", async () => {
     await expect(
       runCollectorPingSmoke({

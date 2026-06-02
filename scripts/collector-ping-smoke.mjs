@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 
 export function readCollectorPingSmokeConfig(env = process.env) {
-  const baseUrl = normalizeBaseUrl(env.APP_BASE_URL ?? env.COLLECTOR_BASE_URL ?? "");
+  const baseUrl = normalizeBaseUrl(
+    env.APP_BASE_URL ?? env.NEXT_PUBLIC_APP_URL ?? env.COLLECTOR_BASE_URL ?? "",
+  );
   const collectorApiKey = env.COLLECTOR_API_KEY?.trim();
   const collectorId = env.COLLECTOR_ID?.trim();
   const missing = [];
