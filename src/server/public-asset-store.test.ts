@@ -26,13 +26,15 @@ describe("public asset store", () => {
 
     expect(calls).toEqual([
       [
-        expect.stringMatching(/^event-posters\/thai-festival-beijing-2026-/),
+        expect.stringMatching(
+          /^event-posters\/poster\/thai-festival-beijing-2026-[a-f0-9]{16}\.png$/,
+        ),
         Buffer.from("poster"),
-        expect.objectContaining({
+        {
           access: "public",
           contentType: "image/png",
-          addRandomSuffix: true,
-        }),
+          allowOverwrite: true,
+        },
       ],
     ]);
   });
