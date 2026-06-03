@@ -71,6 +71,7 @@ Read these before implementation:
 - [Technical Baseline](technical-baseline.md)
 - [External Dependencies](external-dependencies.md)
 - [Testing Strategy](testing-strategy.md)
+- [Event Pipeline V2 Testing And Environment Isolation](event-pipeline-v2-testing.md)
 - [Smoke Tests](smoke-tests.md)
 - [Quickstart](quickstart.md)
 - this document
@@ -85,7 +86,7 @@ missing operator credential. Each issue must have its own branch, tests, PR, and
 handoff comment.
 
 1. [#142 Event Pipeline V2: align Supabase schema and contracts](https://github.com/apue/local-activities/issues/142)
-2. [#143 Event Pipeline V2: build fixture capture and replay harness](https://github.com/apue/local-activities/issues/143)
+2. [#143 Event Pipeline V2: build testing infrastructure and fixture replay harness](https://github.com/apue/local-activities/issues/143)
 3. [#144 Event Pipeline V2: retain WeChat image, poster, and QR evidence](https://github.com/apue/local-activities/issues/144)
 4. [#150 Event Pipeline V2: implement LLM editorial triage](https://github.com/apue/local-activities/issues/150)
 5. [#146 Event Pipeline V2: implement extraction schema v2](https://github.com/apue/local-activities/issues/146)
@@ -128,9 +129,10 @@ source adapter or fixture
 -> public canonical-event rendering
 ```
 
-Collector and LLM outputs remain untrusted. The backend validates schemas,
-assigns review state, computes publish blockers, records dedupe decisions, and
-owns final publication.
+Collector and LLM outputs remain untrusted inputs for state changes. They may
+make an event candidate eligible for backend auto-publication, but the backend
+validates schemas, assigns review state, computes publish blockers, records
+dedupe decisions, and performs the final publication transition.
 
 Triage and extraction are separate contracts and persisted stages. Runtime code
 may implement them in one direct LLM API call when that is simpler or cheaper,
@@ -139,6 +141,8 @@ decision separately from extracted event candidates.
 
 ## Fixture And Replay Contract
 
+Testing and environment isolation are defined in
+[Event Pipeline V2 Testing And Environment Isolation](event-pipeline-v2-testing.md).
 Live source URLs are sampling inputs, not long-term tests. Default development
 and CI must use committed fixtures and recorded LLM responses.
 
@@ -350,6 +354,9 @@ upcoming filtering must work for single, multi-day, long-running, and recurring
 events.
 
 ## Validation Commands
+
+Follow [Event Pipeline V2 Testing And Environment Isolation](event-pipeline-v2-testing.md)
+before running fixture, Supabase, Vercel, or live-source validation.
 
 Before the umbrella issue is marked complete, run:
 
