@@ -633,6 +633,12 @@ function normalizeDateTime(value) {
   if (!text) return undefined;
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return undefined;
   if (!/^\d{4}-\d{2}-\d{2}T/.test(text)) return undefined;
+  const utcLike = text.match(
+    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|\+00:00)$/,
+  );
+  if (utcLike) {
+    return `${utcLike[1]}:${utcLike[2] ?? "00"}+08:00`;
+  }
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text)) {
     return `${text}:00+08:00`;
   }
