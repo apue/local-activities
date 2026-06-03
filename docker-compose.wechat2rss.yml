@@ -4,11 +4,11 @@ services:
     container_name: local-activities-wechat2rss
     restart: unless-stopped
     ports:
-      - "${WECHAT2RSS_BIND_HOST:-127.0.0.1}:${WECHAT2RSS_PORT:-4000}:80"
+      - "${WECHAT2RSS_BIND_HOST:-127.0.0.1}:${WECHAT2RSS_PORT:-4000}:8080"
     env_file:
       - ${WECHAT2RSS_ENV_FILE:-.env.wechat2rss}
     volumes:
-      - wechat2rss-data:/app/data
+      - wechat2rss-data:/wechat2rss
 
 volumes:
   wechat2rss-data:
