@@ -10,6 +10,11 @@ Refactor the activity pipeline so tracked official-account posts can become
 deduplicated, evidence-backed, public-ready Beijing activity listings through a
 fixture-replayable workflow.
 
+The product direction is an automated local events desk: source adapters act as
+reporters, evidence capture records reporter notes, the LLM editorial processor
+triages and extracts event information, LLM resolution handles dedupe and update
+judgment, backend policy owns publication, and admin work handles exceptions.
+
 The target stack remains the current stack from `docs/quickstart.md`: Next.js,
 TypeScript, Node.js 24, pnpm 11, direct OpenAI-compatible API calls, Vercel,
 Vercel Blob or the selected asset storage adapter, and Supabase Postgres.
@@ -33,8 +38,9 @@ The public catalog and detail pages must support:
 - non-public official news, private visits, and internal itineraries excluded
   from ordinary public discovery
 
-Public pages must not expose extraction diagnostics, model names, confidence,
-field evidence, review state labels, or admin-only reasoning.
+Public pages must not expose triage, extraction, or resolution diagnostics,
+model names, confidence, field evidence, review state labels, or admin-only
+reasoning.
 
 ### Admin And Developer View
 
@@ -44,11 +50,13 @@ Admins and developers should see the full pipeline state:
 - article snapshots, content hashes, image candidates, and capture mode
 - evidence assets, including poster, QR, screenshot, OCR text, and vision
   summaries
-- extractor prompt version, schema version, provider, model, raw parsed output,
-  field evidence, missing fields, confidence, and public eligibility
+- editorial processor prompt version, schema version, provider, model, triage
+  decision, raw parsed output, field evidence, missing fields, confidence, and
+  public eligibility
 - dedupe candidates and LLM resolution rationale
 - publish blockers with specific reasons
-- draft edit, reject, merge, needs-info, and publish actions
+- excluded article review, promote-to-extraction, draft edit, reject, merge,
+  needs-info, and publish actions
 
 The admin portal must explain why a publish action is blocked. A disabled
 button without a visible reason is not acceptable.
@@ -79,10 +87,11 @@ handoff comment.
 1. [#142 Event Pipeline V2: align Supabase schema and contracts](https://github.com/apue/local-activities/issues/142)
 2. [#143 Event Pipeline V2: build fixture capture and replay harness](https://github.com/apue/local-activities/issues/143)
 3. [#144 Event Pipeline V2: retain WeChat image, poster, and QR evidence](https://github.com/apue/local-activities/issues/144)
-4. [#146 Event Pipeline V2: implement extractor schema v2](https://github.com/apue/local-activities/issues/146)
-5. [#147 Event Pipeline V2: add LLM dedupe and resolution to WeChat sync](https://github.com/apue/local-activities/issues/147)
-6. [#148 Event Pipeline V2: enforce publish policy and admin review controls](https://github.com/apue/local-activities/issues/148)
-7. [#145 Event Pipeline V2: render schedules, posters, QR, and deduped events publicly](https://github.com/apue/local-activities/issues/145)
+4. [#150 Event Pipeline V2: implement LLM editorial triage](https://github.com/apue/local-activities/issues/150)
+5. [#146 Event Pipeline V2: implement extraction schema v2](https://github.com/apue/local-activities/issues/146)
+6. [#147 Event Pipeline V2: add LLM dedupe and resolution to WeChat sync](https://github.com/apue/local-activities/issues/147)
+7. [#148 Event Pipeline V2: enforce publish policy and admin review controls](https://github.com/apue/local-activities/issues/148)
+8. [#145 Event Pipeline V2: render schedules, posters, QR, and deduped events publicly](https://github.com/apue/local-activities/issues/145)
 
 Umbrella: [#141 Event Pipeline V2 umbrella](https://github.com/apue/local-activities/issues/141).
 
@@ -108,7 +117,9 @@ The V2 pipeline is:
 source adapter or fixture
 -> article snapshot plus image candidates
 -> evidence asset preparation and storage
--> direct LLM extraction
+-> direct LLM editorial triage
+-> excluded article state or extraction input
+-> direct LLM extraction for extractable articles
 -> schema parse and normalization
 -> candidate lookup
 -> direct LLM dedupe/resolution
@@ -120,6 +131,11 @@ source adapter or fixture
 Collector and LLM outputs remain untrusted. The backend validates schemas,
 assigns review state, computes publish blockers, records dedupe decisions, and
 owns final publication.
+
+Triage and extraction are separate contracts and persisted stages. Runtime code
+may implement them in one direct LLM API call when that is simpler or cheaper,
+but tests, fixtures, backend state, and admin surfaces must treat the triage
+decision separately from extracted event candidates.
 
 ## Fixture And Replay Contract
 
@@ -140,9 +156,12 @@ raw-wechat2rss.json
 article-snapshot.json
 image-candidates.json
 evidence-assets.json
-extractor-input.json
-extractor-response.json
-extracted-drafts.json
+triage-input.json
+triage-response.json
+triage-decision.json
+extraction-input.json
+extraction-response.json
+extracted-event-candidates.json
 candidate-events.json
 resolution-response.json
 expected.json
@@ -158,7 +177,7 @@ Required fixture cases:
   16:00-17:00`.
 - `goethe-sonic-exhibition`: long-running exhibition, through 2026-08-30,
   Tuesday-Sunday 10:00-18:00, closed Monday.
-- `german-minister-visit`: official visit/news item that is not public-facing
+- `official-visit-news`: official visit/news item that is not public-facing
   activity.
 - `korean-red-flavor`: high-confidence single public activity.
 - `italian-monthly-roundup`: one article with many cultural activities.
@@ -170,7 +189,8 @@ only if the issue handoff clearly records the equivalent command.
 ```bash
 pnpm fixture:capture -- --case <case-id> --url <source-url> --env-file .env.collector
 pnpm fixture:replay -- --case <case-id> --stage snapshot
-pnpm fixture:replay -- --case <case-id> --stage extractor
+pnpm fixture:replay -- --case <case-id> --stage triage
+pnpm fixture:replay -- --case <case-id> --stage extraction
 pnpm fixture:replay -- --case <case-id> --stage resolution
 pnpm fixture:e2e -- --case <case-id>
 pnpm fixture:e2e -- --all
@@ -183,8 +203,12 @@ article mirrors beyond what is needed for deterministic tests.
 
 ## Target Data Semantics
 
-V2 extraction must distinguish these concerns:
+V2 editorial processing must distinguish these concerns:
 
+- triage decision: `public_activity`, `possible_public_activity`,
+  `official_visit`, `non_public_news`, `internal_or_private`, `not_event`, or
+  `unsupported`
+- triage action: `extract`, `review`, or `exclude`
 - public eligibility: `public`, `not_public`, or `unclear`
 - event kind: `single`, `multi_day`, `long_running`, `recurring`, `news`,
   `visit`, `cancellation`, or `unsupported`
@@ -203,6 +227,12 @@ V2 extraction must distinguish these concerns:
 must not publish a non-public visit, duplicate event, unsupported schedule, or
 QR-required event without QR evidence.
 
+Triage must happen before ordinary event draft creation. Articles classified as
+`official_visit`, `non_public_news`, `internal_or_private`, `not_event`, or
+`unsupported` should become excluded article records, not ordinary event drafts.
+They remain source evidence and may be promoted to extraction by an admin action
+or backend command when triage produced a false negative.
+
 ## Required Fixture Outcomes
 
 The all-case fixture E2E command must validate these outcomes:
@@ -216,7 +246,7 @@ The all-case fixture E2E command must validate these outcomes:
   occurrences can be generated without a live crawl.
 - `goethe-sonic-exhibition`: long-running exhibition schedule is preserved and
   renderable without requiring a fake exact start datetime.
-- `german-minister-visit`: classified as non-public activity or news/visit; it
+- `official-visit-news`: classified as non-public activity or news/visit; it
   does not enter the ordinary publish queue.
 - `korean-red-flavor`: high-confidence complete public single event can
   auto-publish when no blockers exist.
@@ -246,11 +276,19 @@ images. App-owned public asset URLs may be used for public rendering. Source-sit
 image URLs should remain source evidence unless uploaded to the configured asset
 store.
 
-### Extractor V2
+### Editorial Triage V2
+
+Use direct OpenAI-compatible API calls. Version the triage prompt and schema.
+Triage output decides whether an article should be extracted, reviewed as
+possible public activity, or excluded as non-public/news/not-event. It does not
+publish events. Tests must use recorded provider responses by default.
+
+### Extraction V2
 
 Use direct OpenAI-compatible API calls. Version the prompt and schema. Tests must
-use recorded provider responses by default. Extractor output is normalized input
-to backend policy, not a publish command.
+use recorded provider responses by default. Extraction runs only for articles
+that triage routes to `extract` or `review`. Extraction output is normalized
+input to backend policy, not a publish command.
 
 ### Dedupe And Resolution
 
@@ -261,8 +299,28 @@ available. Record rationale and source evidence.
 
 ### Publish Policy
 
-Backend policy computes blockers and final state. Auto-publish is allowed only
-when all required conditions are met:
+Backend policy computes blockers and final state. Blockers must be separated
+into hard and soft blockers.
+
+Hard blockers cannot be overridden by ordinary publish actions:
+
+- triage or extraction indicates not-public activity, official visit, news,
+  internal/private content, not-event, or unsupported content
+- duplicate, update, cancellation, or withdrawal resolution is unresolved
+- source URL is missing
+- schedule is not renderable for public users
+- QR-required event has no QR evidence
+
+Soft blockers may be overridden by an admin only when the public page remains
+readable and actionable, and the publish action records an operator override
+reason:
+
+- low confidence
+- missing end time
+- incomplete venue details when venue text is still human-readable
+- missing optional registration notes or description
+
+Auto-publish is allowed only when all required conditions are met:
 
 - public eligibility is `public`
 - schedule is supported and renderable
@@ -270,12 +328,20 @@ when all required conditions are met:
 - required public fields are present for the event kind
 - QR-required events have QR evidence
 - confidence meets the configured threshold
+- no hard or soft blockers remain
 
 ### Admin
 
 Admin must show blockers, evidence, source context, extraction metadata,
 resolution rationale, and editable fields needed to make a draft publishable.
 Save incomplete drafts without publishing. Publishing remains backend-gated.
+Admin must support a lightweight session cookie after the operator submits the
+configured admin token once. Admin APIs must continue to support bearer-token
+authentication for smoke scripts and CLI tools.
+
+The ordinary draft queue should not be polluted by excluded articles. Admin may
+have a separate low-priority excluded article surface that shows triage rationale
+and supports promote-to-extraction for false negatives.
 
 ### Public
 
@@ -335,9 +401,9 @@ Use this when starting the medium goal-mode implementation:
 Read AGENTS.md and docs/event-pipeline-v2-goal.md first. Treat the document as
 the execution contract and do not rely on chat history.
 
-Work through issues #142, #143, #144, #146, #147, #148, and #145 in order under
-umbrella issue #141. Use the GitHub workflow in AGENTS.md: issue -> branch ->
-implementation -> tests -> PR -> checks -> merge -> issue handoff.
+Work through issues #142, #143, #144, #150, #146, #147, #148, and #145 in order
+under umbrella issue #141. Use the GitHub workflow in AGENTS.md: issue ->
+branch -> implementation -> tests -> PR -> checks -> merge -> issue handoff.
 
 Do not expand scope beyond docs/event-pipeline-v2-goal.md. Do not introduce
 LangChain, LangGraph, third-party APM, direct Supabase writes from the collector,
