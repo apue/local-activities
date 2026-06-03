@@ -1,0 +1,10 @@
+{
+  "caseId": "beiping-beer-festival",
+  "route": "extraction",
+  "expectedDraftCount": 1,
+  "expectedResolutionDecision": "same_event",
+  "expectedScheduleKind": "single",
+  "expectedPublicEligibility": "public",
+  "requiresQrEvidence": false,
+  "autoPublishExpected": false
+}

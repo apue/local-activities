@@ -1,0 +1,12 @@
+{
+  "provider": "recorded",
+  "model": "fixture-model",
+  "decisions": [
+    {
+      "eventDraftId": "draft-qr-registration-poster",
+      "decision": "new_event",
+      "confidence": 0.96,
+      "rationale": "Recorded fixture resolution."
+    }
+  ]
+}

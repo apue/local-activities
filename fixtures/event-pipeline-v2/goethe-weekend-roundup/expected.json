@@ -1,0 +1,10 @@
+{
+  "caseId": "goethe-weekend-roundup",
+  "route": "extraction",
+  "expectedDraftCount": 3,
+  "expectedResolutionDecision": "new_event",
+  "expectedScheduleKind": "single",
+  "expectedPublicEligibility": "public",
+  "requiresQrEvidence": false,
+  "autoPublishExpected": false
+}

@@ -1,0 +1,26 @@
+{
+  "provider": "recorded",
+  "model": "fixture-model",
+  "schemaVersion": "event-pipeline-v2",
+  "events": [
+    {
+      "eventId": "draft-qr-registration-poster",
+      "title": "QR Registration Poster Event",
+      "publicEligibility": "public",
+      "eventKind": "single",
+      "scheduleKind": "single",
+      "scheduleText": "2026年6月22日 19:00-21:00，扫码报名",
+      "startsAt": "2026-06-22T11:00:00.000Z",
+      "timezone": "Asia/Shanghai",
+      "city": "Beijing",
+      "venueName": "International Culture Center Beijing",
+      "reservationStatus": "required",
+      "registrationRequirement": "required",
+      "registrationQrAssetId": "asset-qr-registration-poster-qr",
+      "posterAssetId": "asset-qr-registration-poster-poster",
+      "confidence": 0.96,
+      "hardBlockers": [],
+      "softBlockers": []
+    }
+  ]
+}

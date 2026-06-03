@@ -1,0 +1,8 @@
+{
+  "images": [
+    {
+      "imageUrl": "fixture://korean-red-flavor/poster.png",
+      "role": "poster_candidate"
+    }
+  ]
+}
