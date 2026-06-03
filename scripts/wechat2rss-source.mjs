@@ -205,7 +205,8 @@ function normalizeWechat2RssArticle(item) {
   const summary = stringValue(
     item.summary ?? item.digest ?? item.description ?? item.desc,
   );
-  const contentText = htmlToBoundedText(stringValue(item.content));
+  const contentHtml = stringValue(item.content);
+  const contentText = htmlToBoundedText(contentHtml);
 
   return removeUndefined({
     provider: "wechat2rss",
@@ -215,6 +216,7 @@ function normalizeWechat2RssArticle(item) {
     sourceName,
     sourceId,
     summary,
+    contentHtml,
     contentText,
     contentHash: hashJson({
       url,

@@ -7,6 +7,11 @@ import { createCollectorHeaders } from "./collector-fixture-run.mjs";
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 import { runLlmExtractionOnce } from "./llm-extractor.mjs";
 import {
+  buildImageEvidenceAssetEnvelopes,
+  captureModeForImageEvidence,
+  extractImageCandidatesFromHtml,
+} from "./wechat-image-evidence.mjs";
+import {
   createWechat2RssClient,
   deriveWechat2RssHealth,
   readWechat2RssConfig,
@@ -116,21 +121,27 @@ export async function runWechat2RssSyncOnce({
 
   const query = await client.queryArticles({ after, content: extract });
   const articles = dedupeArticles(query.articles);
-  const articleEnvelopes = articles.map((article) =>
-    articleSnapshotEnvelope({
+  const articleArtifacts = articles.map((article) =>
+    articleSnapshotArtifact({
       collectorId: config.collectorId,
       runId,
       observedAt,
       article,
     }),
   );
+  const articleEnvelopes = articleArtifacts.map(
+    (artifact) => artifact.articleSnapshot,
+  );
   const extractionResults = [];
   if (extract) {
-    for (const articleEnvelope of articleEnvelopes) {
+    for (const artifact of articleArtifacts) {
       extractionResults.push(
         await runLlmExtractionOnce({
           env,
-          articleSnapshot: articleEnvelope.payload,
+          articleSnapshot: artifact.articleSnapshot.payload,
+          evidenceAssets: artifact.evidenceAssets.map(
+            (envelope) => envelope.payload,
+          ),
           fetchImpl,
           now,
           runId,
@@ -178,11 +189,25 @@ export async function runWechat2RssSyncOnce({
     uploadedArticleSnapshotIds.push(response.id);
   }
 
+  const uploadedSourceEvidence = await uploadEvidenceAssets({
+    config,
+    fetchImpl,
+    evidenceAssets: articleArtifacts.flatMap(
+      (artifact) => artifact.evidenceAssets,
+    ),
+  });
   const uploadedExtraction = await uploadExtractionResults({
     config,
     fetchImpl,
     extractionResults,
   });
+  const uploadedEvidenceAssetCount =
+    (uploadedSourceEvidence.uploadedEvidenceAssetCount ?? 0) +
+    (uploadedExtraction.uploadedEvidenceAssetCount ?? 0);
+  const uploadedEvidenceAssetSummary =
+    uploadedEvidenceAssetCount > 0 || extractionResults.length
+      ? { uploadedEvidenceAssetCount }
+      : {};
 
   return {
     kind: "uploaded",
@@ -192,6 +217,7 @@ export async function runWechat2RssSyncOnce({
     uploadedArticleCount: uploadedArticleSnapshotIds.length,
     uploadedArticleSnapshotIds,
     ...uploadedExtraction,
+    ...uploadedEvidenceAssetSummary,
     after,
   };
 }
@@ -256,30 +282,52 @@ function sourceRunEnvelope({ collectorId, runId, observedAt, payload }) {
   };
 }
 
-function articleSnapshotEnvelope({ collectorId, runId, observedAt, article }) {
+function articleSnapshotArtifact({ collectorId, runId, observedAt, article }) {
   const visibleText = [article.title, article.summary, article.contentText]
     .filter(Boolean)
     .join("\n");
-  return {
+  const imageCandidates = extractImageCandidatesFromHtml(article.contentHtml, {
+    articleUrl: article.url,
+  });
+  const evidenceAssets = buildImageEvidenceAssetEnvelopes({
     collectorId,
     runId,
     observedAt,
-    payloadVersion: collectorPayloadVersion,
-    payload: {
-      sourceName: article.sourceName,
-      canonicalUrl: article.url,
-      finalUrl: article.url,
-      title: article.title,
-      authorName: article.sourceName,
-      publishedAt: article.publishedAt,
-      capturedAt: observedAt,
-      languageHints: ["zh", "en"],
-      captureMode: "text_complete",
-      visibleText: visibleText || undefined,
-      textHash: visibleText ? hashText(visibleText) : undefined,
-      evidenceAssetIds: [],
-      contentHash: article.contentHash,
+    articleUrl: article.url,
+    imageCandidates,
+  });
+  return {
+    articleSnapshot: {
+      collectorId,
+      runId,
+      observedAt,
+      payloadVersion: collectorPayloadVersion,
+      payload: {
+        sourceName: article.sourceName,
+        canonicalUrl: article.url,
+        finalUrl: article.url,
+        title: article.title,
+        authorName: article.sourceName,
+        publishedAt: article.publishedAt,
+        capturedAt: observedAt,
+        languageHints: ["zh", "en"],
+        captureMode: captureModeForImageEvidence({
+          visibleText,
+          evidenceAssets,
+        }),
+        visibleText: visibleText || undefined,
+        textHash: visibleText ? hashText(visibleText) : undefined,
+        screenshotAssetId: evidenceAssets.find(
+          (asset) => asset.payload.role === "screenshot",
+        )?.payload.assetId,
+        evidenceAssetIds: evidenceAssets.map(
+          (asset) => asset.payload.assetId,
+        ),
+        contentHash: article.contentHash,
+      },
     },
+    imageCandidates,
+    evidenceAssets,
   };
 }
 
@@ -291,6 +339,22 @@ async function uploadSourceRun({ config, fetchImpl, envelope }) {
     fetchImpl,
     body: envelope,
   });
+}
+
+async function uploadEvidenceAssets({ config, fetchImpl, evidenceAssets }) {
+  let uploadedEvidenceAssetCount = 0;
+  for (const evidence of evidenceAssets) {
+    await postCollectorJson({
+      baseUrl: config.collectorBaseUrl,
+      path: "/api/collector/evidence-asset",
+      headers: config.headers,
+      fetchImpl,
+      body: evidence,
+    });
+    uploadedEvidenceAssetCount += 1;
+  }
+
+  return uploadedEvidenceAssetCount > 0 ? { uploadedEvidenceAssetCount } : {};
 }
 
 async function uploadExtractionResults({ config, fetchImpl, extractionResults }) {
