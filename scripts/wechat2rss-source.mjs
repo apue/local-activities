@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 const defaultLookbackDays = 7;
+const maxContentTextLength = 12_000;
 
 export function readWechat2RssConfig(env) {
   const baseUrl = normalizeBaseUrl(env.WECHAT2RSS_BASE_URL ?? "");
@@ -182,19 +183,29 @@ function normalizeWechat2RssArticle(item) {
       item.date ??
       item.datetime ??
       item.time ??
-      item.updateTime,
+      item.updateTime ??
+      item.created,
   );
   const sourceName = stringValue(
     item.sourceName ??
       item.accountName ??
       item.mpName ??
+      item.biz_name ??
       item.author ??
       item.nickname,
   );
   const sourceId = stringValue(
-    item.sourceId ?? item.accountId ?? item.mpId ?? item.biz ?? item.id,
+    item.sourceId ??
+      item.accountId ??
+      item.mpId ??
+      item.biz ??
+      item.biz_id ??
+      item.id,
   );
-  const summary = stringValue(item.summary ?? item.digest ?? item.description);
+  const summary = stringValue(
+    item.summary ?? item.digest ?? item.description ?? item.desc,
+  );
+  const contentText = htmlToBoundedText(stringValue(item.content));
 
   return removeUndefined({
     provider: "wechat2rss",
@@ -204,6 +215,7 @@ function normalizeWechat2RssArticle(item) {
     sourceName,
     sourceId,
     summary,
+    contentText,
     contentHash: hashJson({
       url,
       title,
@@ -211,7 +223,7 @@ function normalizeWechat2RssArticle(item) {
       sourceName,
       sourceId,
       summary,
-      content: stringValue(item.content),
+      content: contentText,
     }),
     rawId: stringValue(item.id),
   });
@@ -220,7 +232,7 @@ function normalizeWechat2RssArticle(item) {
 function normalizeWechat2RssAccount(item) {
   const rawStatus = stringValue(
     item.status ?? item.state ?? item.loginStatus ?? item.message,
-  );
+  ) ?? booleanAccountStatus(item);
 
   return removeUndefined({
     name: stringValue(
@@ -238,6 +250,7 @@ function normalizeAccountStatus(rawStatus) {
   if (
     value.includes("healthy") ||
     value.includes("normal") ||
+    value.includes("available") ||
     value.includes("ok") ||
     value.includes("在线") ||
     value.includes("正常")
@@ -257,12 +270,20 @@ function normalizeAccountStatus(rawStatus) {
     value.includes("expired") ||
     value.includes("login") ||
     value.includes("offline") ||
+    value.includes("unavailable") ||
     value.includes("失效") ||
     value.includes("登录")
   ) {
     return "login_required";
   }
   return "unknown";
+}
+
+function booleanAccountStatus(item) {
+  if (item?.available === true && item?.needCheck !== true) return "available";
+  if (item?.needCheck === true) return "login_required";
+  if (item?.available === false) return "unavailable";
+  return undefined;
 }
 
 async function fetchJson(url, fetchImpl) {
@@ -352,6 +373,24 @@ function stringValue(value) {
   if (value == null) return undefined;
   const text = String(value).trim();
   return text || undefined;
+}
+
+function htmlToBoundedText(value) {
+  if (!value) return undefined;
+  const text = value
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return undefined;
+  return text.slice(0, maxContentTextLength);
 }
 
 function hashJson(value) {

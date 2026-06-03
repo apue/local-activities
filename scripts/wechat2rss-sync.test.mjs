@@ -129,6 +129,8 @@ describe("Wechat2RSS one-shot sync", () => {
               mpName: "Culture Org",
               digest:
                 "Weekend activity, June 6 14:00-16:00, Beijing Culture Center.",
+              content:
+                "<p>Weekend activity, June 6 14:00-16:00, Beijing Culture Center.</p>",
             },
           ],
         });
@@ -173,7 +175,7 @@ describe("Wechat2RSS one-shot sync", () => {
     });
     expect(calls.map((call) => call.url)).toEqual([
       "http://localhost:4000/login/list?k=wechat-token",
-      "http://localhost:4000/api/query?k=wechat-token&after=20260526&content=0",
+      "http://localhost:4000/api/query?k=wechat-token&after=20260526&content=1",
       "https://api.openai.com/v1/responses",
       "https://activities.example/api/collector/source-run",
       "https://activities.example/api/collector/article-snapshot",
@@ -189,6 +191,9 @@ describe("Wechat2RSS one-shot sync", () => {
     expect(() =>
       collectorEnvelopeSchema(evidenceAssetSchema).parse(calls[5].body),
     ).not.toThrow();
+    expect(calls[4].body.payload.visibleText).toContain(
+      "Weekend activity, June 6 14:00-16:00, Beijing Culture Center.",
+    );
     expect(() =>
       collectorEnvelopeSchema(eventDraftUploadSchema).parse(calls[6].body),
     ).not.toThrow();
@@ -248,7 +253,7 @@ describe("Wechat2RSS one-shot sync", () => {
     });
     expect(calls.map((call) => call.url)).toEqual([
       "http://localhost:4000/login/list?k=wechat-token",
-      "http://localhost:4000/api/query?k=wechat-token&after=20260526&content=0",
+      "http://localhost:4000/api/query?k=wechat-token&after=20260526&content=1",
       "https://activities.example/api/collector/source-run",
       "https://activities.example/api/collector/article-snapshot",
       "https://activities.example/api/collector/failure",

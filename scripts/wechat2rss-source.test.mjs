@@ -70,9 +70,49 @@ describe("Wechat2RSS source adapter", () => {
     expect(result.articles[0].contentHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("normalizes Wechat2RSS content query fields into bounded text", () => {
+    const result = normalizeWechat2RssArticleQueryResponse({
+      data: [
+        {
+          biz_id: 123,
+          biz_name: "IICPechino",
+          title: "Save the Date 2026年5-6月活动计划",
+          desc: "May and June activities",
+          created: "2026-05-29T17:40:00+08:00",
+          link: "https://mp.weixin.qq.com/s/activity",
+          content: `<p><span>IICPechino</span></p><p>June 6 14:00 Beijing Culture Center</p>${"x".repeat(20_000)}`,
+        },
+      ],
+    });
+
+    expect(result.articles[0]).toMatchObject({
+      title: "Save the Date 2026年5-6月活动计划",
+      url: "https://mp.weixin.qq.com/s/activity",
+      publishedAt: "2026-05-29T09:40:00.000Z",
+      sourceName: "IICPechino",
+      sourceId: "123",
+      summary: "May and June activities",
+    });
+    expect(result.articles[0].contentText).toContain(
+      "June 6 14:00 Beijing Culture Center",
+    );
+    expect(result.articles[0].contentText.length).toBeLessThanOrEqual(12_000);
+  });
+
   it("normalizes login health and derives product-visible source health", () => {
     const healthy = normalizeWechat2RssLoginListResponse({
       accounts: [{ nickname: "reader", status: "正常" }],
+    });
+    const healthyByAvailability = normalizeWechat2RssLoginListResponse({
+      data: [
+        {
+          id: 16100076,
+          name: "田阳",
+          available: true,
+          needCheck: false,
+          waitTime: "2026-06-03 10:38:23",
+        },
+      ],
     });
     const risky = normalizeWechat2RssLoginListResponse({
       accounts: [{ nickname: "reader", status: "今日小黑屋 风控" }],
@@ -83,6 +123,15 @@ describe("Wechat2RSS source adapter", () => {
       status: "healthy",
     });
     expect(deriveWechat2RssHealth(healthy)).toEqual({
+      healthStatus: "healthy",
+    });
+    expect(healthyByAvailability.accounts[0]).toMatchObject({
+      name: "田阳",
+      accountId: "16100076",
+      rawStatus: "available",
+      status: "healthy",
+    });
+    expect(deriveWechat2RssHealth(healthyByAvailability)).toEqual({
       healthStatus: "healthy",
     });
     expect(deriveWechat2RssHealth(risky)).toEqual({

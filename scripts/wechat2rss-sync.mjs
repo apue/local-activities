@@ -114,7 +114,7 @@ export async function runWechat2RssSyncOnce({
     };
   }
 
-  const query = await client.queryArticles({ after, content: false });
+  const query = await client.queryArticles({ after, content: extract });
   const articles = dedupeArticles(query.articles);
   const articleEnvelopes = articles.map((article) =>
     articleSnapshotEnvelope({
@@ -257,7 +257,7 @@ function sourceRunEnvelope({ collectorId, runId, observedAt, payload }) {
 }
 
 function articleSnapshotEnvelope({ collectorId, runId, observedAt, article }) {
-  const visibleText = [article.title, article.summary]
+  const visibleText = [article.title, article.summary, article.contentText]
     .filter(Boolean)
     .join("\n");
   return {
@@ -368,7 +368,7 @@ async function postCollectorJson({
     headers,
     body: JSON.stringify(body),
   });
-  const json = await response.json();
+  const json = await response.json().catch(() => ({}));
   if (!response.ok || json?.ok === false) {
     throw new Error(`collector_upload_failed:${path}:${response.status}`);
   }
