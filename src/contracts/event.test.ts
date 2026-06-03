@@ -39,4 +39,33 @@ describe("event contracts", () => {
     expect(() => publicEventStatusSchema.parse("ready_for_review")).toThrow();
     expect(() => canonicalEventReviewStateSchema.parse("published")).toThrow();
   });
+
+  it("accepts public-safe Event Pipeline V2 canonical fields", () => {
+    const result = canonicalEventSchema.parse({
+      id: "event-recurring",
+      title: "Weekly Library Meetup",
+      startsAt: "2026-06-06T08:00:00.000Z",
+      timezone: "Asia/Shanghai",
+      city: "Beijing",
+      reservationStatus: "not_required",
+      sourceUrl: "https://mp.weixin.qq.com/s/example",
+      scheduleText: "Every Saturday 16:00-17:00",
+      publicEligibility: "public",
+      eventKind: "recurring",
+      scheduleKind: "recurring",
+      recurrenceRule: "FREQ=WEEKLY;BYDAY=SA",
+      occurrenceStartsAt: [
+        "2026-06-06T08:00:00.000Z",
+        "2026-06-13T08:00:00.000Z",
+      ],
+      posterAssetId: "asset-poster-1",
+      qrAssetId: "asset-qr-1",
+      registrationQrAssetId: "asset-qr-1",
+      status: "published",
+      reviewState: "approved",
+    });
+
+    expect(result.scheduleKind).toBe("recurring");
+    expect(result.occurrenceStartsAt).toHaveLength(2);
+  });
 });

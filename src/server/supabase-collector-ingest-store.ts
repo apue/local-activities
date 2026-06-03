@@ -5,6 +5,7 @@ import type {
   CollectorEnvelope,
   CollectorFailure,
   EventDraftUpload,
+  ExcludedArticleUpload,
   EvidenceAsset,
   SourceCandidate,
   SourceRunReport,
@@ -157,11 +158,21 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
       article_url: payload.articleUrl,
       extraction_attempt_id: payload.extractionAttemptId,
       capture_mode: payload.captureMode,
+      triage_decision: payload.triageDecision ?? null,
+      triage_action: payload.triageAction ?? null,
+      triage_confidence: payload.triageConfidence ?? null,
+      public_signals: payload.publicSignals ?? [],
+      exclusion_signals: payload.exclusionSignals ?? [],
+      public_eligibility: payload.publicEligibility ?? null,
+      event_kind: payload.eventKind ?? null,
+      schedule_kind: payload.scheduleKind ?? null,
       title: payload.title ?? null,
       original_title: payload.originalTitle ?? null,
       organizer: payload.organizer ?? null,
       starts_at: payload.startsAt ?? null,
       ends_at: payload.endsAt ?? null,
+      recurrence_rule: payload.recurrenceRule ?? null,
+      occurrence_starts_at: payload.occurrenceStartsAt ?? null,
       timezone: payload.timezone,
       venue_name: payload.venueName ?? null,
       venue_address: payload.venueAddress ?? null,
@@ -169,6 +180,10 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
       reservation_status: payload.reservationStatus ?? null,
       registration_action: payload.registrationAction ?? null,
       registration_url: payload.registrationUrl ?? null,
+      schedule_text: payload.scheduleText ?? null,
+      poster_asset_id: payload.posterAssetId ?? null,
+      qr_asset_id: payload.qrAssetId ?? null,
+      registration_qr_asset_id: payload.registrationQrAssetId ?? null,
       poster_image_url: payload.posterImageUrl ?? null,
       poster_image_alt: payload.posterImageAlt ?? null,
       poster_image_source_url: payload.posterImageSourceUrl ?? null,
@@ -178,6 +193,9 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
       evidence_asset_ids: payload.evidenceAssetIds,
       field_evidence: payload.fieldEvidence,
       confidence: payload.confidence,
+      hard_blockers: payload.hardBlockers ?? [],
+      soft_blockers: payload.softBlockers ?? [],
+      resolution_decision: payload.resolutionDecision ?? null,
       review_state: options?.reviewState ?? computeDraftReviewState(payload),
     };
     const row = await this.writeOneWithOptionalPosterFallback<{ id: number }>(
@@ -215,12 +233,25 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
       reservation_status: payload.reservationStatus ?? "unknown",
       registration_action: payload.registrationAction ?? null,
       registration_url: payload.registrationUrl ?? null,
+      schedule_text: payload.scheduleText ?? null,
+      triage_decision: payload.triageDecision ?? null,
+      public_eligibility: payload.publicEligibility ?? null,
+      event_kind: payload.eventKind ?? null,
+      schedule_kind: payload.scheduleKind ?? null,
+      recurrence_rule: payload.recurrenceRule ?? null,
+      occurrence_starts_at: payload.occurrenceStartsAt ?? null,
+      poster_asset_id: payload.posterAssetId ?? null,
+      qr_asset_id: payload.qrAssetId ?? null,
+      registration_qr_asset_id: payload.registrationQrAssetId ?? null,
       source_url: payload.articleUrl,
       poster_image_url: payload.posterImageUrl ?? null,
       poster_image_alt: payload.posterImageAlt ?? null,
       poster_image_source_url: payload.posterImageSourceUrl ?? null,
       summary: payload.summary ?? null,
       entry_notes: payload.entryNotes ?? null,
+      hard_blockers: payload.hardBlockers ?? [],
+      soft_blockers: payload.softBlockers ?? [],
+      resolution_decision: payload.resolutionDecision ?? null,
       status: "published",
       review_state: "approved",
       published_at: input.publishedAt,
@@ -236,6 +267,46 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
         .single(),
     );
     return { id: row.event_id };
+  }
+
+  async upsertExcludedArticle(
+    envelope: CollectorEnvelope<ExcludedArticleUpload>,
+  ) {
+    const payload = envelope.payload;
+    const sourceRunId = await this.findSourceRunId(envelope);
+    const row = await this.writeOne<{ id: number }>(
+      this.client
+        .from("excluded_articles")
+        .upsert(
+          {
+            excluded_article_id: createStableCollectorObjectId("excluded", [
+              payload.articleUrl,
+              payload.triageAttemptId,
+            ]),
+            source_id: parseOptionalNumericId(payload.sourceId),
+            source_run_id: sourceRunId,
+            article_url: payload.articleUrl,
+            triage_attempt_id: payload.triageAttemptId,
+            triage_decision: payload.triageDecision,
+            triage_action: payload.triageAction,
+            confidence: payload.confidence,
+            public_signals: payload.publicSignals,
+            exclusion_signals: payload.exclusionSignals,
+            exclusion_reason: payload.exclusionReason,
+            evidence_asset_ids: payload.evidenceAssetIds,
+            prompt_version: payload.promptVersion,
+            schema_version: payload.schemaVersion,
+            provider: payload.provider,
+            model: payload.model,
+            processing_state: "excluded",
+          },
+          { onConflict: "article_url,triage_attempt_id" },
+        )
+        .select("id")
+        .single(),
+    );
+
+    return { id: String(row.id) };
   }
 
   async upsertCollectorFailure(

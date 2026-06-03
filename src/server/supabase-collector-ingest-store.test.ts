@@ -4,7 +4,7 @@ import type { EventDraftUpload } from "../contracts/collector";
 import { getSupabaseCollectorIngestStore } from "./supabase-collector-ingest-store";
 
 describe("supabase collector ingest store", () => {
-  it("does not require optional schedule_text columns when publishing drafts", async () => {
+  it("persists schedule text while publishing drafts", async () => {
     const upserts: Array<{ table: string; payload: Record<string, unknown> }> = [];
     const store = getSupabaseCollectorIngestStore(
       supabaseClientForEventDraftPublish(upserts),
@@ -72,10 +72,10 @@ describe("supabase collector ingest store", () => {
         expect.objectContaining({ table: "canonical_events" }),
       ]),
     );
-    expect(upserts.find((entry) => entry.table === "event_drafts")?.payload).not
-      .toHaveProperty("schedule_text");
+    expect(upserts.find((entry) => entry.table === "event_drafts")?.payload)
+      .toHaveProperty("schedule_text", "5月30日至31日每日10:30-18:00");
     expect(upserts.find((entry) => entry.table === "canonical_events")?.payload)
-      .not.toHaveProperty("schedule_text");
+      .toHaveProperty("schedule_text", "5月30日至31日每日10:30-18:00");
     expect(upserts.find((entry) => entry.table === "event_drafts")?.payload)
       .toMatchObject({
         poster_image_url: "https://cdn.example.com/posters/thai.png",
@@ -128,6 +128,81 @@ describe("supabase collector ingest store", () => {
     expect(eventAttempts[0]?.payload).toHaveProperty("poster_image_url");
     expect(eventAttempts[1]?.payload).not.toHaveProperty("poster_image_url");
   });
+
+  it("persists Event Pipeline V2 draft fields without optional-column fallback", async () => {
+    const upserts: Array<{ table: string; payload: Record<string, unknown> }> =
+      [];
+    const store = getSupabaseCollectorIngestStore(
+      supabaseClientForEventDraftPublish(upserts),
+    );
+
+    await expect(
+      store.upsertEventDraft(
+        {
+          collectorId: "collector-1",
+          runId: "run-1",
+          observedAt: "2026-06-03T08:00:00.000Z",
+          payloadVersion: "2026-05-collector-v1",
+          payload: eventPipelineV2DraftPayload(),
+        },
+        { reviewState: "needs_review" },
+      ),
+    ).resolves.toEqual({ id: "1" });
+
+    expect(upserts.find((entry) => entry.table === "event_drafts")?.payload)
+      .toMatchObject({
+        triage_decision: "public_activity",
+        triage_action: "extract",
+        triage_confidence: 0.97,
+        public_eligibility: "public",
+        event_kind: "long_running",
+        schedule_kind: "long_running",
+        schedule_text: "Through 2026-08-30, Tue-Sun 10:00-18:00",
+        recurrence_rule: "FREQ=WEEKLY;BYDAY=TU,WE,TH,FR,SA,SU",
+        occurrence_starts_at: ["2026-06-04T02:00:00.000Z"],
+        poster_asset_id: "asset-poster-1",
+        qr_asset_id: "asset-qr-1",
+        registration_qr_asset_id: "asset-qr-1",
+        hard_blockers: [],
+        soft_blockers: [{ code: "low_confidence", message: "Review confidence" }],
+        resolution_decision: "new_event",
+      });
+  });
+
+  it("persists excluded articles separately from ordinary drafts", async () => {
+    const upserts: Array<{ table: string; payload: Record<string, unknown> }> =
+      [];
+    const store = getSupabaseCollectorIngestStore(
+      supabaseClientForEventDraftPublish(upserts),
+    );
+
+    await expect(
+      store.upsertExcludedArticle!({
+        collectorId: "collector-1",
+        runId: "run-1",
+        observedAt: "2026-06-03T08:00:00.000Z",
+        payloadVersion: "2026-05-collector-v1",
+        payload: {
+          articleUrl: "https://mp.weixin.qq.com/s/official-visit",
+          triageAttemptId: "triage-1",
+          triageDecision: "official_visit",
+          triageAction: "exclude",
+          confidence: 0.98,
+          publicSignals: [],
+          exclusionSignals: ["closed official itinerary"],
+          exclusionReason: "Official visit, not a public activity.",
+          evidenceAssetIds: ["asset-screenshot-1"],
+          promptVersion: "triage-v2",
+          schemaVersion: "triage-schema-v2",
+          provider: "openai-compatible",
+          model: "gpt-5.4-mini",
+        },
+      }),
+    ).resolves.toEqual({ id: "1" });
+
+    expect(upserts.map((entry) => entry.table)).toContain("excluded_articles");
+    expect(upserts.map((entry) => entry.table)).not.toContain("event_drafts");
+  });
 });
 
 function eventDraftPayload(): EventDraftUpload {
@@ -149,6 +224,29 @@ function eventDraftPayload(): EventDraftUpload {
     evidenceAssetIds: [],
     fieldEvidence: {},
     confidence: 0.9,
+  };
+}
+
+function eventPipelineV2DraftPayload(): EventDraftUpload {
+  return {
+    ...eventDraftPayload(),
+    triageDecision: "public_activity",
+    triageAction: "extract",
+    triageConfidence: 0.97,
+    publicSignals: ["public venue", "public schedule"],
+    exclusionSignals: [],
+    publicEligibility: "public",
+    eventKind: "long_running",
+    scheduleKind: "long_running",
+    scheduleText: "Through 2026-08-30, Tue-Sun 10:00-18:00",
+    recurrenceRule: "FREQ=WEEKLY;BYDAY=TU,WE,TH,FR,SA,SU",
+    occurrenceStartsAt: ["2026-06-04T02:00:00.000Z"],
+    posterAssetId: "asset-poster-1",
+    qrAssetId: "asset-qr-1",
+    registrationQrAssetId: "asset-qr-1",
+    hardBlockers: [],
+    softBlockers: [{ code: "low_confidence", message: "Review confidence" }],
+    resolutionDecision: "new_event",
   };
 }
 

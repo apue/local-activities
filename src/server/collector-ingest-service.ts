@@ -5,6 +5,7 @@ import type {
   CollectorEnvelope,
   CollectorFailure,
   EventDraftUpload,
+  ExcludedArticleUpload,
   EvidenceAsset,
   SourceCandidate,
   SourceRunReport,
@@ -30,6 +31,9 @@ export type CollectorIngestStore = {
   upsertEventDraft(
     input: CollectorEnvelope<EventDraftUpload>,
     options?: { reviewState: DraftBackendRouting["reviewState"] },
+  ): Promise<StoredCollectorObject>;
+  upsertExcludedArticle?(
+    input: CollectorEnvelope<ExcludedArticleUpload>,
   ): Promise<StoredCollectorObject>;
   upsertCollectorFailure(
     input: CollectorEnvelope<CollectorFailure> & { failureId: string },
@@ -108,6 +112,16 @@ export async function ingestEventDraft(
     autoPublished: true,
     publishedEventId: event.id,
   };
+}
+
+export async function ingestExcludedArticle(
+  envelope: CollectorEnvelope<ExcludedArticleUpload>,
+  store: CollectorIngestStore,
+) {
+  if (!store.upsertExcludedArticle) {
+    throw new Error("excluded_article_store_not_configured");
+  }
+  return store.upsertExcludedArticle(envelope);
 }
 
 export async function ingestCollectorFailure(

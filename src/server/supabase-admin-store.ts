@@ -62,6 +62,25 @@ type EventDraftRow = {
   poster_image_source_url?: string | null;
   summary: string | null;
   entry_notes: string | null;
+  triage_decision: AdminEventDraftRecord["triageDecision"] | null;
+  triage_action: AdminEventDraftRecord["triageAction"] | null;
+  triage_confidence: number | null;
+  public_signals: string[] | null;
+  exclusion_signals: string[] | null;
+  public_eligibility: AdminEventDraftRecord["publicEligibility"] | null;
+  event_kind: AdminEventDraftRecord["eventKind"] | null;
+  schedule_kind: AdminEventDraftRecord["scheduleKind"] | null;
+  recurrence_rule: string | null;
+  occurrence_starts_at: string[] | null;
+  poster_asset_id: string | null;
+  qr_asset_id: string | null;
+  registration_qr_asset_id: string | null;
+  hard_blockers: AdminEventDraftRecord["hardBlockers"] | null;
+  soft_blockers: AdminEventDraftRecord["softBlockers"] | null;
+  operator_override_reason: string | null;
+  resolution_decision: AdminEventDraftRecord["resolutionDecision"] | null;
+  canonical_event_id: string | number | null;
+  processing_state: AdminEventDraftRecord["processingState"] | null;
   confidence: number;
   review_state: AdminReviewState;
   evidence_asset_ids: string[];
@@ -181,6 +200,20 @@ class SupabaseAdminStore implements AdminStore {
       registration_action: input.draft.registrationAction ?? null,
       registration_url: input.draft.registrationUrl ?? null,
       source_url: input.draft.articleUrl,
+      schedule_text: input.draft.scheduleText ?? null,
+      triage_decision: input.draft.triageDecision ?? null,
+      public_eligibility: input.draft.publicEligibility ?? null,
+      event_kind: input.draft.eventKind ?? null,
+      schedule_kind: input.draft.scheduleKind ?? null,
+      recurrence_rule: input.draft.recurrenceRule ?? null,
+      occurrence_starts_at: input.draft.occurrenceStartsAt ?? null,
+      poster_asset_id: input.draft.posterAssetId ?? null,
+      qr_asset_id: input.draft.qrAssetId ?? null,
+      registration_qr_asset_id: input.draft.registrationQrAssetId ?? null,
+      hard_blockers: input.draft.hardBlockers ?? [],
+      soft_blockers: input.draft.softBlockers ?? [],
+      operator_override_reason: input.draft.operatorOverrideReason ?? null,
+      resolution_decision: input.draft.resolutionDecision ?? null,
       poster_image_url: input.draft.posterImageUrl ?? null,
       poster_image_alt: input.draft.posterImageAlt ?? null,
       poster_image_source_url: input.draft.posterImageSourceUrl ?? null,
@@ -335,6 +368,28 @@ function toDraftRecord(row: EventDraftRow): AdminEventDraftRecord {
     posterImageSourceUrl: row.poster_image_source_url ?? undefined,
     summary: row.summary ?? undefined,
     entryNotes: row.entry_notes ?? undefined,
+    triageDecision: row.triage_decision ?? undefined,
+    triageAction: row.triage_action ?? undefined,
+    triageConfidence: row.triage_confidence ?? undefined,
+    publicSignals: row.public_signals ?? undefined,
+    exclusionSignals: row.exclusion_signals ?? undefined,
+    publicEligibility: row.public_eligibility ?? undefined,
+    eventKind: row.event_kind ?? undefined,
+    scheduleKind: row.schedule_kind ?? undefined,
+    recurrenceRule: row.recurrence_rule ?? undefined,
+    occurrenceStartsAt: row.occurrence_starts_at ?? undefined,
+    posterAssetId: row.poster_asset_id ?? undefined,
+    qrAssetId: row.qr_asset_id ?? undefined,
+    registrationQrAssetId: row.registration_qr_asset_id ?? undefined,
+    hardBlockers: row.hard_blockers ?? undefined,
+    softBlockers: row.soft_blockers ?? undefined,
+    operatorOverrideReason: row.operator_override_reason ?? undefined,
+    resolutionDecision: row.resolution_decision ?? undefined,
+    canonicalEventId:
+      row.canonical_event_id === null || row.canonical_event_id === undefined
+        ? undefined
+        : String(row.canonical_event_id),
+    processingState: row.processing_state ?? undefined,
     confidence: row.confidence,
     reviewState: row.review_state,
     evidenceAssetIds: row.evidence_asset_ids,

@@ -34,6 +34,31 @@ export type CanonicalEventRow = {
   poster_image_source_url?: string | null;
   summary: string | null;
   schedule_text?: string | null;
+  public_eligibility?: "public" | "not_public" | "unclear" | null;
+  event_kind?:
+    | "single"
+    | "multi_day"
+    | "long_running"
+    | "recurring"
+    | "news"
+    | "visit"
+    | "cancellation"
+    | "unsupported"
+    | null;
+  schedule_kind?:
+    | "single"
+    | "multi_day"
+    | "long_running"
+    | "recurring"
+    | "unsupported"
+    | null;
+  recurrence_rule?: string | null;
+  occurrence_starts_at?: string[] | null;
+  poster_asset_id?: string | null;
+  qr_asset_id?: string | null;
+  registration_qr_asset_id?: string | null;
+  hard_blockers?: Array<Record<string, unknown>> | null;
+  soft_blockers?: Array<Record<string, unknown>> | null;
   entry_notes: string | null;
   status: "draft" | "published" | "cancelled" | "withdrawn";
   published_at: string | null;
@@ -58,6 +83,9 @@ export type PublicEvent = {
   posterImageSourceUrl?: string;
   summary?: string;
   scheduleText?: string;
+  scheduleKind?: NonNullable<CanonicalEventRow["schedule_kind"]>;
+  recurrenceRule?: string;
+  occurrenceStartsAt?: string[];
   entryNotes?: string;
   status: "published";
 };
@@ -77,6 +105,10 @@ const basePublicEventColumns = [
   "registration_url",
   "source_url",
   "summary",
+  "schedule_text",
+  "schedule_kind",
+  "recurrence_rule",
+  "occurrence_starts_at",
   "entry_notes",
   "status",
   "published_at",
@@ -226,6 +258,9 @@ export function shapePublicEvent(row: CanonicalEventRow): PublicEvent {
     posterImageSourceUrl: row.poster_image_source_url ?? undefined,
     summary: row.summary ?? undefined,
     scheduleText: row.schedule_text ?? undefined,
+    scheduleKind: row.schedule_kind ?? undefined,
+    recurrenceRule: row.recurrence_rule ?? undefined,
+    occurrenceStartsAt: row.occurrence_starts_at ?? undefined,
     entryNotes: row.entry_notes ?? undefined,
     status: "published",
   };

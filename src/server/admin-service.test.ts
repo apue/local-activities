@@ -168,6 +168,30 @@ describe("admin service", () => {
     );
   });
 
+  it("returns Event Pipeline V2 review context on draft detail", async () => {
+    const draft: AdminEventDraftRecord = {
+      ...completeDraft,
+      triageDecision: "possible_public_activity",
+      triageAction: "review",
+      publicEligibility: "unclear",
+      eventKind: "long_running",
+      scheduleKind: "long_running",
+      recurrenceRule: "FREQ=WEEKLY;BYDAY=TU,WE,TH,FR,SA,SU",
+      occurrenceStartsAt: ["2026-06-04T02:00:00.000Z"],
+      hardBlockers: [],
+      softBlockers: [{ code: "low_confidence", message: "Review confidence" }],
+      resolutionDecision: "new_event",
+    };
+    const store = new MemoryAdminStore([draft]);
+
+    await expect(getAdminEventDraftDetail("draft-1", store)).resolves.toMatchObject({
+      triageDecision: "possible_public_activity",
+      scheduleKind: "long_running",
+      softBlockers: [{ code: "low_confidence", message: "Review confidence" }],
+      resolutionDecision: "new_event",
+    });
+  });
+
   it("stores missing-info and rejection decisions", async () => {
     const store = new MemoryAdminStore([completeDraft]);
 

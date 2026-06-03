@@ -34,6 +34,14 @@ const baseEvent: CanonicalEventRow = {
   entry_notes: null,
   status: "published",
   published_at: "2026-05-28T08:00:00.000Z",
+  public_eligibility: "public",
+  event_kind: "recurring",
+  schedule_kind: "recurring",
+  recurrence_rule: "FREQ=WEEKLY;BYDAY=SA",
+  occurrence_starts_at: ["2026-06-06T06:00:00.000Z"],
+  poster_asset_id: "asset-poster-1",
+  qr_asset_id: "asset-qr-1",
+  registration_qr_asset_id: "asset-qr-1",
 };
 
 describe("public event helpers", () => {
@@ -99,11 +107,17 @@ describe("public event helpers", () => {
       posterImageSourceUrl: "https://mp.weixin.qq.com/poster.png",
       summary: "A weekend programme about Italian design.",
       scheduleText: "6月6日 14:00-16:00",
+      scheduleKind: "recurring",
+      recurrenceRule: "FREQ=WEEKLY;BYDAY=SA",
+      occurrenceStartsAt: ["2026-06-06T06:00:00.000Z"],
       entryNotes: undefined,
       status: "published",
     });
     expect(Object.keys(shaped)).not.toContain("reviewState");
     expect(Object.keys(shaped)).not.toContain("confidence");
+    expect(Object.keys(shaped)).not.toContain("hardBlockers");
+    expect(Object.keys(shaped)).not.toContain("publicEligibility");
+    expect(Object.keys(shaped)).not.toContain("posterAssetId");
   });
 
   it("formats public reservation status without exposing unknown", () => {
@@ -154,7 +168,7 @@ describe("public event helpers", () => {
     ).resolves.toEqual([]);
   });
 
-  it("does not require the optional schedule_text column in public queries", async () => {
+  it("selects V2 schedule fields in public queries", async () => {
     const calls: Array<[string, unknown[]]> = [];
     const client = {
       from(...args: unknown[]) {
@@ -194,7 +208,10 @@ describe("public event helpers", () => {
 
     expect(calls).toContainEqual(["from", ["canonical_events"]]);
     expect(calls[1]?.[1]?.[0]).toContain("poster_image_url");
-    expect(calls[1]?.[1]?.[0]).not.toContain("schedule_text");
+    expect(calls[1]?.[1]?.[0]).toContain("schedule_text");
+    expect(calls[1]?.[1]?.[0]).toContain("schedule_kind");
+    expect(calls[1]?.[1]?.[0]).toContain("recurrence_rule");
+    expect(calls[1]?.[1]?.[0]).toContain("occurrence_starts_at");
     expect(events[0]?.scheduleText).toBeUndefined();
   });
 
