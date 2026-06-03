@@ -1,0 +1,117 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  collectorEnvelopeSchema,
+  evidenceAssetSchema,
+} from "../src/contracts/collector";
+import {
+  buildImageEvidenceAssetEnvelopes,
+  captureModeForImageEvidence,
+  classifyImageCandidate,
+  extractImageCandidatesFromHtml,
+} from "./wechat-image-evidence.mjs";
+
+describe("WeChat image evidence helpers", () => {
+  it("extracts image candidates from WeChat-like lazy image HTML", () => {
+    const candidates = extractImageCandidatesFromHtml(
+      `
+        <p>Scan the QR to register.</p>
+        <img data-src="/poster.png" alt="活动海报" width="900" height="1200" />
+        <img data-src="https://mmbiz.qpic.cn/qr.jpg" alt="报名二维码" />
+        <img data-src="https://mmbiz.qpic.cn/qr.jpg" alt="duplicate" />
+      `,
+      { articleUrl: "https://mp.weixin.qq.com/s/activity" },
+    );
+
+    expect(candidates).toEqual([
+      {
+        url: "https://mp.weixin.qq.com/poster.png",
+        alt: "活动海报",
+        width: 900,
+        height: 1200,
+        source: "html_img",
+      },
+      {
+        url: "https://mmbiz.qpic.cn/qr.jpg",
+        alt: "报名二维码",
+        source: "html_img",
+      },
+    ]);
+  });
+
+  it("classifies poster, QR, and ordinary article images", () => {
+    expect(
+      classifyImageCandidate({
+        url: "https://mmbiz.qpic.cn/a.jpg",
+        alt: "报名二维码",
+      }),
+    ).toBe("qr");
+    expect(
+      classifyImageCandidate({
+        url: "https://mmbiz.qpic.cn/event-poster.jpg",
+      }),
+    ).toBe("poster");
+    expect(
+      classifyImageCandidate({
+        url: "https://mmbiz.qpic.cn/body.jpg",
+        width: 120,
+        height: 80,
+      }),
+    ).toBe("article_image");
+  });
+
+  it("builds evidence asset envelopes accepted by collector contracts", () => {
+    const envelopes = buildImageEvidenceAssetEnvelopes({
+      collectorId: "collector-1",
+      runId: "run-1",
+      observedAt: "2026-06-03T08:00:00.000Z",
+      articleUrl: "https://mp.weixin.qq.com/s/activity",
+      imageCandidates: [
+        {
+          url: "https://mmbiz.qpic.cn/poster.jpg",
+          alt: "活动海报",
+          width: 900,
+          height: 1200,
+        },
+        {
+          url: "https://mmbiz.qpic.cn/register-qr.jpg",
+          alt: "报名二维码",
+        },
+      ],
+    });
+
+    expect(envelopes.map((envelope) => envelope.payload.role)).toEqual([
+      "poster",
+      "qr",
+    ]);
+    expect(envelopes.map((envelope) => envelope.payload.assetId)).toEqual([
+      expect.stringMatching(/^asset-[a-f0-9]{24}$/),
+      expect.stringMatching(/^asset-[a-f0-9]{24}$/),
+    ]);
+    expect(() =>
+      collectorEnvelopeSchema(evidenceAssetSchema).parse(envelopes[0]),
+    ).not.toThrow();
+  });
+
+  it("does not invent evidence assets for text-only articles", () => {
+    const candidates = extractImageCandidatesFromHtml("<p>Text only</p>", {
+      articleUrl: "https://mp.weixin.qq.com/s/text",
+    });
+    const envelopes = buildImageEvidenceAssetEnvelopes({
+      collectorId: "collector-1",
+      runId: "run-1",
+      observedAt: "2026-06-03T08:00:00.000Z",
+      articleUrl: "https://mp.weixin.qq.com/s/text",
+      imageCandidates: candidates,
+    });
+
+    expect(candidates).toEqual([]);
+    expect(envelopes).toEqual([]);
+    expect(
+      captureModeForImageEvidence({
+        visibleText: "A readable activity page.",
+        evidenceAssets: envelopes,
+      }),
+    ).toBe("text_complete");
+  });
+});

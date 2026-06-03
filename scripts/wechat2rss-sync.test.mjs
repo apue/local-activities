@@ -112,6 +112,77 @@ describe("Wechat2RSS one-shot sync", () => {
     expect(formatWechat2RssSyncSummary(result)).not.toContain("wechat-token");
   });
 
+  it("retains poster and QR image evidence from Wechat2RSS article HTML", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init, body: init?.body ? JSON.parse(init.body) : null });
+      if (url.includes("/login/list")) {
+        return jsonResponse({ accounts: [{ nickname: "reader", status: "正常" }] });
+      }
+      if (url.includes("/api/query")) {
+        return jsonResponse({
+          data: [
+            {
+              title: "QR Poster Activity",
+              url: "https://mp.weixin.qq.com/s/qr-poster",
+              date: "2026-06-01T12:00:00+08:00",
+              mpName: "Culture Org",
+              digest: "Scan the QR poster to register.",
+              content:
+                '<p>Scan the QR poster to register.</p><img data-src="https://mmbiz.qpic.cn/activity-poster.jpg" alt="活动海报" width="900" height="1200" /><img data-src="https://mmbiz.qpic.cn/register-qr.jpg" alt="报名二维码" />',
+            },
+          ],
+        });
+      }
+      if (url.endsWith("/api/collector/source-run")) {
+        return jsonResponse({ ok: true, id: "source-run-1" });
+      }
+      if (url.endsWith("/api/collector/article-snapshot")) {
+        return jsonResponse({ ok: true, id: "snapshot-1" });
+      }
+      if (url.endsWith("/api/collector/evidence-asset")) {
+        return jsonResponse({ ok: true, id: `evidence-${calls.length}` });
+      }
+      throw new Error(`unexpected_url:${url}`);
+    };
+
+    const result = await runWechat2RssSyncOnce({
+      env: validEnv(),
+      fetchImpl,
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "wechat2rss-images",
+    });
+
+    const articleUpload = calls.find((call) =>
+      call.url.endsWith("/api/collector/article-snapshot"),
+    );
+    const evidenceUploads = calls.filter((call) =>
+      call.url.endsWith("/api/collector/evidence-asset"),
+    );
+
+    expect(result).toMatchObject({
+      kind: "uploaded",
+      uploadedEvidenceAssetCount: 2,
+    });
+    expect(articleUpload.body.payload).toMatchObject({
+      captureMode: "image_with_qr_registration",
+      evidenceAssetIds: [
+        expect.stringMatching(/^asset-[a-f0-9]{24}$/),
+        expect.stringMatching(/^asset-[a-f0-9]{24}$/),
+      ],
+    });
+    expect(evidenceUploads.map((call) => call.body.payload.role)).toEqual([
+      "poster",
+      "qr",
+    ]);
+    expect(evidenceUploads[0].body.payload.sourceUrl).toBe(
+      "https://mmbiz.qpic.cn/activity-poster.jpg",
+    );
+    expect(() =>
+      collectorEnvelopeSchema(evidenceAssetSchema).parse(evidenceUploads[0].body),
+    ).not.toThrow();
+  });
+
   it("optionally extracts uploaded Wechat2RSS snapshots into reviewable drafts", async () => {
     const calls = [];
     const fetchImpl = async (url, init) => {

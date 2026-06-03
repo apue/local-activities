@@ -16,6 +16,16 @@ export type PublicEventImageInput = {
   keyHint: string;
 };
 
+export type PublicEventAssetRole =
+  | "poster"
+  | "registration_qr"
+  | "article_image"
+  | "screenshot";
+
+export type PublicEventAssetInput = PublicEventImageInput & {
+  role: PublicEventAssetRole;
+};
+
 export type PublicAssetStoreDeps = {
   put?: PutBlob;
 };
@@ -24,9 +34,16 @@ export async function putPublicEventImage(
   input: PublicEventImageInput,
   deps: PublicAssetStoreDeps = {},
 ) {
+  return putPublicEventAsset({ ...input, role: "poster" }, deps);
+}
+
+export async function putPublicEventAsset(
+  input: PublicEventAssetInput,
+  deps: PublicAssetStoreDeps = {},
+) {
   const put = deps.put ?? vercelBlobPut;
   const extension = extensionForContentType(input.contentType);
-  const pathname = `event-posters/${slugify(input.keyHint)}-${Date.now()}${extension}`;
+  const pathname = `${assetDirectory(input.role)}/${slugify(input.keyHint)}-${Date.now()}${extension}`;
   const blob = await put(pathname, input.bytes, {
     access: "public",
     contentType: input.contentType,
@@ -34,6 +51,11 @@ export async function putPublicEventImage(
   });
 
   return { url: blob.url };
+}
+
+function assetDirectory(role: PublicEventAssetRole) {
+  if (role === "poster") return "event-posters";
+  return `event-assets/${role}`;
 }
 
 function slugify(value: string) {
