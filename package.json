@@ -19,6 +19,7 @@
     "collector": "node scripts/local-collector-console.mjs",
     "collector:wechat2rss:once": "node scripts/wechat2rss-sync.mjs",
     "extractor:llm": "node scripts/llm-extractor.mjs",
+    "extractor:wechat-url": "node scripts/wechat-url-extract.mjs",
     "editor:capture": "node scripts/editor-agent-capture.mjs",
     "smoke:e2e-fixture": "node scripts/e2e-fixture-smoke.mjs",
     "smoke:admin-readonly": "node scripts/admin-readonly-smoke.mjs",
