@@ -206,6 +206,28 @@
   font-weight: 850;
 }
 
+.qrSection {
+  margin-top: 18px;
+  border-top: 1px solid #eef0eb;
+  padding-top: 16px;
+}
+
+.qrSection h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.qrSection img {
+  display: block;
+  width: min(100%, 240px);
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  border: 1px solid #d6d9d1;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 8px;
+}
+
 .backLink {
   color: #315b7c;
   font-weight: 850;

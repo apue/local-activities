@@ -3,7 +3,7 @@ import Link from "next/link";
 import styles from "./public-event-ui.module.css";
 import {
   formatReservationStatus,
-  formatPublicEventTime,
+  formatPublicEventSchedule,
   listPublicUpcomingEvents,
 } from "../src/server/public-events";
 
@@ -43,7 +43,7 @@ export default async function HomePage() {
                 </div>
               ) : null}
               <div className={styles.dateBlock}>
-                {event.scheduleText ?? formatPublicEventTime(event)}
+                {formatPublicEventSchedule(event)}
               </div>
               <div>
                 <h2>{event.title}</h2>

@@ -3,7 +3,7 @@ import Link from "next/link";
 import styles from "../../public-event-ui.module.css";
 import {
   formatReservationStatus,
-  formatPublicEventTime,
+  formatPublicEventSchedule,
   getPublicEvent,
 } from "../../../src/server/public-events";
 
@@ -52,13 +52,22 @@ export default async function EventDetailPage({
                 {event.registrationAction ?? "查看报名方式"}
               </a>
             ) : null}
+            {event.registrationQrImageUrl ? (
+              <section className={styles.qrSection}>
+                <h3>{event.registrationAction ?? "扫码报名"}</h3>
+                <img
+                  src={event.registrationQrImageUrl}
+                  alt={event.registrationQrImageAlt ?? `${event.title} registration QR`}
+                />
+              </section>
+            ) : null}
           </article>
 
           <aside className={styles.panel}>
             <h2>Plan</h2>
             <div className={styles.field}>
               <span>Time</span>
-              <strong>{event.scheduleText ?? formatPublicEventTime(event)}</strong>
+              <strong>{formatPublicEventSchedule(event)}</strong>
             </div>
             <div className={styles.field}>
               <span>Venue</span>

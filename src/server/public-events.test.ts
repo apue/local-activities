@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildUpcomingEventFilter,
   filterUpcomingPublishedEvents,
+  formatPublicEventSchedule,
   formatReservationStatus,
   formatPublicEventTime,
   getPublicEventFromClient,
@@ -57,6 +58,7 @@ describe("public event helpers", () => {
             event_id: "expired",
             starts_at: "2026-05-01T06:00:00.000Z",
             ends_at: "2026-05-01T08:00:00.000Z",
+            occurrence_starts_at: null,
           },
           { ...baseEvent, event_id: "draft", status: "draft" },
           { ...baseEvent, event_id: "cancelled", status: "cancelled" },
@@ -77,11 +79,53 @@ describe("public event helpers", () => {
     ).toEqual(["event-1"]);
   });
 
+  it("keeps recurring events when a future occurrence is available", () => {
+    const now = new Date("2026-06-10T00:00:00.000Z");
+
+    expect(
+      filterUpcomingPublishedEvents(
+        [
+          {
+            ...baseEvent,
+            event_id: "weekly-library",
+            starts_at: "2026-05-03T06:00:00.000Z",
+            ends_at: "2026-05-03T09:00:00.000Z",
+            schedule_text: null,
+            schedule_kind: "recurring",
+            occurrence_starts_at: [
+              "2026-06-06T06:00:00.000Z",
+              "2026-06-13T06:00:00.000Z",
+            ],
+          },
+        ],
+        now,
+      ).map((event) => event.event_id),
+    ).toEqual(["weekly-library"]);
+  });
+
+  it("deduplicates public cards with the same real-world event key", () => {
+    const now = new Date("2026-06-01T00:00:00.000Z");
+
+    expect(
+      filterUpcomingPublishedEvents(
+        [
+          baseEvent,
+          {
+            ...baseEvent,
+            event_id: "event-duplicate",
+            source_url: "https://mp.weixin.qq.com/s/duplicate",
+          },
+        ],
+        now,
+      ).map((event) => event.event_id),
+    ).toEqual(["event-1"]);
+  });
+
   it("builds the database-side upcoming filter before applying result limits", () => {
     expect(
       buildUpcomingEventFilter(new Date("2026-06-01T00:00:00.000Z")),
     ).toBe(
-      "starts_at.gte.2026-06-01T00:00:00.000Z,ends_at.gte.2026-06-01T00:00:00.000Z",
+      "starts_at.gte.2026-06-01T00:00:00.000Z,ends_at.gte.2026-06-01T00:00:00.000Z,schedule_kind.eq.recurring",
     );
   });
 
@@ -105,6 +149,8 @@ describe("public event helpers", () => {
       posterImageUrl: "https://cdn.example.com/posters/event.png",
       posterImageAlt: "Italian Design Weekend poster",
       posterImageSourceUrl: "https://mp.weixin.qq.com/poster.png",
+      registrationQrImageUrl: undefined,
+      registrationQrImageAlt: undefined,
       summary: "A weekend programme about Italian design.",
       scheduleText: "6月6日 14:00-16:00",
       scheduleKind: "recurring",
@@ -120,6 +166,23 @@ describe("public event helpers", () => {
     expect(Object.keys(shaped)).not.toContain("posterAssetId");
   });
 
+  it("shapes public QR registration evidence when available", () => {
+    expect(
+      shapePublicEvent({
+        ...baseEvent,
+        registration_url: null,
+        registration_action: "扫码报名",
+        registration_qr_image_url: "https://cdn.example.com/qr/register.png",
+        registration_qr_image_alt: "Italian Design Weekend registration QR",
+      }),
+    ).toMatchObject({
+      registrationAction: "扫码报名",
+      registrationUrl: undefined,
+      registrationQrImageUrl: "https://cdn.example.com/qr/register.png",
+      registrationQrImageAlt: "Italian Design Weekend registration QR",
+    });
+  });
+
   it("formats public reservation status without exposing unknown", () => {
     expect(formatReservationStatus("required")).toBe("需要预约");
     expect(formatReservationStatus("not_required")).toBe("无需预约");
@@ -128,6 +191,34 @@ describe("public event helpers", () => {
 
   it("formats event time in Asia Shanghai for public display", () => {
     expect(formatPublicEventTime(baseEvent)).toContain("6月6日");
+  });
+
+  it("formats long-running exhibition schedules for public display", () => {
+    expect(
+      formatPublicEventSchedule({
+        ...baseEvent,
+        starts_at: "2026-06-07T02:00:00.000Z",
+        ends_at: "2026-08-31T11:00:00.000Z",
+        schedule_text: null,
+        schedule_kind: "long_running",
+      }),
+    ).toContain("6月7日-8月31日");
+  });
+
+  it("formats recurring schedules from upcoming occurrences", () => {
+    expect(
+      formatPublicEventSchedule({
+        ...baseEvent,
+        starts_at: "2026-05-03T06:00:00.000Z",
+        ends_at: "2026-05-03T09:00:00.000Z",
+        schedule_text: null,
+        schedule_kind: "recurring",
+        occurrence_starts_at: [
+          "2026-06-06T06:00:00.000Z",
+          "2026-06-13T06:00:00.000Z",
+        ],
+      }),
+    ).toContain("每周");
   });
 
   it("returns an empty public list when the backing store is temporarily unavailable", async () => {

@@ -32,6 +32,8 @@ export type CanonicalEventRow = {
   poster_image_url?: string | null;
   poster_image_alt?: string | null;
   poster_image_source_url?: string | null;
+  registration_qr_image_url?: string | null;
+  registration_qr_image_alt?: string | null;
   summary: string | null;
   schedule_text?: string | null;
   public_eligibility?: "public" | "not_public" | "unclear" | null;
@@ -81,6 +83,8 @@ export type PublicEvent = {
   posterImageUrl?: string;
   posterImageAlt?: string;
   posterImageSourceUrl?: string;
+  registrationQrImageUrl?: string;
+  registrationQrImageAlt?: string;
   summary?: string;
   scheduleText?: string;
   scheduleKind?: NonNullable<CanonicalEventRow["schedule_kind"]>;
@@ -88,6 +92,19 @@ export type PublicEvent = {
   occurrenceStartsAt?: string[];
   entryNotes?: string;
   status: "published";
+};
+
+type PublicScheduleInput = {
+  starts_at?: string;
+  startsAt?: string;
+  ends_at?: string | null;
+  endsAt?: string;
+  schedule_text?: string | null;
+  scheduleText?: string;
+  schedule_kind?: CanonicalEventRow["schedule_kind"];
+  scheduleKind?: PublicEvent["scheduleKind"];
+  occurrence_starts_at?: string[] | null;
+  occurrenceStartsAt?: string[];
 };
 
 const basePublicEventColumns = [
@@ -119,6 +136,8 @@ const publicEventColumns = [
   "poster_image_url",
   "poster_image_alt",
   "poster_image_source_url",
+  "registration_qr_image_url",
+  "registration_qr_image_alt",
 ].join(",");
 
 export async function listPublicUpcomingEvents(now = new Date()) {
@@ -134,7 +153,7 @@ export async function listPublicUpcomingEventsFromClient(
 ) {
   const first = await queryPublicUpcomingEvents(client, publicEventColumns, now);
   const { data, error } =
-    first.error && isMissingOptionalPosterColumnError(first.error)
+    first.error && isMissingOptionalPublicAssetColumnError(first.error)
       ? await queryPublicUpcomingEvents(client, basePublicEventColumns, now)
       : first;
 
@@ -164,7 +183,7 @@ export async function getPublicEventFromClient(
 ) {
   const first = await queryPublicEvent(client, publicEventColumns, eventId);
   const { data, error } =
-    first.error && isMissingOptionalPosterColumnError(first.error)
+    first.error && isMissingOptionalPublicAssetColumnError(first.error)
       ? await queryPublicEvent(client, basePublicEventColumns, eventId)
       : first;
 
@@ -208,7 +227,7 @@ function queryPublicEvent(
   return query.maybeSingle<CanonicalEventRow>();
 }
 
-function isMissingOptionalPosterColumnError(error: unknown) {
+function isMissingOptionalPublicAssetColumnError(error: unknown) {
   const message =
     typeof error === "object" && error && "message" in error
       ? String(error.message)
@@ -216,7 +235,9 @@ function isMissingOptionalPosterColumnError(error: unknown) {
   return (
     message.includes("poster_image_url") ||
     message.includes("poster_image_alt") ||
-    message.includes("poster_image_source_url")
+    message.includes("poster_image_source_url") ||
+    message.includes("registration_qr_image_url") ||
+    message.includes("registration_qr_image_alt")
   );
 }
 
@@ -227,15 +248,21 @@ export function filterUpcomingPublishedEvents(
   return events
     .filter((event) => event.status === "published")
     .filter((event) => {
-      const relevantEnd = event.ends_at ?? event.starts_at;
-      return Date.parse(relevantEnd) >= now.getTime();
+      return getPublicEventEndTime(event, now) >= now.getTime();
     })
-    .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    .sort((a, b) => getPublicEventSortTime(a, now) - getPublicEventSortTime(b, now))
+    .filter((event, index, sorted) => {
+      const key = buildPublicEventDedupeKey(event);
+      return (
+        sorted.findIndex((candidate) => buildPublicEventDedupeKey(candidate) === key) ===
+        index
+      );
+    });
 }
 
 export function buildUpcomingEventFilter(now = new Date()) {
   const nowIso = now.toISOString();
-  return `starts_at.gte.${nowIso},ends_at.gte.${nowIso}`;
+  return `starts_at.gte.${nowIso},ends_at.gte.${nowIso},schedule_kind.eq.recurring`;
 }
 
 export function shapePublicEvent(row: CanonicalEventRow): PublicEvent {
@@ -256,6 +283,8 @@ export function shapePublicEvent(row: CanonicalEventRow): PublicEvent {
     posterImageUrl: row.poster_image_url ?? undefined,
     posterImageAlt: row.poster_image_alt ?? undefined,
     posterImageSourceUrl: row.poster_image_source_url ?? undefined,
+    registrationQrImageUrl: row.registration_qr_image_url ?? undefined,
+    registrationQrImageAlt: row.registration_qr_image_alt ?? undefined,
     summary: row.summary ?? undefined,
     scheduleText: row.schedule_text ?? undefined,
     scheduleKind: row.schedule_kind ?? undefined,
@@ -301,4 +330,90 @@ export function formatPublicEventTime(
   }).format(new Date(endsAt));
 
   return `${date} ${startTime}-${endTime}`;
+}
+
+export function formatPublicEventSchedule(
+  event: PublicScheduleInput,
+  now = new Date(),
+) {
+  const scheduleText = event.schedule_text ?? event.scheduleText;
+  if (scheduleText) return scheduleText;
+
+  const scheduleKind = event.schedule_kind ?? event.scheduleKind;
+  const startsAt = event.starts_at ?? event.startsAt;
+  const endsAt = event.ends_at ?? event.endsAt;
+
+  if (!startsAt) return "时间待定";
+
+  if (scheduleKind === "recurring") {
+    const occurrences = event.occurrence_starts_at ?? event.occurrenceStartsAt;
+    const upcoming = getUpcomingOccurrence(occurrences, now);
+    if (upcoming) return `每周 · 下次 ${formatPublicEventTime({ startsAt: upcoming })}`;
+  }
+
+  if ((scheduleKind === "multi_day" || scheduleKind === "long_running") && endsAt) {
+    return formatDateRange(startsAt, endsAt);
+  }
+
+  return formatPublicEventTime({ startsAt, endsAt: endsAt ?? undefined });
+}
+
+function getPublicEventEndTime(event: CanonicalEventRow, now: Date) {
+  const upcomingOccurrence = getUpcomingOccurrence(event.occurrence_starts_at, now);
+  if (upcomingOccurrence) return Date.parse(upcomingOccurrence);
+  return Date.parse(event.ends_at ?? event.starts_at);
+}
+
+function getPublicEventSortTime(event: CanonicalEventRow, now: Date) {
+  const upcomingOccurrence = getUpcomingOccurrence(event.occurrence_starts_at, now);
+  return Date.parse(upcomingOccurrence ?? event.starts_at);
+}
+
+function getUpcomingOccurrence(
+  occurrences: string[] | null | undefined,
+  now: Date,
+) {
+  return (occurrences ?? [])
+    .filter((occurrence) => Date.parse(occurrence) >= now.getTime())
+    .sort()[0];
+}
+
+function buildPublicEventDedupeKey(event: CanonicalEventRow) {
+  return [
+    normalizePublicKeyPart(event.title),
+    event.starts_at,
+    normalizePublicKeyPart(event.venue_name ?? event.venue_address ?? ""),
+  ].join("|");
+}
+
+function normalizePublicKeyPart(value: string) {
+  return value.trim().toLocaleLowerCase("zh-CN").replace(/\s+/g, " ");
+}
+
+function formatDateRange(startsAt: string, endsAt: string) {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  const startDate = formatMonthDay(start);
+  const endDate = formatMonthDay(end);
+  const startTime = formatClockTime(start);
+  const endTime = formatClockTime(end);
+
+  if (startDate === endDate) return `${startDate} ${startTime}-${endTime}`;
+  return `${startDate}-${endDate} ${startTime}-${endTime}`;
+}
+
+function formatMonthDay(date: Date) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "long",
+    day: "numeric",
+    timeZone: "Asia/Shanghai",
+  }).format(date);
+}
+
+function formatClockTime(date: Date) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Shanghai",
+  }).format(date);
 }
