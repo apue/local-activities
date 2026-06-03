@@ -171,6 +171,46 @@ describe("lightweight LLM extractor", () => {
     ]);
   });
 
+  it("creates article-unique metadata evidence ids within the same run", async () => {
+    const first = await runLlmExtractionOnce({
+      env: {
+        COLLECTOR_ID: "collector-1",
+        AGENT_PROVIDER: "fixture",
+        OPENAI_MODEL: "fixture-model",
+      },
+      articleSnapshot: textArticle(),
+      providerResponse: activityResponse(),
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "shared-run",
+    });
+    const second = await runLlmExtractionOnce({
+      env: {
+        COLLECTOR_ID: "collector-1",
+        AGENT_PROVIDER: "fixture",
+        OPENAI_MODEL: "fixture-model",
+      },
+      articleSnapshot: {
+        ...textArticle(),
+        canonicalUrl: "https://mp.weixin.qq.com/s/other",
+        finalUrl: "https://mp.weixin.qq.com/s/other",
+        contentHash: "other-article-hash",
+      },
+      providerResponse: activityResponse(),
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "shared-run",
+    });
+
+    expect(first.evidenceAssets[0].payload.assetId).not.toBe(
+      second.evidenceAssets[0].payload.assetId,
+    );
+    expect(first.eventDrafts[0].payload.evidenceAssetIds).toContain(
+      first.evidenceAssets[0].payload.assetId,
+    );
+    expect(second.eventDrafts[0].payload.evidenceAssetIds).toContain(
+      second.evidenceAssets[0].payload.assetId,
+    );
+  });
+
   it("keeps image and QR registration signals from provider output", async () => {
     const result = await runLlmExtractionOnce({
       env: validEnv(),
@@ -218,7 +258,7 @@ describe("lightweight LLM extractor", () => {
     expect(result.eventDrafts[0].payload.evidenceAssetIds).toEqual([
       "poster-1",
       "qr-1",
-      "extract-image-metadata",
+      result.evidenceAssets[0].payload.assetId,
     ]);
   });
 

@@ -546,12 +546,15 @@ function buildMetadataEvidenceEnvelope({
     model: config.openaiModel,
     classification,
   });
+  const articleKey = hashText(
+    `${articleSnapshot.canonicalUrl ?? articleSnapshot.finalUrl ?? ""}:${articleSnapshot.contentHash ?? ""}`,
+  ).slice(0, 16);
   return envelope({
     collectorId,
     runId,
     observedAt,
     payload: {
-      assetId: `${runId}-metadata`,
+      assetId: `${runId}-${articleKey}-metadata`,
       articleUrl: articleSnapshot.canonicalUrl,
       role: "vision_summary",
       mediaType: "text",
