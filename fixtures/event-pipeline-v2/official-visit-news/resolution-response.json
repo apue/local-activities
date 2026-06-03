@@ -1,0 +1,10 @@
+{
+  "provider": "recorded",
+  "model": "fixture-model",
+  "decisions": [
+    {
+      "decision": "not_public_activity",
+      "rationale": "Recorded non-public/news triage exclusion."
+    }
+  ]
+}

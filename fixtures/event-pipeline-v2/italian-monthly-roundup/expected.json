@@ -1,0 +1,10 @@
+{
+  "caseId": "italian-monthly-roundup",
+  "route": "extraction",
+  "expectedDraftCount": 4,
+  "expectedResolutionDecision": "new_event",
+  "expectedScheduleKind": "single",
+  "expectedPublicEligibility": "public",
+  "requiresQrEvidence": false,
+  "autoPublishExpected": false
+}

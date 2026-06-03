@@ -1,0 +1,30 @@
+{
+  "provider": "recorded",
+  "model": "fixture-model",
+  "schemaVersion": "event-pipeline-v2",
+  "events": [
+    {
+      "eventId": "draft-goethe-sonic-exhibition",
+      "title": "Sonic Other__lands 第三只耳——折叠的地景之间",
+      "publicEligibility": "public",
+      "eventKind": "long_running",
+      "scheduleKind": "long_running",
+      "scheduleText": "即日起至2026年8月30日，周二至周日 10:00-18:00，周一闭馆",
+      "startsAt": "2026-06-04T02:00:00.000Z",
+      "endsAt": "2026-08-30T11:00:00.000Z",
+      "timezone": "Asia/Shanghai",
+      "city": "Beijing",
+      "venueName": "歌德学院798空间",
+      "reservationStatus": "not_required",
+      "registrationRequirement": "not_required",
+      "posterAssetId": "asset-goethe-sonic-exhibition-poster",
+      "recurrenceRule": "FREQ=WEEKLY;BYDAY=TU,WE,TH,FR,SA,SU;UNTIL=20260830T110000Z",
+      "occurrenceStartsAt": [
+        "2026-06-04T02:00:00.000Z"
+      ],
+      "confidence": 0.96,
+      "hardBlockers": [],
+      "softBlockers": []
+    }
+  ]
+}

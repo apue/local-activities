@@ -1,0 +1,14 @@
+{
+  "assets": [
+    {
+      "assetId": "asset-qr-registration-poster-poster",
+      "kind": "poster",
+      "source": "recorded_fixture"
+    },
+    {
+      "assetId": "asset-qr-registration-poster-qr",
+      "kind": "registration_qr",
+      "source": "recorded_fixture"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "provider": "recorded",
+  "model": "fixture-model",
+  "schemaVersion": "event-pipeline-v2",
+  "events": []
+}

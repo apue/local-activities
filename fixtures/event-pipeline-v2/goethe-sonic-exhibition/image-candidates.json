@@ -1,0 +1,8 @@
+{
+  "images": [
+    {
+      "imageUrl": "fixture://goethe-sonic-exhibition/poster.png",
+      "role": "poster_candidate"
+    }
+  ]
+}

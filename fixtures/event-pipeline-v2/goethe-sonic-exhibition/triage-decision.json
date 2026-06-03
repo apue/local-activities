@@ -1,0 +1,11 @@
+{
+  "triageDecision": "public_activity",
+  "triageAction": "extract",
+  "publicEligibility": "public",
+  "eventKind": "long_running",
+  "confidence": 0.96,
+  "publicSignals": [
+    "public schedule or venue present"
+  ],
+  "exclusionSignals": []
+}
