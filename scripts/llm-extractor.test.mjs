@@ -77,7 +77,7 @@ describe("lightweight LLM extractor", () => {
       startsAt: "2026-06-06T06:00:00.000Z",
       timezone: "Asia/Shanghai",
       city: "Beijing",
-      signals: ["ready_for_review"],
+      signals: ["ready_for_review", "possible_duplicate"],
       confidence: 0.91,
     });
     expect(result.eventDrafts[0].payload.fieldEvidence._extraction).toEqual([
@@ -96,6 +96,57 @@ describe("lightweight LLM extractor", () => {
     expect(JSON.stringify(calls)).not.toContain("openai-secret");
     expect(formatLlmExtractionSummary(result)).toContain("drafts=1");
     expect(formatLlmExtractionSummary(result)).not.toContain("openai-secret");
+  });
+
+  it("supports chat completions providers for activity extraction", async () => {
+    const calls = [];
+    const result = await runLlmExtractionOnce({
+      env: {
+        ...validEnv(),
+        OPENAI_API_STYLE: "chat_completions",
+      },
+      articleSnapshot: textArticle(),
+      fetchImpl: async (url, init) => {
+        calls.push({ url, body: JSON.parse(init.body), signal: init.signal });
+        return jsonResponse(chatCompletionResponse(activityResponse()));
+      },
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "extract-chat",
+    });
+
+    expect(result.kind).toBe("drafts");
+    expect(result.eventDrafts[0].payload.title).toBe("Weekend concert");
+    expect(calls[0].url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(calls[0].body.messages).toHaveLength(1);
+    expect(calls[0].body.messages[0].role).toBe("user");
+    expect(calls[0].body.messages[0].content).toContain("ARTICLE:");
+    expect(calls[0].body.max_tokens).toBe(800);
+    expect(calls[0].body.response_format).toBeUndefined();
+    expect(calls[0].signal).toBeDefined();
+    expect(JSON.stringify(calls)).not.toContain("openai-secret");
+  });
+
+  it("normalizes string classifications from loose chat providers", async () => {
+    const result = await runLlmExtractionOnce({
+      env: {
+        ...validEnv(),
+        OPENAI_API_STYLE: "chat_completions",
+      },
+      articleSnapshot: textArticle(),
+      fetchImpl: async () =>
+        jsonResponse(
+          chatCompletionResponse({
+            classification: "not_activity",
+            events: [],
+            signals: ["missing_required_public_field"],
+          }),
+        ),
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "extract-string-classification",
+    });
+
+    expect(result.kind).toBe("no_draft");
+    expect(result.failures[0].payload.reason).toBe("not_activity");
   });
 
   it("runs deterministic fixture extraction without a live provider API key", async () => {
@@ -162,6 +213,7 @@ describe("lightweight LLM extractor", () => {
     expect(result.eventDrafts[0].payload.signals).toEqual([
       "image_dominant",
       "qr_registration",
+      "possible_duplicate",
     ]);
     expect(result.eventDrafts[0].payload.evidenceAssetIds).toEqual([
       "poster-1",
@@ -202,6 +254,70 @@ describe("lightweight LLM extractor", () => {
       "extract-multi-activity-2",
     );
     expect(result.eventDrafts[1].payload.signals).toContain("secondary_mention");
+    expect(result.eventDrafts[1].payload.signals).toContain("possible_duplicate");
+  });
+
+  it("keeps date-only model output in schedule text instead of invalid datetime fields", async () => {
+    const result = await runLlmExtractionOnce({
+      env: validEnv(),
+      articleSnapshot: textArticle(),
+      fetchImpl: async () =>
+        jsonResponse(
+          openaiResponse({
+            ...activityResponse(),
+            events: [
+              {
+                ...activityResponse().events[0],
+                startsAt: "2026-05-31",
+                endsAt: "2026-06-13",
+              },
+            ],
+          }),
+        ),
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "extract-date-only",
+    });
+
+    expect(result.eventDrafts[0].payload.startsAt).toBeUndefined();
+    expect(result.eventDrafts[0].payload.endsAt).toBeUndefined();
+    expect(result.eventDrafts[0].payload.scheduleText).toBe(
+      "2026-05-31 - 2026-06-13",
+    );
+    expect(() =>
+      collectorEnvelopeSchema(eventDraftUploadSchema).parse(result.eventDrafts[0]),
+    ).not.toThrow();
+  });
+
+  it("adds Beijing offset to local datetime model output", async () => {
+    const result = await runLlmExtractionOnce({
+      env: validEnv(),
+      articleSnapshot: textArticle(),
+      fetchImpl: async () =>
+        jsonResponse(
+          openaiResponse({
+            ...activityResponse(),
+            events: [
+              {
+                ...activityResponse().events[0],
+                startsAt: "2026-06-03T19:00",
+                endsAt: "2026-06-03T21:00",
+              },
+            ],
+          }),
+        ),
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "extract-local-time",
+    });
+
+    expect(result.eventDrafts[0].payload.startsAt).toBe(
+      "2026-06-03T19:00:00+08:00",
+    );
+    expect(result.eventDrafts[0].payload.endsAt).toBe(
+      "2026-06-03T21:00:00+08:00",
+    );
+    expect(() =>
+      collectorEnvelopeSchema(eventDraftUploadSchema).parse(result.eventDrafts[0]),
+    ).not.toThrow();
   });
 
   it("classifies non-activity and cancellation posts without creating drafts", async () => {
@@ -261,6 +377,25 @@ describe("lightweight LLM extractor", () => {
 
     expect(failed.kind).toBe("failed");
     expect(failed.failures[0].payload.reason).toBe("agent_request_failed");
+  });
+
+  it("retries live provider once after an invalid schema response", async () => {
+    let calls = 0;
+    const result = await runLlmExtractionOnce({
+      env: validEnv(),
+      articleSnapshot: textArticle(),
+      fetchImpl: async () => {
+        calls += 1;
+        return jsonResponse(
+          calls === 1 ? openaiResponse({ nope: true }) : openaiResponse(activityResponse()),
+        );
+      },
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "extract-retry",
+    });
+
+    expect(calls).toBe(2);
+    expect(result.kind).toBe("drafts");
   });
 });
 
@@ -363,6 +498,18 @@ function openaiResponse(data) {
             text: JSON.stringify(data),
           },
         ],
+      },
+    ],
+  };
+}
+
+function chatCompletionResponse(data) {
+  return {
+    choices: [
+      {
+        message: {
+          content: JSON.stringify(data),
+        },
       },
     ],
   };

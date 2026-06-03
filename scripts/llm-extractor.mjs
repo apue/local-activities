@@ -48,6 +48,8 @@ export function readLlmExtractorConfig(env = process.env, options = {}) {
     provider: agentProvider,
     openaiApiKey,
     openaiModel,
+    openaiApiStyle: normalizeOpenAIApiStyle(clean(env.OPENAI_API_STYLE)),
+    agentTimeoutSeconds: readPositiveInteger(env.AGENT_TIMEOUT_SECONDS, 45),
     openaiBaseUrl: normalizeBaseUrl(
       clean(env.OPENAI_BASE_URL) ?? "https://api.openai.com/v1",
     ),
@@ -134,37 +136,32 @@ export async function runLlmExtractionOnce({
   }
 
   const observedAt = now.toISOString();
-  let parsed;
-  try {
-    const raw =
-      providerResponse ??
-      (await requestProvider({
-        config,
-        articleSnapshot,
-        evidenceAssets,
-        fetchImpl,
-        now,
-        runId,
-      }));
-    parsed = parseProviderResponse(raw);
-  } catch (error) {
+  const providerResult = await requestAndParseProvider({
+    config,
+    articleSnapshot,
+    evidenceAssets,
+    fetchImpl,
+    runId,
+    providerResponse,
+  });
+  if (!providerResult.ok && providerResult.reason === "agent_request_failed") {
     return failureResult({
       collectorId: config.collectorId,
       runId,
       articleUrl: articleSnapshot.canonicalUrl,
-      reason: error?.reason ?? "agent_request_failed",
-      message: error instanceof Error ? error.message : String(error),
+      reason: providerResult.reason,
+      message: providerResult.message,
       now,
     });
   }
 
-  if (!parsed.ok) {
+  if (!providerResult.ok) {
     return failureResult({
       collectorId: config.collectorId,
       runId,
       articleUrl: articleSnapshot.canonicalUrl,
       reason: "agent_response_invalid_schema",
-      message: parsed.message,
+      message: providerResult.message,
       now,
     });
   }
@@ -175,13 +172,13 @@ export async function runLlmExtractionOnce({
     observedAt,
     articleSnapshot,
     config,
-    classification: parsed.data.classification,
+    classification: providerResult.data.classification,
   });
   const metadataId = metadata.payload.assetId;
 
-  if (parsed.data.classification.kind !== "activity") {
+  if (providerResult.data.classification.kind !== "activity") {
     const reason =
-      parsed.data.classification.kind === "not_activity"
+      providerResult.data.classification.kind === "not_activity"
         ? "not_activity"
         : "unsupported";
     const result = failureResult({
@@ -190,7 +187,7 @@ export async function runLlmExtractionOnce({
       articleUrl: articleSnapshot.canonicalUrl,
       reason,
       message:
-        parsed.data.classification.kind === "cancellation"
+        providerResult.data.classification.kind === "cancellation"
           ? "Cancellation-only post requires manual matching before publication."
           : "Provider classified this article as not an activity.",
       now,
@@ -200,7 +197,7 @@ export async function runLlmExtractionOnce({
     return maybeUploadExtractionResult(result, { config, fetchImpl, upload });
   }
 
-  const eventDrafts = parsed.data.events.map((event, index) =>
+  const eventDrafts = providerResult.data.events.map((event, index) =>
     buildEventDraftEnvelope({
       collectorId: config.collectorId,
       runId,
@@ -260,37 +257,20 @@ async function requestProvider({
   fetchImpl,
   runId,
 }) {
-  const body = {
-    model: config.openaiModel,
-    text: {
-      format: responseTextFormat(),
-    },
-    input: [
-      {
-        role: "system",
-        content:
-          "You extract Beijing official cultural activity drafts. Return only JSON matching the schema. Do not invent missing fields.",
-      },
-      {
-        role: "user",
-        content: JSON.stringify(
-          buildExtractorPromptInput({
-            articleSnapshot,
-            evidenceAssets,
-            collectorId: config.collectorId,
-            runId,
-          }),
-        ),
-      },
-    ],
-  };
-  const response = await fetchImpl(`${config.openaiBaseUrl}/responses`, {
+  const request = providerRequest({
+    config,
+    articleSnapshot,
+    evidenceAssets,
+    runId,
+  });
+  const response = await fetchImpl(`${config.openaiBaseUrl}${request.path}`, {
     method: "POST",
+    signal: AbortSignal.timeout(config.agentTimeoutSeconds * 1000),
     headers: {
       authorization: `Bearer ${config.openaiApiKey}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(request.body),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -299,6 +279,132 @@ async function requestProvider({
     });
   }
   return data;
+}
+
+async function requestAndParseProvider({
+  config,
+  articleSnapshot,
+  evidenceAssets,
+  fetchImpl,
+  runId,
+  providerResponse,
+}) {
+  if (providerResponse !== undefined) {
+    const parsed = parseProviderResponse(providerResponse);
+    return parsed.ok
+      ? { ok: true, data: parsed.data }
+      : {
+          ok: false,
+          reason: "agent_response_invalid_schema",
+          message: parsed.message,
+        };
+  }
+
+  let lastFailure;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const raw = await requestProvider({
+        config,
+        articleSnapshot,
+        evidenceAssets,
+        fetchImpl,
+        runId,
+      });
+      const parsed = parseProviderResponse(raw);
+      if (parsed.ok) return { ok: true, data: parsed.data };
+      lastFailure = {
+        ok: false,
+        reason: "agent_response_invalid_schema",
+        message: parsed.message,
+      };
+    } catch (error) {
+      lastFailure = {
+        ok: false,
+        reason: error?.reason ?? "agent_request_failed",
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+  return lastFailure;
+}
+
+function providerRequest({ config, articleSnapshot, evidenceAssets, runId }) {
+  const systemPrompt =
+    "You extract Beijing official cultural activity drafts. Return only JSON matching the schema. Do not invent missing fields.";
+  const userPrompt = JSON.stringify(
+    buildExtractorPromptInput({
+      articleSnapshot,
+      evidenceAssets,
+      collectorId: config.collectorId,
+      runId,
+    }),
+  );
+
+  if (config.openaiApiStyle === "chat_completions") {
+    return {
+      path: "/chat/completions",
+      body: {
+        model: config.openaiModel,
+        messages: [
+          {
+            role: "user",
+            content: compactChatPrompt({
+              articleSnapshot,
+              evidenceAssets,
+              collectorId: config.collectorId,
+              runId,
+            }),
+          },
+        ],
+        max_tokens: 800,
+        temperature: 0,
+      },
+    };
+  }
+
+  return {
+    path: "/responses",
+    body: {
+      model: config.openaiModel,
+      text: {
+        format: responseTextFormat(),
+      },
+      input: [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        {
+          role: "user",
+          content: userPrompt,
+        },
+      ],
+    },
+  };
+}
+
+function compactChatPrompt({
+  articleSnapshot,
+  evidenceAssets,
+  collectorId,
+  runId,
+}) {
+  const evidenceText = evidenceAssets.length
+    ? `\n\nEVIDENCE_ASSETS:\n${JSON.stringify(
+        buildExtractorPromptInput({
+          articleSnapshot,
+          evidenceAssets,
+          collectorId,
+          runId,
+        }).evidenceAssets,
+      )}`
+    : "";
+  return [
+    "Extract Beijing cultural events from this article.",
+    'Return ONLY compact JSON: {"classification":{"kind":"activity|not_activity|cancellation","confidence":0.0,"signals":[],"missingFields":[]},"events":[{"title":"","startsAt":"","endsAt":"","venueName":"","summary":"","confidence":0.0,"signals":[]}]}',
+    `ARTICLE:\n${articleSnapshot.visibleText ?? ""}${evidenceText}`,
+  ]
+    .join("\n\n");
 }
 
 function responseTextFormat() {
@@ -339,7 +445,7 @@ function parseProviderResponse(data) {
   if (!content || typeof content !== "object") {
     return { ok: false, message: "Provider response was not a JSON object." };
   }
-  const classification = content.classification;
+  const classification = normalizeClassification(content.classification, content);
   if (!classification || typeof classification !== "object") {
     return { ok: false, message: "Provider response missed classification." };
   }
@@ -373,6 +479,23 @@ function parseProviderResponse(data) {
       events: content.events,
     },
   };
+}
+
+function normalizeClassification(classification, content) {
+  if (
+    typeof classification === "string" &&
+    ["activity", "not_activity", "cancellation"].includes(classification)
+  ) {
+    return {
+      kind: classification,
+      confidence: 0.5,
+      signals: Array.isArray(content.signals) ? content.signals : [],
+      missingFields: Array.isArray(content.missingFields)
+        ? content.missingFields
+        : [],
+    };
+  }
+  return classification;
 }
 
 function parseOpenAIJson(data) {
@@ -450,12 +573,14 @@ function buildEventDraftEnvelope({
   metadataId,
   config,
 }) {
-  const signals = normalizeSignals(event.signals);
+  const signals = normalizeSignals([...(event.signals ?? []), "possible_duplicate"]);
   const evidenceAssetIds = uniqueStrings([
     ...(event.evidenceAssetIds ?? []),
     metadataId,
   ]);
   const fieldEvidence = normalizeFieldEvidence(event.fieldEvidence);
+  const startsAt = normalizeDateTime(event.startsAt);
+  const endsAt = normalizeDateTime(event.endsAt);
   fieldEvidence._extraction = [
     `prompt:${promptVersion}`,
     `schema:${extractionSchemaVersion}`,
@@ -475,8 +600,8 @@ function buildEventDraftEnvelope({
       title: clean(event.title),
       originalTitle: clean(event.originalTitle),
       organizer: clean(event.organizer),
-      startsAt: clean(event.startsAt),
-      endsAt: clean(event.endsAt),
+      startsAt,
+      endsAt,
       timezone: "Asia/Shanghai",
       venueName: clean(event.venueName),
       venueAddress: clean(event.venueAddress),
@@ -484,7 +609,7 @@ function buildEventDraftEnvelope({
       reservationStatus: normalizeReservationStatus(event.reservationStatus),
       registrationAction: clean(event.registrationAction),
       registrationUrl: clean(event.registrationUrl),
-      scheduleText: clean(event.scheduleText),
+      scheduleText: clean(event.scheduleText) ?? scheduleTextFallback(event),
       posterImageUrl: clean(event.posterImageUrl),
       posterImageAlt: clean(event.posterImageAlt),
       posterImageSourceUrl: clean(event.posterImageSourceUrl),
@@ -498,6 +623,27 @@ function buildEventDraftEnvelope({
         : 0.5,
     }),
   });
+}
+
+function normalizeDateTime(value) {
+  const text = clean(value);
+  if (!text) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(text)) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text)) {
+    return `${text}:00+08:00`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(text)) {
+    return `${text}+08:00`;
+  }
+  return text;
+}
+
+function scheduleTextFallback(event) {
+  const values = [clean(event.startsAt), clean(event.endsAt)].filter(
+    (value) => value && !normalizeDateTime(value),
+  );
+  return values.length ? values.join(" - ") : undefined;
 }
 
 function failureResult({
@@ -673,6 +819,16 @@ function hashText(text) {
 
 function normalizeBaseUrl(value) {
   return value.replace(/\/+$/, "");
+}
+
+function normalizeOpenAIApiStyle(value) {
+  if (value === "chat_completions") return "chat_completions";
+  return "responses";
+}
+
+function readPositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function clean(value) {
