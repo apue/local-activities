@@ -74,7 +74,7 @@ describe("lightweight LLM extractor", () => {
       articleUrl: "https://mp.weixin.qq.com/s/activity",
       extractionAttemptId: "extract-run-activity-1",
       title: "Weekend concert",
-      startsAt: "2026-06-06T06:00:00.000Z",
+      startsAt: "2026-06-06T06:00:00+08:00",
       timezone: "Asia/Shanghai",
       city: "Beijing",
       signals: ["ready_for_review", "possible_duplicate"],
@@ -354,6 +354,38 @@ describe("lightweight LLM extractor", () => {
     );
     expect(result.eventDrafts[0].payload.endsAt).toBe(
       "2026-06-03T21:00:00+08:00",
+    );
+    expect(() =>
+      collectorEnvelopeSchema(eventDraftUploadSchema).parse(result.eventDrafts[0]),
+    ).not.toThrow();
+  });
+
+  it("treats UTC-looking model datetimes as Beijing local event times", async () => {
+    const result = await runLlmExtractionOnce({
+      env: validEnv(),
+      articleSnapshot: textArticle(),
+      fetchImpl: async () =>
+        jsonResponse(
+          openaiResponse({
+            ...activityResponse(),
+            events: [
+              {
+                ...activityResponse().events[0],
+                startsAt: "2026-06-03T10:00:00.000Z",
+                endsAt: "2026-06-03T12:00:00+00:00",
+              },
+            ],
+          }),
+        ),
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "extract-beijing-time",
+    });
+
+    expect(result.eventDrafts[0].payload.startsAt).toBe(
+      "2026-06-03T10:00:00+08:00",
+    );
+    expect(result.eventDrafts[0].payload.endsAt).toBe(
+      "2026-06-03T12:00:00+08:00",
     );
     expect(() =>
       collectorEnvelopeSchema(eventDraftUploadSchema).parse(result.eventDrafts[0]),
