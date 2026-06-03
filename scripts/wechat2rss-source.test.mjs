@@ -74,6 +74,17 @@ describe("Wechat2RSS source adapter", () => {
     const healthy = normalizeWechat2RssLoginListResponse({
       accounts: [{ nickname: "reader", status: "正常" }],
     });
+    const healthyByAvailability = normalizeWechat2RssLoginListResponse({
+      data: [
+        {
+          id: 16100076,
+          name: "田阳",
+          available: true,
+          needCheck: false,
+          waitTime: "2026-06-03 10:38:23",
+        },
+      ],
+    });
     const risky = normalizeWechat2RssLoginListResponse({
       accounts: [{ nickname: "reader", status: "今日小黑屋 风控" }],
     });
@@ -83,6 +94,15 @@ describe("Wechat2RSS source adapter", () => {
       status: "healthy",
     });
     expect(deriveWechat2RssHealth(healthy)).toEqual({
+      healthStatus: "healthy",
+    });
+    expect(healthyByAvailability.accounts[0]).toMatchObject({
+      name: "田阳",
+      accountId: "16100076",
+      rawStatus: "available",
+      status: "healthy",
+    });
+    expect(deriveWechat2RssHealth(healthyByAvailability)).toEqual({
       healthStatus: "healthy",
     });
     expect(deriveWechat2RssHealth(risky)).toEqual({

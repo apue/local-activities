@@ -220,7 +220,7 @@ function normalizeWechat2RssArticle(item) {
 function normalizeWechat2RssAccount(item) {
   const rawStatus = stringValue(
     item.status ?? item.state ?? item.loginStatus ?? item.message,
-  );
+  ) ?? booleanAccountStatus(item);
 
   return removeUndefined({
     name: stringValue(
@@ -238,6 +238,7 @@ function normalizeAccountStatus(rawStatus) {
   if (
     value.includes("healthy") ||
     value.includes("normal") ||
+    value.includes("available") ||
     value.includes("ok") ||
     value.includes("在线") ||
     value.includes("正常")
@@ -257,12 +258,20 @@ function normalizeAccountStatus(rawStatus) {
     value.includes("expired") ||
     value.includes("login") ||
     value.includes("offline") ||
+    value.includes("unavailable") ||
     value.includes("失效") ||
     value.includes("登录")
   ) {
     return "login_required";
   }
   return "unknown";
+}
+
+function booleanAccountStatus(item) {
+  if (item?.available === true && item?.needCheck !== true) return "available";
+  if (item?.needCheck === true) return "login_required";
+  if (item?.available === false) return "unavailable";
+  return undefined;
 }
 
 async function fetchJson(url, fetchImpl) {
