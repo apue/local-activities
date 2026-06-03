@@ -93,6 +93,32 @@ describe("WeChat image evidence helpers", () => {
     ).not.toThrow();
   });
 
+  it("keeps evidence asset ids distinct when different articles reuse the same image", () => {
+    const sharedImage = {
+      url: "https://mmbiz.qpic.cn/shared-poster.jpg",
+      alt: "活动海报",
+      width: 900,
+      height: 1200,
+    };
+    const first = buildImageEvidenceAssetEnvelopes({
+      collectorId: "collector-1",
+      runId: "run-1",
+      observedAt: "2026-06-03T08:00:00.000Z",
+      articleUrl: "https://mp.weixin.qq.com/s/activity-one",
+      imageCandidates: [sharedImage],
+    });
+    const second = buildImageEvidenceAssetEnvelopes({
+      collectorId: "collector-1",
+      runId: "run-1",
+      observedAt: "2026-06-03T08:00:00.000Z",
+      articleUrl: "https://mp.weixin.qq.com/s/activity-two",
+      imageCandidates: [sharedImage],
+    });
+
+    expect(first[0].payload.assetId).not.toBe(second[0].payload.assetId);
+    expect(first[0].payload.contentHash).toBe(second[0].payload.contentHash);
+  });
+
   it("does not invent evidence assets for text-only articles", () => {
     const candidates = extractImageCandidatesFromHtml("<p>Text only</p>", {
       articleUrl: "https://mp.weixin.qq.com/s/text",
