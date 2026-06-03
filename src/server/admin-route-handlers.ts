@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { adminSessionCookie } from "./admin-auth";
 import { authenticateAdminRequest } from "./admin-auth";
 import {
   createAdminCollectorJob,
@@ -8,6 +9,7 @@ import {
   listAdminExcludedArticles,
   listAdminEventDrafts,
   markAdminEventDraftNeedsInfo,
+  patchAdminEventDraft,
   promoteAdminExcludedArticle,
   publishAdminEventDraft,
   rejectAdminEventDraft,
@@ -47,6 +49,60 @@ const createCollectorJobSchema = z
       .optional(),
   })
   .strict();
+
+const draftPublishActionSchema = z
+  .object({
+    operatorOverrideReason: z.string().trim().min(1).max(2_000).optional(),
+  })
+  .strict();
+
+const draftPatchSchema = z
+  .object({
+    title: z.string().min(1).optional(),
+    startsAt: z.string().datetime({ offset: true }).optional(),
+    endsAt: z.string().datetime({ offset: true }).nullable().optional(),
+    venueName: z.string().min(1).optional(),
+    venueAddress: z.string().min(1).optional(),
+    scheduleText: z.string().min(1).optional(),
+    scheduleKind: z
+      .enum(["single", "multi_day", "long_running", "recurring", "unsupported"])
+      .optional(),
+    recurrenceRule: z.string().min(1).optional(),
+    occurrenceStartsAt: z.array(z.string().datetime({ offset: true })).optional(),
+    registrationUrl: z.string().url().optional(),
+    registrationQrAssetId: z.string().min(1).optional(),
+    summary: z.string().min(1).optional(),
+    entryNotes: z.string().min(1).optional(),
+  })
+  .strict();
+
+const adminLoginSchema = z
+  .object({
+    token: z.string().min(1),
+  })
+  .strict();
+
+export async function handleAdminLogin(request: Request, env: AdminEnv) {
+  const parsed = adminLoginSchema.safeParse(await parseJson(request));
+  if (!parsed.success) return invalidRequestResponse(parsed.error);
+
+  const auth = authenticateAdminRequest(
+    new Request(request.url, {
+      headers: { authorization: `Bearer ${parsed.data.token}` },
+    }),
+    env,
+  );
+  if (!auth.ok) return authErrorResponse(auth);
+
+  return Response.json(
+    { ok: true },
+    {
+      headers: {
+        "set-cookie": adminSessionCookie(parsed.data.token),
+      },
+    },
+  );
+}
 
 export async function handleAdminCreateCollectorJob(
   request: Request,
@@ -213,6 +269,26 @@ export async function handleAdminGetEventDraft(
   }
 }
 
+export async function handleAdminPatchEventDraft(
+  request: Request,
+  draftId: string,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const parsed = draftPatchSchema.safeParse(await parseJson(request));
+  if (!parsed.success) return invalidRequestResponse(parsed.error);
+
+  try {
+    const draft = await patchAdminEventDraft(draftId, parsed.data, store);
+    return Response.json({ ok: true, draft });
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
 export async function handleAdminDraftAction(
   request: Request,
   draftId: string,
@@ -234,7 +310,16 @@ export async function handleAdminDraftAction(
       return Response.json({ ok: true, draft });
     }
 
-    const event = await publishAdminEventDraft(draftId, store, now);
+    const parsed = draftPublishActionSchema.safeParse(
+      (await parseJson(request)) ?? {},
+    );
+    if (!parsed.success) return invalidRequestResponse(parsed.error);
+    const event = await publishAdminEventDraft(
+      draftId,
+      store,
+      now,
+      parsed.data,
+    );
     return Response.json({
       ok: true,
       event,

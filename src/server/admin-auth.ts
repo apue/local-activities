@@ -5,6 +5,8 @@ type AdminAuthEnv = {
   ADMIN_ACCESS_TOKEN?: string;
 };
 
+export const adminSessionCookieName = "admin_session";
+
 export type AdminAuthResult =
   | {
       ok: true;
@@ -29,9 +31,11 @@ export function authenticateAdminRequest(
   }
 
   const authorization = request.headers.get("authorization");
-  const token = authorization?.startsWith("Bearer ")
+  const bearerToken = authorization?.startsWith("Bearer ")
     ? authorization.slice("Bearer ".length).trim()
     : "";
+  const cookieToken = readCookie(request, adminSessionCookieName);
+  const token = bearerToken || cookieToken;
 
   if (!token || !secureCompare(token, expectedToken)) {
     return {
@@ -42,6 +46,20 @@ export function authenticateAdminRequest(
   }
 
   return { ok: true };
+}
+
+export function adminSessionCookie(token: string) {
+  return `${adminSessionCookieName}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`;
+}
+
+function readCookie(request: Request, name: string) {
+  const cookie = request.headers.get("cookie");
+  if (!cookie) return "";
+  for (const part of cookie.split(";")) {
+    const [rawKey, ...rawValue] = part.trim().split("=");
+    if (rawKey === name) return decodeURIComponent(rawValue.join("="));
+  }
+  return "";
 }
 
 function secureCompare(value: string, expected: string) {

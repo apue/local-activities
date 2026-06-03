@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { authenticateAdminRequest } from "./admin-auth";
+import {
+  adminSessionCookie,
+  authenticateAdminRequest,
+} from "./admin-auth";
 
 function request(headers: HeadersInit) {
   return new Request("https://example.com/api/admin/collector-jobs", {
@@ -44,5 +47,17 @@ describe("authenticateAdminRequest", () => {
     });
     expect(JSON.stringify(result)).not.toContain("admin-secret");
     expect(JSON.stringify(result)).not.toContain("wrong-secret");
+  });
+
+  it("accepts a validated admin session cookie", () => {
+    const cookie = adminSessionCookie("admin-secret");
+
+    expect(
+      authenticateAdminRequest(request({ cookie }), {
+        ADMIN_ACCESS_TOKEN: "admin-secret",
+      }),
+    ).toEqual({ ok: true });
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=Lax");
   });
 });
