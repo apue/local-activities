@@ -63,13 +63,14 @@ export function buildImageEvidenceAssetEnvelopes({
   return imageCandidates.map((candidate, index) => {
     const role = classifyImageCandidate(candidate);
     const contentHash = hashText(candidate.url);
+    const assetHash = hashText(`${articleUrl}\n${role}\n${candidate.url}`);
     return {
       collectorId,
       runId,
       observedAt,
       payloadVersion,
       payload: removeUndefined({
-        assetId: `asset-${contentHash.slice(0, 24)}`,
+        assetId: `asset-${assetHash.slice(0, 24)}`,
         articleUrl,
         role,
         mediaType: "image",
