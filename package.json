@@ -12,6 +12,7 @@
     "build": "next build",
     "start": "next start",
     "env:check": "node scripts/env-inventory.mjs",
+    "schema:parity": "node scripts/schema-parity-check.mjs",
     "collector:bootstrap-env": "node scripts/collector-bootstrap-env.mjs",
     "collector:fixture": "node scripts/collector-fixture-run.mjs",
     "collector:console": "node scripts/local-collector-console.mjs",

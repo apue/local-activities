@@ -15,6 +15,49 @@ export const canonicalEventReviewStateSchema = z.enum([
   "rejected",
 ]);
 
+export const canonicalPublicEligibilitySchema = z.enum([
+  "public",
+  "not_public",
+  "unclear",
+]);
+
+export const canonicalEventKindSchema = z.enum([
+  "single",
+  "multi_day",
+  "long_running",
+  "recurring",
+  "news",
+  "visit",
+  "cancellation",
+  "unsupported",
+]);
+
+export const canonicalScheduleKindSchema = z.enum([
+  "single",
+  "multi_day",
+  "long_running",
+  "recurring",
+  "unsupported",
+]);
+
+export const canonicalResolutionDecisionSchema = z.enum([
+  "new_event",
+  "same_event",
+  "update_existing",
+  "cancel_existing",
+  "withdraw_existing",
+  "not_public_activity",
+  "insufficient_info",
+]);
+
+export const canonicalPublishBlockerSchema = z
+  .object({
+    code: z.string().min(1),
+    message: z.string().min(1),
+    evidenceAssetIds: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
 export const canonicalEventSchema = z
   .object({
     id: z.string().min(1),
@@ -31,6 +74,18 @@ export const canonicalEventSchema = z
     registrationUrl: z.string().url().optional(),
     sourceUrl: z.string().url(),
     scheduleText: z.string().min(1).max(1_000).optional(),
+    publicEligibility: canonicalPublicEligibilitySchema.optional(),
+    eventKind: canonicalEventKindSchema.optional(),
+    scheduleKind: canonicalScheduleKindSchema.optional(),
+    recurrenceRule: z.string().min(1).max(1_000).optional(),
+    occurrenceStartsAt: z.array(z.string().datetime({ offset: true })).optional(),
+    posterAssetId: z.string().min(1).optional(),
+    qrAssetId: z.string().min(1).optional(),
+    registrationQrAssetId: z.string().min(1).optional(),
+    hardBlockers: z.array(canonicalPublishBlockerSchema).optional(),
+    softBlockers: z.array(canonicalPublishBlockerSchema).optional(),
+    operatorOverrideReason: z.string().min(1).max(2_000).optional(),
+    resolutionDecision: canonicalResolutionDecisionSchema.optional(),
     posterImageUrl: z.string().url().optional(),
     posterImageAlt: z.string().min(1).max(500).optional(),
     posterImageSourceUrl: z.string().url().optional(),

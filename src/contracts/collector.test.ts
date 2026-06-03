@@ -4,6 +4,7 @@ import {
   captureModeSchema,
   collectorFailureSchema,
   collectorEnvelopeSchema,
+  excludedArticleUploadSchema,
   failureReasonSchema,
   eventDraftUploadSchema,
   sourceCandidateSchema,
@@ -134,5 +135,74 @@ describe("collector contracts", () => {
       stage: "agent_extraction",
       reason: "agent_response_invalid_schema",
     });
+  });
+
+  it("accepts Event Pipeline V2 editorial fields on event drafts", () => {
+    const result = eventDraftUploadSchema.parse({
+      articleUrl: "https://mp.weixin.qq.com/s/activity",
+      extractionAttemptId: "extract-v2-001",
+      captureMode: "image_with_qr_registration",
+      triageDecision: "public_activity",
+      triageAction: "extract",
+      triageConfidence: 0.96,
+      publicSignals: ["Open RSVP link", "Venue and date are public"],
+      exclusionSignals: [],
+      publicEligibility: "public",
+      eventKind: "recurring",
+      scheduleKind: "recurring",
+      scheduleText: "Every Saturday 16:00-17:00",
+      recurrenceRule: "FREQ=WEEKLY;BYDAY=SA",
+      occurrenceStartsAt: [
+        "2026-06-06T08:00:00.000Z",
+        "2026-06-13T08:00:00.000Z",
+      ],
+      timezone: "Asia/Shanghai",
+      city: "Beijing",
+      title: "Weekly Library Meetup",
+      startsAt: "2026-06-06T08:00:00.000Z",
+      venueName: "Goethe-Institut Beijing",
+      registrationRequirement: "not_required",
+      reservationStatus: "not_required",
+      posterAssetId: "asset-poster-1",
+      qrAssetId: "asset-qr-1",
+      registrationQrAssetId: "asset-qr-1",
+      hardBlockers: [],
+      softBlockers: [{ code: "missing_end_time", message: "No end time" }],
+      signals: ["ready_for_review"],
+      evidenceAssetIds: ["asset-poster-1", "asset-qr-1"],
+      fieldEvidence: { title: ["asset-poster-1"] },
+      confidence: 0.96,
+    });
+
+    expect(result.triageDecision).toBe("public_activity");
+    expect(result.scheduleKind).toBe("recurring");
+    expect(result.softBlockers?.[0]?.code).toBe("missing_end_time");
+  });
+
+  it("accepts excluded article uploads separate from event drafts", () => {
+    const result = collectorEnvelopeSchema(excludedArticleUploadSchema).parse({
+      collectorId: "home-collector",
+      runId: "run-triage",
+      observedAt: "2026-06-03T08:00:00.000Z",
+      payloadVersion: "2026-05-collector-v1",
+      payload: {
+        articleUrl: "https://mp.weixin.qq.com/s/official-visit",
+        triageAttemptId: "triage-001",
+        triageDecision: "official_visit",
+        triageAction: "exclude",
+        confidence: 0.98,
+        publicSignals: [],
+        exclusionSignals: ["ministerial delegation", "closed itinerary"],
+        exclusionReason: "Official visit, not a public activity.",
+        evidenceAssetIds: ["asset-screenshot-1"],
+        promptVersion: "triage-v2",
+        schemaVersion: "triage-schema-v2",
+        provider: "openai-compatible",
+        model: "gpt-5.4-mini",
+      },
+    });
+
+    expect(result.payload.triageDecision).toBe("official_visit");
+    expect(result.payload.triageAction).toBe("exclude");
   });
 });

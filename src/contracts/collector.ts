@@ -81,6 +81,63 @@ export const captureModeSchema = z.enum([
   "unsupported",
 ]);
 
+export const triageDecisionSchema = z.enum([
+  "public_activity",
+  "possible_public_activity",
+  "official_visit",
+  "non_public_news",
+  "internal_or_private",
+  "not_event",
+  "unsupported",
+]);
+
+export const triageActionSchema = z.enum(["extract", "review", "exclude"]);
+
+export const publicEligibilitySchema = z.enum(["public", "not_public", "unclear"]);
+
+export const eventKindSchema = z.enum([
+  "single",
+  "multi_day",
+  "long_running",
+  "recurring",
+  "news",
+  "visit",
+  "cancellation",
+  "unsupported",
+]);
+
+export const scheduleKindSchema = z.enum([
+  "single",
+  "multi_day",
+  "long_running",
+  "recurring",
+  "unsupported",
+]);
+
+export const registrationRequirementSchema = z.enum([
+  "required",
+  "not_required",
+  "unknown",
+]);
+
+export const resolutionDecisionSchema = z.enum([
+  "new_event",
+  "same_event",
+  "update_existing",
+  "cancel_existing",
+  "withdraw_existing",
+  "not_public_activity",
+  "insufficient_info",
+]);
+
+export const publishBlockerSchema = z
+  .object({
+    code: z.string().min(1),
+    message: z.string().min(1).max(1_000),
+    evidenceAssetIds: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
 export const articleSnapshotSchema = z
   .object({
     sourceId: z.string().min(1).optional(),
@@ -145,19 +202,35 @@ export const eventDraftUploadSchema = z
     sourceId: z.string().min(1).optional(),
     extractionAttemptId: z.string().min(1),
     captureMode: captureModeSchema,
+    triageDecision: triageDecisionSchema.optional(),
+    triageAction: triageActionSchema.optional(),
+    triageConfidence: z.number().min(0).max(1).optional(),
+    publicSignals: z.array(z.string().min(1)).optional(),
+    exclusionSignals: z.array(z.string().min(1)).optional(),
+    publicEligibility: publicEligibilitySchema.optional(),
+    eventKind: eventKindSchema.optional(),
+    scheduleKind: scheduleKindSchema.optional(),
     title: z.string().min(1).optional(),
     originalTitle: z.string().min(1).optional(),
     organizer: z.string().min(1).optional(),
     startsAt: z.string().datetime({ offset: true }).optional(),
     endsAt: z.string().datetime({ offset: true }).optional(),
+    recurrenceRule: z.string().min(1).max(1_000).optional(),
+    occurrenceStartsAt: z
+      .array(z.string().datetime({ offset: true }))
+      .optional(),
     timezone: z.literal("Asia/Shanghai"),
     venueName: z.string().min(1).optional(),
     venueAddress: z.string().min(1).optional(),
     city: z.literal("Beijing"),
     reservationStatus: z.enum(["required", "not_required", "unknown"]).optional(),
+    registrationRequirement: registrationRequirementSchema.optional(),
     registrationAction: z.string().min(1).optional(),
     registrationUrl: z.string().url().optional(),
     scheduleText: z.string().min(1).max(1_000).optional(),
+    posterAssetId: z.string().min(1).optional(),
+    qrAssetId: z.string().min(1).optional(),
+    registrationQrAssetId: z.string().min(1).optional(),
     posterImageUrl: z.string().url().optional(),
     posterImageAlt: z.string().min(1).max(500).optional(),
     posterImageSourceUrl: z.string().url().optional(),
@@ -167,6 +240,31 @@ export const eventDraftUploadSchema = z
     evidenceAssetIds: z.array(z.string().min(1)),
     fieldEvidence: z.record(z.string().min(1), z.array(z.string().min(1))),
     confidence: z.number().min(0).max(1),
+    hardBlockers: z.array(publishBlockerSchema).optional(),
+    softBlockers: z.array(publishBlockerSchema).optional(),
+    resolutionDecision: resolutionDecisionSchema.optional(),
+  })
+  .strict();
+
+export const excludedArticleUploadSchema = z
+  .object({
+    articleUrl: z.string().url(),
+    sourceId: z.string().min(1).optional(),
+    triageAttemptId: z.string().min(1),
+    triageDecision: triageDecisionSchema.exclude([
+      "public_activity",
+      "possible_public_activity",
+    ]),
+    triageAction: z.literal("exclude"),
+    confidence: z.number().min(0).max(1),
+    publicSignals: z.array(z.string().min(1)),
+    exclusionSignals: z.array(z.string().min(1)),
+    exclusionReason: z.string().min(1).max(2_000),
+    evidenceAssetIds: z.array(z.string().min(1)),
+    promptVersion: z.string().min(1),
+    schemaVersion: z.string().min(1),
+    provider: z.string().min(1),
+    model: z.string().min(1),
   })
   .strict();
 
@@ -201,4 +299,5 @@ export type SourceRunReport = z.infer<typeof sourceRunReportSchema>;
 export type ArticleSnapshot = z.infer<typeof articleSnapshotSchema>;
 export type EvidenceAsset = z.infer<typeof evidenceAssetSchema>;
 export type EventDraftUpload = z.infer<typeof eventDraftUploadSchema>;
+export type ExcludedArticleUpload = z.infer<typeof excludedArticleUploadSchema>;
 export type CollectorFailure = z.infer<typeof collectorFailureSchema>;

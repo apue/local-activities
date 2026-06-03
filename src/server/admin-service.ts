@@ -9,6 +9,12 @@ export type AdminReviewState =
   | "approved"
   | "rejected";
 
+export type AdminPublishBlocker = {
+  code: string;
+  message: string;
+  evidenceAssetIds?: string[];
+};
+
 export type AdminEventDraftRecord = {
   id: string;
   articleUrl: string;
@@ -30,6 +36,55 @@ export type AdminEventDraftRecord = {
   posterImageSourceUrl?: string;
   summary?: string;
   entryNotes?: string;
+  triageDecision?:
+    | "possible_public_activity"
+    | "not_public_activity"
+    | "needs_extraction"
+    | "unknown";
+  triageAction?: "extract" | "exclude" | "review";
+  triageConfidence?: number;
+  publicSignals?: string[];
+  exclusionSignals?: string[];
+  publicEligibility?: "public" | "not_public" | "unclear";
+  eventKind?:
+    | "single"
+    | "multi_day"
+    | "long_running"
+    | "recurring"
+    | "news"
+    | "visit"
+    | "cancellation"
+    | "unsupported";
+  scheduleKind?:
+    | "single"
+    | "multi_day"
+    | "long_running"
+    | "recurring"
+    | "unsupported";
+  recurrenceRule?: string;
+  occurrenceStartsAt?: string[];
+  posterAssetId?: string;
+  qrAssetId?: string;
+  registrationQrAssetId?: string;
+  hardBlockers?: AdminPublishBlocker[];
+  softBlockers?: AdminPublishBlocker[];
+  operatorOverrideReason?: string;
+  resolutionDecision?:
+    | "new_event"
+    | "same_event"
+    | "update_existing"
+    | "cancel_existing"
+    | "withdraw_existing"
+    | "not_public_activity"
+    | "insufficient_info";
+  canonicalEventId?: string;
+  processingState?:
+    | "draft"
+    | "ready_for_policy"
+    | "blocked"
+    | "auto_published"
+    | "published"
+    | "rejected";
   confidence: number;
   reviewState: AdminReviewState;
   evidenceAssetIds: string[];
