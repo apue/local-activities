@@ -1,5 +1,6 @@
 import type { CollectorJobRecord } from "./collector-job-service";
 import { extractFirstHttpUrl } from "../shared/seed-url";
+import { computePublishDecision } from "./publish-policy";
 
 export type AdminReviewState =
   | "needs_review"
@@ -94,6 +95,30 @@ export type AdminEventDraftRecord = {
   fieldEvidence: Record<string, string[]>;
 };
 
+export type AdminEventDraftPatch = Partial<
+  Omit<
+    Pick<
+      AdminEventDraftRecord,
+      | "title"
+      | "startsAt"
+      | "endsAt"
+      | "venueName"
+      | "venueAddress"
+      | "scheduleText"
+      | "scheduleKind"
+      | "recurrenceRule"
+      | "occurrenceStartsAt"
+      | "registrationUrl"
+      | "registrationQrAssetId"
+      | "summary"
+      | "entryNotes"
+    >,
+    "endsAt"
+  >
+> & {
+  endsAt?: string | null;
+};
+
 export type PublishedAdminEvent = {
   id: string;
   title: string;
@@ -134,6 +159,10 @@ export type AdminStore = {
   updateEventDraftReviewState(
     draftId: string,
     reviewState: AdminReviewState,
+  ): Promise<AdminEventDraftRecord | null>;
+  updateEventDraftFields(
+    draftId: string,
+    patch: AdminEventDraftPatch,
   ): Promise<AdminEventDraftRecord | null>;
   listExcludedArticles(input: {
     processingState?: AdminExcludedArticleRecord["processingState"];
@@ -208,6 +237,16 @@ export async function getAdminEventDraftDetail(
   return draft;
 }
 
+export async function patchAdminEventDraft(
+  draftId: string,
+  patch: AdminEventDraftPatch,
+  store: AdminStore,
+) {
+  const draft = await store.updateEventDraftFields(draftId, patch);
+  if (!draft) throw new Error("draft_not_found");
+  return draft;
+}
+
 export async function markAdminEventDraftNeedsInfo(
   draftId: string,
   store: AdminStore,
@@ -227,22 +266,21 @@ export async function publishAdminEventDraft(
   draftId: string,
   store: AdminStore,
   now = new Date(),
+  options: { operatorOverrideReason?: string } = {},
 ) {
   const draft = await store.getEventDraft(draftId);
   if (!draft) throw new Error("draft_not_found");
-  if (!isDraftPublishable(draft)) throw new Error("draft_not_publishable");
+  const decision = computePublishDecision(draft, options);
+  if (!decision.canPublish) throw new Error("draft_not_publishable");
 
   return store.publishEventDraft({
-    draft,
+    draft: {
+      ...draft,
+      hardBlockers: decision.hardBlockers,
+      softBlockers: decision.softBlockers,
+      operatorOverrideReason:
+        options.operatorOverrideReason ?? draft.operatorOverrideReason,
+    },
     publishedAt: now.toISOString(),
   });
-}
-
-function isDraftPublishable(draft: AdminEventDraftRecord) {
-  return Boolean(
-    draft.title &&
-      draft.startsAt &&
-      draft.articleUrl &&
-      (draft.venueName || draft.venueAddress),
-  );
 }

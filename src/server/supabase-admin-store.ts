@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
   AdminExcludedArticleRecord,
+  AdminEventDraftPatch,
   AdminEventDraftRecord,
   AdminReviewState,
   AdminStore,
@@ -201,6 +202,24 @@ class SupabaseAdminStore implements AdminStore {
     return data ? toDraftRecord(data) : null;
   }
 
+  async updateEventDraftFields(
+    draftId: string,
+    patch: AdminEventDraftPatch,
+  ): Promise<AdminEventDraftRecord | null> {
+    const { data, error } = await this.client
+      .from("event_drafts")
+      .update({
+        ...toDraftPatchRow(patch),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("draft_id", draftId)
+      .select("*")
+      .maybeSingle<EventDraftRow>();
+
+    if (error) throw new Error("admin_draft_update_failed");
+    return data ? toDraftRecord(data) : null;
+  }
+
   async listExcludedArticles(input: {
     processingState?: AdminExcludedArticleRecord["processingState"];
   }): Promise<AdminExcludedArticleRecord[]> {
@@ -370,6 +389,24 @@ function isMissingOptionalPosterColumnError(error: unknown) {
     message.includes("poster_image_alt") ||
     message.includes("poster_image_source_url")
   );
+}
+
+function toDraftPatchRow(patch: AdminEventDraftPatch) {
+  return {
+    title: patch.title,
+    starts_at: patch.startsAt,
+    ends_at: patch.endsAt,
+    venue_name: patch.venueName,
+    venue_address: patch.venueAddress,
+    schedule_text: patch.scheduleText,
+    schedule_kind: patch.scheduleKind,
+    recurrence_rule: patch.recurrenceRule,
+    occurrence_starts_at: patch.occurrenceStartsAt,
+    registration_url: patch.registrationUrl,
+    registration_qr_asset_id: patch.registrationQrAssetId,
+    summary: patch.summary,
+    entry_notes: patch.entryNotes,
+  };
 }
 
 function toExcludedArticleRecord(

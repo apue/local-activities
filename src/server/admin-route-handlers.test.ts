@@ -8,10 +8,12 @@ import type {
 import {
   handleAdminCreateCollectorJob,
   handleAdminDraftAction,
+  handleAdminLogin,
   handleAdminListExcludedArticles,
   handleAdminListCollectorJobs,
   handleAdminListEventDrafts,
   handleAdminPromoteExcludedArticle,
+  handleAdminPatchEventDraft,
 } from "./admin-route-handlers";
 import type { CollectorJobRecord } from "./collector-job-service";
 
@@ -22,10 +24,13 @@ class RouteAdminStore implements AdminStore {
     title: "Italian Design Weekend",
     organizer: "Italian Cultural Institute",
     startsAt: "2026-06-06T06:00:00.000Z",
+    endsAt: "2026-06-06T08:00:00.000Z",
     timezone: "Asia/Shanghai",
     city: "Beijing",
     venueName: "Italian Cultural Institute",
     reservationStatus: "required",
+    registrationUrl: "https://example.com/register",
+    summary: "A complete public activity.",
     confidence: 0.9,
     reviewState: "ready_for_review",
     evidenceAssetIds: [],
@@ -107,6 +112,15 @@ class RouteAdminStore implements AdminStore {
     return this.draft;
   }
 
+  async updateEventDraftFields(
+    draftId: string,
+    patch: Partial<AdminEventDraftRecord>,
+  ) {
+    if (draftId !== this.draft.id) return null;
+    this.draft = { ...this.draft, ...patch };
+    return this.draft;
+  }
+
   async publishEventDraft() {
     return {
       id: "event-1",
@@ -160,6 +174,22 @@ describe("admin route handlers", () => {
       ok: false,
       error: "invalid_admin_token",
     });
+  });
+
+  it("sets an http-only admin session cookie after token login", async () => {
+    const response = await handleAdminLogin(
+      new Request("https://example.com/api/admin/login", {
+        method: "POST",
+        body: JSON.stringify({ token: "admin-secret" }),
+      }),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain(
+      "admin_session=admin-secret",
+    );
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
   });
 
   it("creates queued collector jobs for valid seed URLs", async () => {
@@ -323,6 +353,32 @@ describe("admin route handlers", () => {
     });
   });
 
+  it("patches editable draft fields for long-running or recurring events", async () => {
+    const response = await handleAdminPatchEventDraft(
+      new Request("https://example.com/api/admin/event-drafts/draft-1", {
+        method: "PATCH",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          scheduleKind: "long_running",
+          scheduleText: "至8月30日，周二至周日 10:00-18:00",
+          endsAt: "2026-08-30T11:00:00.000Z",
+        }),
+      }),
+      "draft-1",
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      draft: {
+        scheduleKind: "long_running",
+        endsAt: "2026-08-30T11:00:00.000Z",
+      },
+    });
+  });
+
   it("returns JSON errors when job listing fails", async () => {
     const response = await handleAdminListCollectorJobs(
       request(),
@@ -371,5 +427,41 @@ describe("admin route handlers", () => {
         publishedAt: "2026-05-28T08:00:00.000Z",
       },
     });
+  });
+
+  it("publishes soft-blocked drafts only when an override reason is submitted", async () => {
+    const store = new RouteAdminStore();
+    store.draft = {
+      ...store.draft,
+      endsAt: undefined,
+      confidence: 0.62,
+    };
+
+    const blocked = await handleAdminDraftAction(
+      request(),
+      "draft-1",
+      "publish",
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+    expect(blocked.status).toBe(400);
+
+    const response = await handleAdminDraftAction(
+      new Request("https://example.com/api/admin/event-drafts/draft-1/publish", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          operatorOverrideReason: "Human verified the missing end time.",
+        }),
+      }),
+      "draft-1",
+      "publish",
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+
+    expect(response.status).toBe(200);
   });
 });

@@ -78,6 +78,17 @@ class MemoryAdminStore implements AdminStore {
     return draft;
   }
 
+  async updateEventDraftFields(
+    draftId: string,
+    patch: Partial<AdminEventDraftRecord>,
+  ) {
+    const draft = this.drafts.get(draftId);
+    if (!draft) return null;
+    const updated = { ...draft, ...patch };
+    this.drafts.set(draftId, updated);
+    return updated;
+  }
+
   async listExcludedArticles(input: {
     processingState?: AdminExcludedArticleRecord["processingState"];
   }) {
@@ -119,11 +130,13 @@ const completeDraft: AdminEventDraftRecord = {
   title: "Italian Design Weekend",
   organizer: "Italian Cultural Institute",
   startsAt: "2026-06-06T06:00:00.000Z",
+  endsAt: "2026-06-06T08:00:00.000Z",
   timezone: "Asia/Shanghai",
   city: "Beijing",
   venueName: "Italian Cultural Institute",
   reservationStatus: "required",
   registrationUrl: "https://example.com/register",
+  summary: "A complete public activity.",
   confidence: 0.91,
   reviewState: "ready_for_review",
   evidenceAssetIds: [],
@@ -311,10 +324,38 @@ describe("admin service", () => {
         "draft-minimum",
         store,
         new Date("2026-05-28T08:00:00.000Z"),
+        { operatorOverrideReason: "Human reviewed minimal venue details." },
       ),
     ).resolves.toMatchObject({
       status: "published",
     });
+  });
+
+  it("requires an override reason before publishing soft-blocked drafts", async () => {
+    const store = new MemoryAdminStore([
+      {
+        ...completeDraft,
+        id: "draft-soft",
+        endsAt: undefined,
+        confidence: 0.62,
+      },
+    ]);
+
+    await expect(
+      publishAdminEventDraft(
+        "draft-soft",
+        store,
+        new Date("2026-05-28T08:00:00.000Z"),
+      ),
+    ).rejects.toThrow("draft_not_publishable");
+    await expect(
+      publishAdminEventDraft(
+        "draft-soft",
+        store,
+        new Date("2026-05-28T08:00:00.000Z"),
+        { operatorOverrideReason: "Human verified schedule from poster." },
+      ),
+    ).resolves.toMatchObject({ status: "published" });
   });
 
   it("rejects publishing drafts that lack public required fields", async () => {
