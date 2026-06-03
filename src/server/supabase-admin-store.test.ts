@@ -79,6 +79,45 @@ describe("supabase admin store", () => {
     ]);
   });
 
+  it("maps and promotes excluded articles for admin audit", async () => {
+    const updates: Array<{ table: string; payload: Record<string, unknown> }> =
+      [];
+    const store = getSupabaseAdminStore(
+      supabaseClientForExcludedArticles(updates),
+    );
+
+    await expect(
+      store.listExcludedArticles({ processingState: "excluded" }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "excluded-1",
+        articleUrl: "https://mp.weixin.qq.com/s/official-visit",
+        triageDecision: "official_visit",
+        processingState: "excluded",
+      }),
+    ]);
+    await expect(
+      store.promoteExcludedArticle(
+        "excluded-1",
+        "2026-06-03T09:00:00.000Z",
+      ),
+    ).resolves.toMatchObject({
+      id: "excluded-1",
+      processingState: "promoted_to_extraction",
+      promotedAt: "2026-06-03T09:00:00.000Z",
+    });
+    expect(updates).toEqual([
+      {
+        table: "excluded_articles",
+        payload: {
+          processing_state: "promoted_to_extraction",
+          promoted_at: "2026-06-03T09:00:00.000Z",
+          updated_at: "2026-06-03T09:00:00.000Z",
+        },
+      },
+    ]);
+  });
+
   it("maps collector job result fields for admin smoke verification", async () => {
     const store = getSupabaseAdminStore(
       supabaseClientReturning([
@@ -221,6 +260,64 @@ function supabaseClientReturningEventDrafts(rows: unknown[]) {
   return {
     from(table: string) {
       expect(table).toBe("event_drafts");
+      return query;
+    },
+  } as never;
+}
+
+function supabaseClientForExcludedArticles(
+  updates: Array<{ table: string; payload: Record<string, unknown> }>,
+) {
+  const row = {
+    excluded_article_id: "excluded-1",
+    article_url: "https://mp.weixin.qq.com/s/official-visit",
+    triage_decision: "official_visit",
+    triage_action: "exclude",
+    confidence: 0.94,
+    public_signals: [],
+    exclusion_signals: ["Official visit"],
+    exclusion_reason: "Not open to ordinary attendees.",
+    evidence_asset_ids: ["asset-1"],
+    prompt_version: "event-triage-2026-06-03",
+    schema_version: "event-triage-schema-v1",
+    provider: "recorded",
+    model: "fixture-model",
+    processing_state: "excluded",
+    promoted_at: null,
+    created_at: "2026-06-03T08:00:00.000Z",
+  };
+
+  return {
+    from(table: string) {
+      expect(table).toBe("excluded_articles");
+      const query = {
+        select() {
+          return query;
+        },
+        order() {
+          return query;
+        },
+        limit() {
+          return Promise.resolve({ data: [row], error: null });
+        },
+        eq() {
+          return query;
+        },
+        update(payload: Record<string, unknown>) {
+          updates.push({ table, payload });
+          return query;
+        },
+        maybeSingle() {
+          return Promise.resolve({
+            data: {
+              ...row,
+              processing_state: "promoted_to_extraction",
+              promoted_at: "2026-06-03T09:00:00.000Z",
+            },
+            error: null,
+          });
+        },
+      };
       return query;
     },
   } as never;

@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   createAdminCollectorJob,
   getAdminEventDraftDetail,
+  listAdminExcludedArticles,
   listAdminEventDrafts,
   markAdminEventDraftNeedsInfo,
+  promoteAdminExcludedArticle,
   publishAdminEventDraft,
   rejectAdminEventDraft,
+  type AdminExcludedArticleRecord,
   type AdminEventDraftRecord,
   type AdminStore,
 } from "./admin-service";
@@ -15,10 +18,17 @@ import type { CollectorJobRecord } from "./collector-job-service";
 class MemoryAdminStore implements AdminStore {
   jobs: CollectorJobRecord[] = [];
   drafts = new Map<string, AdminEventDraftRecord>();
+  excludedArticles = new Map<string, AdminExcludedArticleRecord>();
   publishedEvents: Array<{ draftId: string; title: string }> = [];
 
-  constructor(drafts: AdminEventDraftRecord[] = []) {
+  constructor(
+    drafts: AdminEventDraftRecord[] = [],
+    excludedArticles: AdminExcludedArticleRecord[] = [],
+  ) {
     for (const draft of drafts) this.drafts.set(draft.id, draft);
+    for (const article of excludedArticles) {
+      this.excludedArticles.set(article.id, article);
+    }
   }
 
   async createCollectorJob(input: {
@@ -68,6 +78,24 @@ class MemoryAdminStore implements AdminStore {
     return draft;
   }
 
+  async listExcludedArticles(input: {
+    processingState?: AdminExcludedArticleRecord["processingState"];
+  }) {
+    const articles = Array.from(this.excludedArticles.values());
+    if (!input.processingState) return articles;
+    return articles.filter(
+      (article) => article.processingState === input.processingState,
+    );
+  }
+
+  async promoteExcludedArticle(excludedArticleId: string, promotedAt: string) {
+    const article = this.excludedArticles.get(excludedArticleId);
+    if (!article) return null;
+    article.processingState = "promoted_to_extraction";
+    article.promotedAt = promotedAt;
+    return article;
+  }
+
   async publishEventDraft(input: {
     draft: AdminEventDraftRecord;
     publishedAt: string;
@@ -100,6 +128,24 @@ const completeDraft: AdminEventDraftRecord = {
   reviewState: "ready_for_review",
   evidenceAssetIds: [],
   fieldEvidence: {},
+};
+
+const excludedArticle: AdminExcludedArticleRecord = {
+  id: "excluded-1",
+  articleUrl: "https://mp.weixin.qq.com/s/official-visit",
+  triageDecision: "official_visit",
+  triageAction: "exclude",
+  confidence: 0.94,
+  publicSignals: [],
+  exclusionSignals: ["Official visit"],
+  exclusionReason: "Not open to ordinary attendees.",
+  evidenceAssetIds: ["asset-1"],
+  promptVersion: "event-triage-2026-06-03",
+  schemaVersion: "event-triage-schema-v1",
+  provider: "recorded",
+  model: "fixture-model",
+  processingState: "excluded",
+  createdAt: "2026-06-03T08:00:00.000Z",
 };
 
 describe("admin service", () => {
@@ -201,6 +247,31 @@ describe("admin service", () => {
     await expect(rejectAdminEventDraft("draft-1", store)).resolves.toMatchObject(
       { id: "draft-1", reviewState: "rejected" },
     );
+  });
+
+  it("lists excluded articles and promotes false negatives to extraction", async () => {
+    const store = new MemoryAdminStore([], [excludedArticle]);
+
+    await expect(
+      listAdminExcludedArticles({ processingState: "excluded" }, store),
+    ).resolves.toEqual([excludedArticle]);
+    await expect(
+      promoteAdminExcludedArticle(
+        "excluded-1",
+        store,
+        new Date("2026-06-03T09:00:00.000Z"),
+      ),
+    ).resolves.toMatchObject({
+      id: "excluded-1",
+      processingState: "promoted_to_extraction",
+      promotedAt: "2026-06-03T09:00:00.000Z",
+    });
+  });
+
+  it("throws when promoting a missing excluded article", async () => {
+    await expect(
+      promoteAdminExcludedArticle("missing", new MemoryAdminStore()),
+    ).rejects.toThrow("excluded_article_not_found");
   });
 
   it("publishes complete drafts into canonical events", async () => {

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
+  AdminExcludedArticleRecord,
   AdminEventDraftRecord,
   AdminReviewState,
   AdminStore,
@@ -85,6 +86,25 @@ type EventDraftRow = {
   review_state: AdminReviewState;
   evidence_asset_ids: string[];
   field_evidence: Record<string, string[]>;
+};
+
+type ExcludedArticleRow = {
+  excluded_article_id: string;
+  article_url: string;
+  triage_decision: string;
+  triage_action: "exclude";
+  confidence: number;
+  public_signals: string[] | null;
+  exclusion_signals: string[] | null;
+  exclusion_reason: string;
+  evidence_asset_ids: string[] | null;
+  prompt_version: string;
+  schema_version: string;
+  provider: string;
+  model: string;
+  processing_state: AdminExcludedArticleRecord["processingState"];
+  promoted_at: string | null;
+  created_at: string | null;
 };
 
 export function getSupabaseAdminStore(
@@ -179,6 +199,43 @@ class SupabaseAdminStore implements AdminStore {
 
     if (error) throw new Error("admin_draft_update_failed");
     return data ? toDraftRecord(data) : null;
+  }
+
+  async listExcludedArticles(input: {
+    processingState?: AdminExcludedArticleRecord["processingState"];
+  }): Promise<AdminExcludedArticleRecord[]> {
+    let query = this.client
+      .from("excluded_articles")
+      .select("*");
+
+    if (input.processingState) {
+      query = query.eq("processing_state", input.processingState);
+    }
+
+    query = query.order("created_at", { ascending: false }).limit(100);
+
+    const { data, error } = await query;
+    if (error) throw new Error("admin_excluded_article_list_failed");
+    return ((data ?? []) as ExcludedArticleRow[]).map(toExcludedArticleRecord);
+  }
+
+  async promoteExcludedArticle(
+    excludedArticleId: string,
+    promotedAt: string,
+  ): Promise<AdminExcludedArticleRecord | null> {
+    const { data, error } = await this.client
+      .from("excluded_articles")
+      .update({
+        processing_state: "promoted_to_extraction",
+        promoted_at: promotedAt,
+        updated_at: promotedAt,
+      })
+      .eq("excluded_article_id", excludedArticleId)
+      .select("*")
+      .maybeSingle<ExcludedArticleRow>();
+
+    if (error) throw new Error("admin_excluded_article_promote_failed");
+    return data ? toExcludedArticleRecord(data) : null;
   }
 
   async publishEventDraft(input: {
@@ -313,6 +370,29 @@ function isMissingOptionalPosterColumnError(error: unknown) {
     message.includes("poster_image_alt") ||
     message.includes("poster_image_source_url")
   );
+}
+
+function toExcludedArticleRecord(
+  row: ExcludedArticleRow,
+): AdminExcludedArticleRecord {
+  return {
+    id: row.excluded_article_id,
+    articleUrl: row.article_url,
+    triageDecision: row.triage_decision,
+    triageAction: row.triage_action,
+    confidence: row.confidence,
+    publicSignals: row.public_signals ?? [],
+    exclusionSignals: row.exclusion_signals ?? [],
+    exclusionReason: row.exclusion_reason,
+    evidenceAssetIds: row.evidence_asset_ids ?? [],
+    promptVersion: row.prompt_version,
+    schemaVersion: row.schema_version,
+    provider: row.provider,
+    model: row.model,
+    processingState: row.processing_state,
+    promotedAt: row.promoted_at ?? undefined,
+    createdAt: row.created_at ?? undefined,
+  };
 }
 
 function toJobRecord(row: CollectorJobRow): CollectorJobRecord {

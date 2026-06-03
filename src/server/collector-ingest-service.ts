@@ -174,7 +174,9 @@ export function computeDraftBackendRouting(
   if (
     !policy.autoPublishEnabled ||
     !hasMinimumPublishFields(payload) ||
-    hasBlockingSignal(payload)
+    hasBlockingSignal(payload) ||
+    hasTriageReviewRequirement(payload) ||
+    hasPublishBlockers(payload)
   ) {
     return {
       reviewState,
@@ -192,6 +194,14 @@ function hasBlockingSignal(payload: EventDraftUpload) {
   return payload.signals.some((signal) =>
     ["missing_required_public_field", "possible_duplicate"].includes(signal),
   );
+}
+
+function hasTriageReviewRequirement(payload: EventDraftUpload) {
+  return payload.triageDecision === "possible_public_activity";
+}
+
+function hasPublishBlockers(payload: EventDraftUpload) {
+  return Boolean(payload.hardBlockers?.length || payload.softBlockers?.length);
 }
 
 function hasMinimumPublishFields(payload: EventDraftUpload) {

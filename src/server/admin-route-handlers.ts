@@ -5,8 +5,10 @@ import {
   createAdminCollectorJob,
   getAdminEventDraftDetail,
   listAdminCollectorJobs,
+  listAdminExcludedArticles,
   listAdminEventDrafts,
   markAdminEventDraftNeedsInfo,
+  promoteAdminExcludedArticle,
   publishAdminEventDraft,
   rejectAdminEventDraft,
   type AdminStore,
@@ -141,6 +143,56 @@ export async function handleAdminListEventDrafts(
   }
 }
 
+export async function handleAdminListExcludedArticles(
+  request: Request,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const url = new URL(request.url);
+  const processingState =
+    url.searchParams.get("processingState") ?? undefined;
+  try {
+    const excludedArticles = await listAdminExcludedArticles(
+      { processingState: processingState as never },
+      store,
+    );
+    return Response.json({
+      ok: true,
+      excludedArticles,
+    });
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminPromoteExcludedArticle(
+  request: Request,
+  excludedArticleId: string,
+  store: AdminStore,
+  env: AdminEnv,
+  now = new Date(),
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  try {
+    const excludedArticle = await promoteAdminExcludedArticle(
+      excludedArticleId,
+      store,
+      now,
+    );
+    return Response.json({
+      ok: true,
+      excludedArticle,
+    });
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
 export async function handleAdminGetEventDraft(
   request: Request,
   draftId: string,
@@ -228,12 +280,7 @@ function invalidRequestResponse(error: z.ZodError) {
 
 function serviceErrorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "admin_error";
-  const status =
-    message === "draft_not_found"
-      ? 404
-      : message === "draft_not_publishable" || message === "invalid_seed_url"
-        ? 400
-        : 500;
+  const status = adminErrorStatus(message);
 
   return Response.json(
     {
@@ -242,4 +289,12 @@ function serviceErrorResponse(error: unknown) {
     },
     { status },
   );
+}
+
+function adminErrorStatus(message: string) {
+  if (message === "draft_not_found") return 404;
+  if (message === "excluded_article_not_found") return 404;
+  if (message === "draft_not_publishable") return 400;
+  if (message === "invalid_seed_url") return 400;
+  return 500;
 }

@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import type { AdminEventDraftRecord, AdminStore } from "./admin-service";
+import type {
+  AdminEventDraftRecord,
+  AdminExcludedArticleRecord,
+  AdminStore,
+} from "./admin-service";
 import {
   handleAdminCreateCollectorJob,
   handleAdminDraftAction,
+  handleAdminListExcludedArticles,
   handleAdminListCollectorJobs,
   handleAdminListEventDrafts,
+  handleAdminPromoteExcludedArticle,
 } from "./admin-route-handlers";
 import type { CollectorJobRecord } from "./collector-job-service";
 
@@ -24,6 +30,22 @@ class RouteAdminStore implements AdminStore {
     reviewState: "ready_for_review",
     evidenceAssetIds: [],
     fieldEvidence: {},
+  };
+  excludedArticle: AdminExcludedArticleRecord = {
+    id: "excluded-1",
+    articleUrl: "https://mp.weixin.qq.com/s/official-visit",
+    triageDecision: "official_visit",
+    triageAction: "exclude",
+    confidence: 0.94,
+    publicSignals: [],
+    exclusionSignals: ["Official visit"],
+    exclusionReason: "Not open to ordinary attendees.",
+    evidenceAssetIds: ["asset-1"],
+    promptVersion: "event-triage-2026-06-03",
+    schemaVersion: "event-triage-schema-v1",
+    provider: "recorded",
+    model: "fixture-model",
+    processingState: "excluded",
   };
 
   async createCollectorJob(input: {
@@ -53,6 +75,23 @@ class RouteAdminStore implements AdminStore {
 
   async listEventDrafts(): Promise<AdminEventDraftRecord[]> {
     return [this.draft];
+  }
+
+  async listExcludedArticles(): Promise<AdminExcludedArticleRecord[]> {
+    return [this.excludedArticle];
+  }
+
+  async promoteExcludedArticle(
+    excludedArticleId: string,
+    promotedAt: string,
+  ): Promise<AdminExcludedArticleRecord | null> {
+    if (excludedArticleId !== this.excludedArticle.id) return null;
+    this.excludedArticle = {
+      ...this.excludedArticle,
+      processingState: "promoted_to_extraction",
+      promotedAt,
+    };
+    return this.excludedArticle;
   }
 
   async getEventDraft(draftId: string) {
@@ -85,6 +124,10 @@ class FailingListAdminStore extends RouteAdminStore {
 
   async listEventDrafts(): Promise<AdminEventDraftRecord[]> {
     throw new Error("admin_draft_list_failed");
+  }
+
+  async listExcludedArticles(): Promise<AdminExcludedArticleRecord[]> {
+    throw new Error("admin_excluded_article_list_failed");
   }
 }
 
@@ -232,6 +275,51 @@ describe("admin route handlers", () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       drafts: [expect.objectContaining({ id: "draft-1" })],
+    });
+  });
+
+  it("lists excluded articles for admin audit", async () => {
+    const response = await handleAdminListExcludedArticles(
+      new Request(
+        "https://example.com/api/admin/excluded-articles?processingState=excluded",
+        {
+          headers: { authorization: "Bearer admin-secret" },
+        },
+      ),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      excludedArticles: [
+        expect.objectContaining({
+          id: "excluded-1",
+          triageDecision: "official_visit",
+          processingState: "excluded",
+        }),
+      ],
+    });
+  });
+
+  it("promotes excluded articles back to extraction state", async () => {
+    const response = await handleAdminPromoteExcludedArticle(
+      request(),
+      "excluded-1",
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-06-03T09:00:00.000Z"),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      excludedArticle: {
+        id: "excluded-1",
+        processingState: "promoted_to_extraction",
+        promotedAt: "2026-06-03T09:00:00.000Z",
+      },
     });
   });
 
