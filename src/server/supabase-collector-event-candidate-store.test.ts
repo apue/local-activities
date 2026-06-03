@@ -6,23 +6,41 @@ describe("supabase collector event candidate store", () => {
   it("queries bounded canonical event candidates using blocking fields", async () => {
     const calls: Array<[string, unknown[]]> = [];
     const store = getSupabaseCollectorEventCandidateStore(
-      supabaseClientReturning(calls, [
-        {
-          event_id: "event-1",
-          title: "泰国风情节",
-          organizer: "泰国驻华大使馆",
-          starts_at: "2026-05-30T00:30:00.000Z",
-          ends_at: "2026-05-30T10:00:00.000Z",
-          timezone: "Asia/Shanghai",
-          city: "Beijing",
-          venue_name: "朝阳公园",
-          venue_address: "北京市朝阳区朝阳公园",
-          source_url: "https://mp.weixin.qq.com/s/example",
-          schedule_text: "5月30日至31日每日8:30-18:00",
-          status: "published",
-          published_at: "2026-05-29T08:00:00.000Z",
-        },
-      ]),
+      supabaseClientReturning(calls, {
+        canonical_events: [
+          {
+            event_id: "event-1",
+            title: "泰国风情节",
+            organizer: "泰国驻华大使馆",
+            starts_at: "2026-05-30T00:30:00.000Z",
+            ends_at: "2026-05-30T10:00:00.000Z",
+            timezone: "Asia/Shanghai",
+            city: "Beijing",
+            venue_name: "朝阳公园",
+            venue_address: "北京市朝阳区朝阳公园",
+            source_url: "https://mp.weixin.qq.com/s/example",
+            schedule_text: "5月30日至31日每日8:30-18:00",
+            status: "published",
+            published_at: "2026-05-29T08:00:00.000Z",
+          },
+        ],
+        event_drafts: [
+          {
+            draft_id: "draft-1",
+            title: "泰国风情节",
+            organizer: "泰国驻华大使馆",
+            starts_at: "2026-05-30T00:30:00.000Z",
+            ends_at: "2026-05-30T10:00:00.000Z",
+            timezone: "Asia/Shanghai",
+            city: "Beijing",
+            venue_name: "朝阳公园",
+            venue_address: "北京市朝阳区朝阳公园",
+            article_url: "https://mp.weixin.qq.com/s/draft",
+            schedule_text: "5月30日至31日每日8:30-18:00",
+            review_state: "ready_for_review",
+          },
+        ],
+      }),
     );
 
     await expect(
@@ -51,8 +69,24 @@ describe("supabase collector event candidate store", () => {
         status: "published",
         publishedAt: "2026-05-29T08:00:00.000Z",
       },
+      {
+        eventId: "draft-1",
+        title: "泰国风情节",
+        organizer: "泰国驻华大使馆",
+        startsAt: "2026-05-30T00:30:00.000Z",
+        endsAt: "2026-05-30T10:00:00.000Z",
+        timezone: "Asia/Shanghai",
+        city: "Beijing",
+        venueName: "朝阳公园",
+        venueAddress: "北京市朝阳区朝阳公园",
+        sourceUrl: "https://mp.weixin.qq.com/s/draft",
+        scheduleText: "5月30日至31日每日8:30-18:00",
+        status: "draft",
+        publishedAt: null,
+      },
     ]);
     expect(calls).toContainEqual(["from", ["canonical_events"]]);
+    expect(calls).toContainEqual(["from", ["event_drafts"]]);
     expect(calls).toContainEqual([
       "select",
       [
@@ -64,11 +98,17 @@ describe("supabase collector event candidate store", () => {
     expect(calls).toContainEqual(["ilike", ["title", "%泰国风情节%"]]);
     expect(calls).toContainEqual(["ilike", ["organizer", "%泰国驻华大使馆%"]]);
     expect(calls).toContainEqual(["ilike", ["venue_name", "%朝阳公园%"]]);
-    expect(calls).toContainEqual(["limit", [3]]);
+    expect(calls.filter(([name]) => name === "limit")).toEqual([
+      ["limit", [3]],
+      ["limit", [3]],
+    ]);
   });
 });
 
-function supabaseClientReturning(calls: Array<[string, unknown[]]>, rows: unknown[]) {
+function supabaseClientReturning(
+  calls: Array<[string, unknown[]]>,
+  rowsByTable: Record<string, unknown[]>,
+) {
   const query = {
     select(...args: unknown[]) {
       calls.push(["select", args]);
@@ -100,12 +140,14 @@ function supabaseClientReturning(calls: Array<[string, unknown[]]>, rows: unknow
     },
     limit(...args: unknown[]) {
       calls.push(["limit", args]);
-      return Promise.resolve({ data: rows, error: null });
+      return Promise.resolve({ data: rowsByTable[currentTable], error: null });
     },
   };
+  let currentTable = "";
 
   return {
     from(...args: unknown[]) {
+      currentTable = String(args[0]);
       calls.push(["from", args]);
       return query;
     },
