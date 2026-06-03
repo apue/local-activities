@@ -6,6 +6,7 @@ import {
   collectorFailureSchema,
   eventDraftUploadSchema,
   evidenceAssetSchema,
+  excludedArticleUploadSchema,
   sourceCandidateSchema,
   sourceRunReportSchema,
   type ArticleSnapshot,
@@ -13,6 +14,7 @@ import {
   type CollectorFailure,
   type EventDraftUpload,
   type EvidenceAsset,
+  type ExcludedArticleUpload,
   type SourceCandidate,
   type SourceRunReport,
 } from "../contracts/collector";
@@ -21,6 +23,7 @@ import {
   ingestArticleSnapshot,
   ingestCollectorFailure,
   ingestEventDraft,
+  ingestExcludedArticle,
   ingestEvidenceAsset,
   ingestSourceCandidate,
   ingestSourceRun,
@@ -100,6 +103,20 @@ export function handleEventDraftIngest(
     eventDraftUploadSchema,
     (envelope, ingestStore) =>
       ingestEventDraft(envelope, ingestStore, readDraftBackendPolicy(env)),
+  );
+}
+
+export function handleExcludedArticleIngest(
+  request: Request,
+  store: CollectorIngestStore,
+  env: CollectorEnv,
+) {
+  return handleCollectorIngest(
+    request,
+    store,
+    env,
+    excludedArticleUploadSchema,
+    ingestExcludedArticle,
   );
 }
 
@@ -201,4 +218,5 @@ type IngestPayload =
   | ArticleSnapshot
   | EvidenceAsset
   | EventDraftUpload
+  | ExcludedArticleUpload
   | CollectorFailure;

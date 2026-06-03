@@ -37,10 +37,13 @@ export type AdminEventDraftRecord = {
   summary?: string;
   entryNotes?: string;
   triageDecision?:
+    | "public_activity"
     | "possible_public_activity"
-    | "not_public_activity"
-    | "needs_extraction"
-    | "unknown";
+    | "official_visit"
+    | "non_public_news"
+    | "internal_or_private"
+    | "not_event"
+    | "unsupported";
   triageAction?: "extract" | "exclude" | "review";
   triageConfidence?: number;
   publicSignals?: string[];
@@ -98,6 +101,25 @@ export type PublishedAdminEvent = {
   publishedAt: string;
 };
 
+export type AdminExcludedArticleRecord = {
+  id: string;
+  articleUrl: string;
+  triageDecision: string;
+  triageAction: "exclude";
+  confidence: number;
+  publicSignals: string[];
+  exclusionSignals: string[];
+  exclusionReason: string;
+  evidenceAssetIds: string[];
+  promptVersion: string;
+  schemaVersion: string;
+  provider: string;
+  model: string;
+  processingState: "excluded" | "promoted_to_extraction";
+  promotedAt?: string;
+  createdAt?: string;
+};
+
 export type AdminStore = {
   createCollectorJob(input: {
     seedUrl: string;
@@ -113,6 +135,13 @@ export type AdminStore = {
     draftId: string,
     reviewState: AdminReviewState,
   ): Promise<AdminEventDraftRecord | null>;
+  listExcludedArticles(input: {
+    processingState?: AdminExcludedArticleRecord["processingState"];
+  }): Promise<AdminExcludedArticleRecord[]>;
+  promoteExcludedArticle(
+    excludedArticleId: string,
+    promotedAt: string,
+  ): Promise<AdminExcludedArticleRecord | null>;
   publishEventDraft(input: {
     draft: AdminEventDraftRecord;
     publishedAt: string;
@@ -148,6 +177,26 @@ export function listAdminEventDrafts(
   store: AdminStore,
 ) {
   return store.listEventDrafts(input);
+}
+
+export function listAdminExcludedArticles(
+  input: { processingState?: AdminExcludedArticleRecord["processingState"] },
+  store: AdminStore,
+) {
+  return store.listExcludedArticles(input);
+}
+
+export async function promoteAdminExcludedArticle(
+  excludedArticleId: string,
+  store: AdminStore,
+  now = new Date(),
+) {
+  const article = await store.promoteExcludedArticle(
+    excludedArticleId,
+    now.toISOString(),
+  );
+  if (!article) throw new Error("excluded_article_not_found");
+  return article;
 }
 
 export async function getAdminEventDraftDetail(

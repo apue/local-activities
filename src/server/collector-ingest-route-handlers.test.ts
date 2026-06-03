@@ -4,32 +4,46 @@ import type { CollectorIngestStore } from "./collector-ingest-service";
 import {
   handleArticleSnapshotIngest,
   handleEventDraftIngest,
+  handleExcludedArticleIngest,
   handleSourceCandidateIngest,
   handleSourceRunIngest,
 } from "./collector-ingest-route-handlers";
 
 class RouteIngestStore implements CollectorIngestStore {
+  calls: string[] = [];
+
   async upsertSourceCandidate() {
+    this.calls.push("source");
     return { id: "source-1" };
   }
 
   async upsertSourceRun() {
+    this.calls.push("source-run");
     return { id: "source-run-1" };
   }
 
   async upsertArticleSnapshot() {
+    this.calls.push("article-snapshot");
     return { id: "article-snapshot-1" };
   }
 
   async upsertEvidenceAsset() {
+    this.calls.push("evidence");
     return { id: "evidence-1" };
   }
 
   async upsertEventDraft() {
+    this.calls.push("event-draft");
     return { id: "draft-1" };
   }
 
+  async upsertExcludedArticle() {
+    this.calls.push("excluded-article");
+    return { id: "excluded-1" };
+  }
+
   async upsertCollectorFailure() {
+    this.calls.push("failure");
     return { id: "failure-1" };
   }
 }
@@ -160,6 +174,39 @@ describe("collector ingest route handlers", () => {
       reviewState: "needs_info",
       autoPublished: false,
     });
+  });
+
+  it("routes excluded articles without creating ordinary event drafts", async () => {
+    const store = new RouteIngestStore();
+    const response = await handleExcludedArticleIngest(
+      post({
+        ...envelopeBase,
+        payload: {
+          articleUrl: "https://mp.weixin.qq.com/s/official-visit",
+          triageAttemptId: "triage-1",
+          triageDecision: "official_visit",
+          triageAction: "exclude",
+          confidence: 0.94,
+          publicSignals: [],
+          exclusionSignals: ["Official visit"],
+          exclusionReason: "Not open to ordinary attendees.",
+          evidenceAssetIds: ["asset-1"],
+          promptVersion: "event-triage-2026-06-03",
+          schemaVersion: "event-triage-schema-v1",
+          provider: "recorded",
+          model: "fixture-model",
+        },
+      }),
+      store,
+      { COLLECTOR_API_KEY: "collector-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      id: "excluded-1",
+    });
+    expect(store.calls).toEqual(["excluded-article"]);
   });
 
   it("accepts source candidates before source run uploads", async () => {
@@ -297,5 +344,49 @@ describe("collector ingest route handlers", () => {
       autoPublished: true,
       publishedEventId: "event-1",
     });
+  });
+
+  it("does not auto-publish possible public activity drafts solely from triage", async () => {
+    class PublishingStore extends RouteIngestStore {
+      async publishEventDraft() {
+        this.calls.push("publish");
+        return { id: "event-1" };
+      }
+    }
+    const store = new PublishingStore();
+
+    const response = await handleEventDraftIngest(
+      post({
+        ...envelopeBase,
+        payload: {
+          articleUrl: "https://mp.weixin.qq.com/s/possible",
+          extractionAttemptId: "attempt-possible",
+          captureMode: "text_complete",
+          triageDecision: "possible_public_activity",
+          triageAction: "review",
+          triageConfidence: 0.82,
+          publicEligibility: "unclear",
+          title: "Possible Activity",
+          startsAt: "2026-06-06T06:00:00.000Z",
+          timezone: "Asia/Shanghai",
+          venueName: "Cultural Center",
+          city: "Beijing",
+          signals: ["ready_for_review"],
+          evidenceAssetIds: [],
+          fieldEvidence: {},
+          confidence: 0.96,
+        },
+      }),
+      store,
+      { COLLECTOR_API_KEY: "collector-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      reviewState: "ready_for_review",
+      autoPublished: false,
+    });
+    expect(store.calls).toEqual(["event-draft"]);
   });
 });
