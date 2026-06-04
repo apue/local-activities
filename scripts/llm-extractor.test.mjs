@@ -97,7 +97,7 @@ describe("lightweight LLM extractor", () => {
       startsAt: "2026-06-06T06:00:00+08:00",
       timezone: "Asia/Shanghai",
       city: "Beijing",
-      signals: ["ready_for_review", "possible_duplicate"],
+      signals: ["ready_for_review"],
       confidence: 0.91,
     });
     expect(result.eventDrafts[0].payload.fieldEvidence._extraction).toEqual([
@@ -341,7 +341,6 @@ describe("lightweight LLM extractor", () => {
     expect(result.eventDrafts[0].payload.signals).toEqual([
       "image_dominant",
       "qr_registration",
-      "possible_duplicate",
     ]);
     expect(result.eventDrafts[0].payload.evidenceAssetIds).toEqual([
       "poster-1",
@@ -382,7 +381,34 @@ describe("lightweight LLM extractor", () => {
       "extract-multi-activity-2",
     );
     expect(result.eventDrafts[1].payload.signals).toContain("secondary_mention");
-    expect(result.eventDrafts[1].payload.signals).toContain("possible_duplicate");
+    expect(result.eventDrafts[1].payload.signals).not.toContain(
+      "possible_duplicate",
+    );
+  });
+
+  it("keeps explicit possible duplicate signals from provider output", async () => {
+    const result = await runLlmExtractionOnce({
+      env: validEnv(),
+      articleSnapshot: textArticle(),
+      fetchImpl: async () =>
+        jsonResponse(
+          openaiResponse({
+            ...activityResponse(),
+            events: [
+              {
+                ...activityResponse().events[0],
+                signals: ["possible_duplicate"],
+              },
+            ],
+          }),
+        ),
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "extract-explicit-duplicate",
+    });
+
+    expect(result.eventDrafts[0].payload.signals).toEqual([
+      "possible_duplicate",
+    ]);
   });
 
   it("keeps date-only model output in schedule text instead of invalid datetime fields", async () => {
