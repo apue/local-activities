@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { createClient } from "@supabase/supabase-js";
 
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 import {
@@ -21,6 +22,7 @@ const defaultSampleSize = 3;
 const defaultMaxImages = 2;
 const defaultDetail = "low";
 const defaultMaxImageBytes = 4_000_000;
+const defaultMinImageBytes = 2_048;
 const defaultMaxOutputTokens = 3_000;
 const defaultTimeoutMs = 60_000;
 const maxArticleTextChars = 6_000;
@@ -76,6 +78,7 @@ export function parseVisionEvalArgs(argv) {
     listModels: false,
     models: defaultVisionEvalModels.map((model) => model.id),
     articleUrls: [],
+    caseFile: undefined,
     lookbackDays: defaultLookbackDays,
     maxImageBytes: defaultMaxImageBytes,
     maxOutputTokens: defaultMaxOutputTokens,
@@ -122,6 +125,9 @@ export function parseVisionEvalArgs(argv) {
       index += 1;
     } else if (arg === "--article-url") {
       args.articleUrls.push(readRequiredValue(argv, index, arg));
+      index += 1;
+    } else if (arg === "--case-file") {
+      args.caseFile = readRequiredValue(argv, index, arg);
       index += 1;
     } else if (arg === "--lookback-days") {
       args.lookbackDays = readPositiveIntegerArg(argv, index, arg, {
@@ -192,12 +198,111 @@ export function buildVisionEvalArticleFromHtml({ url, html }) {
   };
 }
 
+export async function loadVisionEvalCaseFile(caseFilePath) {
+  const absolutePath = path.resolve(process.cwd(), caseFilePath);
+  return normalizeVisionEvalCaseFile(
+    JSON.parse(await readFile(absolutePath, "utf8")),
+    { caseFilePath },
+  );
+}
+
+export function normalizeVisionEvalCaseFile(input, { caseFilePath = "case-file" } = {}) {
+  const cases = Array.isArray(input) ? input : input?.cases;
+  if (!Array.isArray(cases)) throw new Error(`vision_case_file_missing_cases:${caseFilePath}`);
+
+  return cases.map((visionCase, index) => normalizeVisionEvalCase(visionCase, index));
+}
+
+export function evaluateVisionCaseResult({ visionCase, parsed }) {
+  const label = visionCase.label ?? {};
+  const predictedAction = inferVisionEvalAction(parsed);
+  const classification = parsed?.classification ?? {};
+  const events = Array.isArray(parsed?.events) ? parsed.events : [];
+  const expectedAction = label.expectedAction ?? "review";
+  const expectedPublicEligibility = label.publicEligibility;
+  const eventCount = events.length;
+  const eventCountMatch = eventCountMatchesLabel(eventCount, label);
+  const qrExpected = Boolean(label.expectsQrEvidence);
+  const qrFound = events.some((event) =>
+    String(event?.qrEvidence ?? "").toLowerCase() === "yes" ||
+    /二维码|扫码|qr|scan/i.test(String(event?.registrationAction ?? "")),
+  );
+  const reservationExpected = Boolean(label.requiresReservation);
+  const reservationFound = events.some(
+    (event) => event?.reservationStatus === "required" || event?.registrationAction,
+  );
+
+  return {
+    caseId: visionCase.id,
+    expectedAction,
+    predictedAction,
+    actionMatch: expectedAction === predictedAction,
+    expectedPublicEligibility,
+    predictedPublicEligibility: classification.publicEligibility ?? "unknown",
+    publicEligibilityMatch: expectedPublicEligibility
+      ? expectedPublicEligibility === classification.publicEligibility
+      : undefined,
+    expectedEventCount: label.expectedEventCount,
+    expectedEventCountMin: label.expectedEventCountMin,
+    expectedEventCountMax: label.expectedEventCountMax,
+    actualEventCount: eventCount,
+    eventCountMatch,
+    qrExpected,
+    qrFound,
+    qrMatch: qrExpected ? qrFound : undefined,
+    reservationExpected,
+    reservationFound,
+    reservationMatch: reservationExpected ? reservationFound : undefined,
+    falsePositive: expectedAction === "exclude" && predictedAction === "extract",
+    falseNegative: expectedAction === "extract" && predictedAction === "exclude",
+  };
+}
+
+export function summarizeVisionCaseMetrics(caseResults) {
+  const results = caseResults.filter(Boolean);
+  const count = results.length;
+  const actionMatches = results.filter((result) => result.actionMatch).length;
+  const publicEligibilityResults = results.filter(
+    (result) => result.publicEligibilityMatch !== undefined,
+  );
+  const eventCountResults = results.filter(
+    (result) => result.eventCountMatch !== undefined,
+  );
+  const qrResults = results.filter((result) => result.qrMatch !== undefined);
+  const reservationResults = results.filter(
+    (result) => result.reservationMatch !== undefined,
+  );
+
+  return {
+    caseCount: count,
+    actionAccuracy: ratio(actionMatches, count),
+    falsePositiveCount: results.filter((result) => result.falsePositive).length,
+    falseNegativeCount: results.filter((result) => result.falseNegative).length,
+    publicEligibilityAccuracy: ratio(
+      publicEligibilityResults.filter((result) => result.publicEligibilityMatch).length,
+      publicEligibilityResults.length,
+    ),
+    eventCountAccuracy: ratio(
+      eventCountResults.filter((result) => result.eventCountMatch).length,
+      eventCountResults.length,
+    ),
+    qrRecall: ratio(
+      qrResults.filter((result) => result.qrMatch).length,
+      qrResults.length,
+    ),
+    reservationRecall: ratio(
+      reservationResults.filter((result) => result.reservationMatch).length,
+      reservationResults.length,
+    ),
+  };
+}
+
 export function selectArticleImages(candidates, { maxImages = defaultMaxImages } = {}) {
   return candidates
     .filter((candidate) => isLikelyImageUrl(candidate.url))
     .map((candidate, index) => ({
       ...candidate,
-      role: classifyImageCandidate(candidate),
+      role: candidate.role ?? classifyImageCandidate(candidate),
       originalIndex: index,
     }))
     .sort((left, right) => {
@@ -411,6 +516,20 @@ export function formatVisionEvalMarkdownReport(result) {
 
   lines.push("");
   lines.push(`Recommended model: \`${result.recommendation ?? "none"}\``);
+  if (result.labelMetrics && Object.keys(result.labelMetrics).length > 0) {
+    lines.push("");
+    lines.push("## Label Metrics");
+    lines.push("");
+    lines.push(
+      "| Model | Cases | Action acc | False + | False - | Public eligibility acc | Event count acc | QR recall | Reservation recall |",
+    );
+    lines.push("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
+    for (const [model, metrics] of Object.entries(result.labelMetrics)) {
+      lines.push(
+        `| ${model} | ${metrics.caseCount} | ${formatPercent(metrics.actionAccuracy)} | ${metrics.falsePositiveCount} | ${metrics.falseNegativeCount} | ${formatPercent(metrics.publicEligibilityAccuracy)} | ${formatPercent(metrics.eventCountAccuracy)} | ${formatPercent(metrics.qrRecall)} | ${formatPercent(metrics.reservationRecall)} |`,
+      );
+    }
+  }
   lines.push("");
   lines.push("## Cases");
 
@@ -418,6 +537,10 @@ export function formatVisionEvalMarkdownReport(result) {
     lines.push("");
     lines.push(`### ${articleCase.article.title || articleCase.article.url}`);
     lines.push("");
+    if (articleCase.caseId) {
+      lines.push(`Case: ${articleCase.caseId}`);
+      lines.push(`Expected action: ${articleCase.label?.expectedAction ?? "unknown"}`);
+    }
     lines.push(`Source: ${articleCase.article.sourceName || "unknown"}`);
     lines.push(`URL: ${articleCase.article.url}`);
     lines.push(`Images: ${articleCase.images.map((image) => image.role).join(", ") || "none"}`);
@@ -444,6 +567,12 @@ export function formatVisionEvalMarkdownReport(result) {
       if (modelResult.error) {
         lines.push(`  error: ${modelResult.error}`);
       }
+      if (modelResult.labelEvaluation) {
+        const evaluation = modelResult.labelEvaluation;
+        lines.push(
+          `  label: predicted=${evaluation.predictedAction}; actionMatch=${evaluation.actionMatch}; falsePositive=${evaluation.falsePositive}; falseNegative=${evaluation.falseNegative}`,
+        );
+      }
       if (modelResult.contentPreview) {
         lines.push(`  content preview: ${singleLine(modelResult.contentPreview)}`);
       }
@@ -465,25 +594,32 @@ export async function runVisionEval({
   }
 
   const siliconflow = readSiliconFlowConfig(env);
-  const articles =
-    args.articleUrls.length > 0
-      ? await loadArticleUrlSamples({
+  const samples = args.caseFile
+    ? await loadCaseFileSamples({
+        env,
+        caseFilePath: args.caseFile,
+        sampleSize: args.sampleSize,
+        fetchImpl,
+      })
+    : args.articleUrls.length > 0
+      ? (await loadArticleUrlSamples({
           articleUrls: args.articleUrls,
           sampleSize: args.sampleSize,
           fetchImpl,
-        })
-      : await loadWechat2RssSampleArticles({
+        })).map((article) => ({ article }))
+      : (await loadWechat2RssSampleArticles({
           env,
           sampleSize: args.sampleSize,
           lookbackDays: args.lookbackDays,
           fetchImpl,
           now,
-        });
+        })).map((article) => ({ article }));
 
   const cases = [];
 
-  for (const article of articles) {
-    const candidates = extractArticleImageCandidates(article);
+  for (const sample of samples) {
+    const { article, visionCase } = sample;
+    const candidates = sample.imageCandidates ?? extractArticleImageCandidates(article);
     const selectedImages = selectArticleImages(candidates, {
       maxImages: args.maxImages,
     });
@@ -506,11 +642,16 @@ export async function runVisionEval({
           timeoutMs: args.timeoutMs,
           siliconflow,
           fetchImpl,
+          visionCase,
         }),
       );
     }
 
     cases.push({
+      caseId: visionCase?.id,
+      label: visionCase?.label,
+      tags: visionCase?.tags,
+      rationale: visionCase?.rationale,
       article: publicArticleSummary(article),
       images: images.map((image) => ({
         url: image.url,
@@ -526,11 +667,13 @@ export async function runVisionEval({
 
   const totals = summarizeModelTotals({ cases, models: args.models });
   const recommendation = pickRecommendation(totals);
+  const labelMetrics = summarizeLabelMetricsByModel({ cases, models: args.models });
 
   const result = {
     generatedAt: now.toISOString(),
-    sampleSize: articles.length,
+    sampleSize: samples.length,
     requestedSampleSize: args.sampleSize,
+    caseFile: args.caseFile,
     maxImages: args.maxImages,
     maxOutputTokens: args.maxOutputTokens,
     timeoutMs: args.timeoutMs,
@@ -538,6 +681,7 @@ export async function runVisionEval({
     lookbackDays: args.lookbackDays,
     models: args.models,
     totals,
+    labelMetrics,
     recommendation,
     cases,
   };
@@ -669,6 +813,98 @@ async function loadArticleUrlSamples({ articleUrls, sampleSize, fetchImpl }) {
   return articles;
 }
 
+async function loadCaseFileSamples({
+  env,
+  caseFilePath,
+  sampleSize,
+  fetchImpl,
+}) {
+  const visionCases = (await loadVisionEvalCaseFile(caseFilePath)).slice(0, sampleSize);
+  const samples = [];
+  const supabaseClient = visionCases.some(
+    (visionCase) => visionCase.source.type === "supabase_snapshot",
+  )
+    ? createSupabaseReadOnlyClient(env)
+    : undefined;
+
+  for (const visionCase of visionCases) {
+    if (visionCase.source.type === "live_url") {
+      const [article] = await loadArticleUrlSamples({
+        articleUrls: [visionCase.source.url],
+        sampleSize: 1,
+        fetchImpl,
+      });
+      samples.push({
+        visionCase,
+        article,
+      });
+    } else if (visionCase.source.type === "supabase_snapshot") {
+      samples.push(
+        await loadSupabaseSnapshotCase({
+          supabaseClient,
+          visionCase,
+        }),
+      );
+    } else {
+      throw new Error(`unsupported_vision_case_source:${visionCase.source.type}`);
+    }
+  }
+
+  return samples;
+}
+
+async function loadSupabaseSnapshotCase({ supabaseClient, visionCase }) {
+  if (!supabaseClient) throw new Error("missing_supabase_client");
+  const snapshotId = visionCase.source.snapshotId;
+  const { data: snapshot, error } = await supabaseClient
+    .from("article_snapshots")
+    .select("id,canonical_url,title,author_name,published_at,captured_at,visible_text")
+    .eq("id", snapshotId)
+    .single();
+  if (error) throw new Error(`supabase_snapshot_fetch_failed:${snapshotId}:${error.message}`);
+
+  const article = {
+    provider: "supabase_snapshot",
+    url: snapshot.canonical_url,
+    title: snapshot.title,
+    publishedAt: snapshot.published_at ?? snapshot.captured_at,
+    sourceName: snapshot.author_name,
+    sourceId: `snapshot-${snapshot.id}`,
+    summary: "",
+    contentHtml: "",
+    contentText: snapshot.visible_text ?? "",
+  };
+
+  const { data: evidenceAssets, error: evidenceError } = await supabaseClient
+    .from("evidence_assets")
+    .select("role,source_url,width,height,text_content")
+    .eq("article_url", snapshot.canonical_url)
+    .in("role", ["cover", "poster", "qr", "registration", "article_image"])
+    .limit(24);
+  if (evidenceError) {
+    throw new Error(
+      `supabase_evidence_fetch_failed:${snapshotId}:${evidenceError.message}`,
+    );
+  }
+
+  return {
+    visionCase,
+    article,
+    imageCandidates: (evidenceAssets ?? [])
+      .map((asset) =>
+        removeUndefined({
+          url: decodeHtmlEntities(asset.source_url),
+          role: asset.role,
+          alt: asset.text_content,
+          width: asset.width,
+          height: asset.height,
+          source: "supabase_evidence_asset",
+        }),
+      )
+      .filter((candidate) => candidate.url),
+  };
+}
+
 async function loadWechat2RssSampleArticles({
   env,
   sampleSize,
@@ -736,6 +972,9 @@ async function loadImageDataUrls({
         throw new Error(`image_too_large:${contentLength}`);
       }
       const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.byteLength < defaultMinImageBytes) {
+        throw new Error(`image_too_small:${buffer.byteLength}`);
+      }
       if (buffer.byteLength > maxImageBytes) {
         throw new Error(`image_too_large:${buffer.byteLength}`);
       }
@@ -771,6 +1010,7 @@ async function evaluateArticleWithModel({
   timeoutMs,
   siliconflow,
   fetchImpl,
+  visionCase,
 }) {
   const usableImages = images.filter((image) => image.dataUrl);
   const request = buildVisionEvalRequest({
@@ -809,6 +1049,9 @@ async function evaluateArticleWithModel({
       };
     }
     const score = scoreVisionEvalOutput({ parsed, images: usableImages });
+    const labelEvaluation = visionCase
+      ? evaluateVisionCaseResult({ visionCase, parsed })
+      : undefined;
     const cost = estimateVisionEvalCostCny({
       model,
       usage: response.usage,
@@ -821,6 +1064,7 @@ async function evaluateArticleWithModel({
       usage: response.usage,
       cost,
       score,
+      labelEvaluation,
       parsed,
     };
   } catch (error) {
@@ -949,6 +1193,20 @@ function summarizeModelTotals({ cases, models }) {
   });
 }
 
+function summarizeLabelMetricsByModel({ cases, models }) {
+  const metrics = {};
+  for (const model of models) {
+    const evaluations = cases.flatMap((articleCase) =>
+      articleCase.results
+        .filter((result) => result.model === model)
+        .map((result) => result.labelEvaluation)
+        .filter(Boolean),
+    );
+    if (evaluations.length > 0) metrics[model] = summarizeVisionCaseMetrics(evaluations);
+  }
+  return metrics;
+}
+
 function pickRecommendation(totals) {
   const passing = totals
     .filter((total) => total.ok > 0 && total.averageScore >= 70)
@@ -982,6 +1240,110 @@ function publicArticleSummary(article) {
     contentTextLength: article.contentText?.length ?? 0,
     imageCandidateCount: article.imageCandidateCount,
   };
+}
+
+function normalizeVisionEvalCase(visionCase, index) {
+  if (!visionCase || typeof visionCase !== "object") {
+    throw new Error(`invalid_vision_case:${index}`);
+  }
+  const id = stringValue(visionCase.id);
+  if (!id) throw new Error(`vision_case_missing_id:${index}`);
+  return {
+    id,
+    title: stringValue(visionCase.title),
+    source: normalizeVisionCaseSource(visionCase.source, id),
+    tags: Array.isArray(visionCase.tags)
+      ? visionCase.tags.map(stringValue).filter(Boolean)
+      : [],
+    label: normalizeVisionCaseLabel(visionCase.label, id),
+    rationale: stringValue(visionCase.rationale),
+  };
+}
+
+function normalizeVisionCaseSource(source, id) {
+  if (!source || typeof source !== "object") {
+    throw new Error(`vision_case_missing_source:${id}`);
+  }
+  if (source.type === "live_url") {
+    const url = stringValue(source.url);
+    if (!url) throw new Error(`vision_case_missing_live_url:${id}`);
+    return { type: "live_url", url };
+  }
+  if (source.type === "supabase_snapshot") {
+    const snapshotId = Number.parseInt(String(source.snapshotId ?? ""), 10);
+    if (!Number.isInteger(snapshotId) || snapshotId <= 0) {
+      throw new Error(`vision_case_invalid_snapshot_id:${id}`);
+    }
+    return {
+      type: "supabase_snapshot",
+      snapshotId,
+      articleUrl: stringValue(source.articleUrl),
+    };
+  }
+  throw new Error(`vision_case_unsupported_source:${id}:${source.type}`);
+}
+
+function normalizeVisionCaseLabel(label, id) {
+  if (!label || typeof label !== "object") {
+    throw new Error(`vision_case_missing_label:${id}`);
+  }
+  const expectedAction = stringValue(label.expectedAction);
+  if (!["extract", "exclude", "review"].includes(expectedAction)) {
+    throw new Error(`vision_case_invalid_expected_action:${id}`);
+  }
+  return removeUndefined({
+    expectedAction,
+    triageDecision: stringValue(label.triageDecision),
+    publicEligibility: stringValue(label.publicEligibility),
+    expectedEventCount: optionalNonNegativeInteger(label.expectedEventCount, id),
+    expectedEventCountMin: optionalNonNegativeInteger(label.expectedEventCountMin, id),
+    expectedEventCountMax: optionalNonNegativeInteger(label.expectedEventCountMax, id),
+    requiresReservation: Boolean(label.requiresReservation),
+    expectsQrEvidence: Boolean(label.expectsQrEvidence),
+  });
+}
+
+function inferVisionEvalAction(parsed) {
+  const classification = parsed?.classification ?? {};
+  const kind = String(classification.kind ?? "");
+  const publicEligibility = String(classification.publicEligibility ?? "");
+  if (kind === "activity" && publicEligibility === "public") return "extract";
+  if (
+    ["not_activity", "cancellation"].includes(kind) ||
+    publicEligibility === "not_public"
+  ) {
+    return "exclude";
+  }
+  return "review";
+}
+
+function eventCountMatchesLabel(eventCount, label) {
+  if (Number.isInteger(label.expectedEventCount)) {
+    return eventCount === label.expectedEventCount;
+  }
+  const hasMin = Number.isInteger(label.expectedEventCountMin);
+  const hasMax = Number.isInteger(label.expectedEventCountMax);
+  if (!hasMin && !hasMax) return undefined;
+  if (hasMin && eventCount < label.expectedEventCountMin) return false;
+  if (hasMax && eventCount > label.expectedEventCountMax) return false;
+  return true;
+}
+
+function createSupabaseReadOnlyClient(env) {
+  const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const supabaseSecretKey =
+    env.SUPABASE_SECRET_KEY?.trim() ??
+    env.SUPABASE_SERVICE_ROLE_KEY?.trim() ??
+    env.SUPA_SERVICE_KEY?.trim();
+  if (!supabaseUrl) throw new Error("missing_next_public_supabase_url");
+  if (!supabaseSecretKey) throw new Error("missing_supabase_secret_key");
+  return createClient(supabaseUrl, supabaseSecretKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
 }
 
 function extractArticleImageCandidates(article) {
@@ -1080,6 +1442,30 @@ function decodeHtmlEntities(value) {
     );
 }
 
+function stringValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function optionalNonNegativeInteger(value, id) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const number = Number.parseInt(String(value), 10);
+  if (!Number.isInteger(number) || number < 0) {
+    throw new Error(`vision_case_invalid_event_count:${id}`);
+  }
+  return number;
+}
+
+function ratio(numerator, denominator) {
+  if (!denominator) return undefined;
+  return numerator / denominator;
+}
+
+function removeUndefined(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, innerValue]) => innerValue !== undefined),
+  );
+}
+
 function readRequiredValue(argv, index, arg) {
   const value = argv[index + 1];
   if (!value || value.startsWith("--")) throw new Error(`missing_value:${arg}`);
@@ -1142,6 +1528,11 @@ function formatNumber(value, digits = 1) {
   return Number(value).toFixed(digits);
 }
 
+function formatPercent(value) {
+  if (!Number.isFinite(value)) return "n/a";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 function formatInteger(value) {
   if (!Number.isFinite(value)) return "n/a";
   return String(Math.round(value));
@@ -1164,6 +1555,7 @@ Options:
   --detail <low|high|auto> Vision detail hint. Default ${defaultDetail}.
   --models <csv>           Comma-separated model IDs.
   --article-url <url>      Evaluate an explicit article URL. May be repeated.
+  --case-file <path>       Evaluate labeled cases from a JSON case file.
   --lookback-days <n>      WeChat2RSS query lookback. Default ${defaultLookbackDays}.
   --max-image-bytes <n>    Skip any single fetched image above this size. Default ${defaultMaxImageBytes}.
   --max-output-tokens <n>  Max completion tokens per model call. Default ${defaultMaxOutputTokens}.
@@ -1196,6 +1588,11 @@ async function runCli(argv = process.argv.slice(2), baseEnv = process.env) {
   for (const total of result.totals) {
     console.log(
       `${total.model}: ok=${total.ok} failed=${total.failed} avgScore=${formatNumber(total.averageScore)} cost=${formatNumber(total.totalCostCny, 6)} CNY avgLatency=${formatInteger(total.averageLatencyMs)}ms`,
+    );
+  }
+  for (const [model, metrics] of Object.entries(result.labelMetrics ?? {})) {
+    console.log(
+      `${model}: labelActionAccuracy=${formatPercent(metrics.actionAccuracy)} falsePositive=${metrics.falsePositiveCount} falseNegative=${metrics.falseNegativeCount} qrRecall=${formatPercent(metrics.qrRecall)}`,
     );
   }
   return 0;
