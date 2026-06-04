@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
+import { readVisionModelPolicy } from "./vision-model-policy.mjs";
 
 export const promptVersion = "event-extraction-2026-06-02";
 export const extractionSchemaVersion = "event-extraction-schema-v1";
@@ -32,12 +33,12 @@ export function readLlmExtractorConfig(env = process.env, options = {}) {
   const collectorId = clean(env.COLLECTOR_ID);
   const agentProvider = clean(env.AGENT_PROVIDER);
   const openaiApiKey = clean(env.OPENAI_API_KEY);
-  const openaiModel = clean(env.OPENAI_MODEL);
+  const visionModelPolicy = readVisionModelPolicy(env);
+  const openaiModel = visionModelPolicy.extractionModel;
   const missing = [
     collectorId ? undefined : "COLLECTOR_ID",
     agentProvider ? undefined : "AGENT_PROVIDER",
     requireApiKey && !openaiApiKey ? "OPENAI_API_KEY" : undefined,
-    openaiModel ? undefined : "OPENAI_MODEL",
   ].filter(Boolean);
 
   if (missing.length) return { ok: false, missing };
@@ -48,6 +49,7 @@ export function readLlmExtractorConfig(env = process.env, options = {}) {
     provider: agentProvider,
     openaiApiKey,
     openaiModel,
+    visionModelPolicy,
     openaiApiStyle: normalizeOpenAIApiStyle(clean(env.OPENAI_API_STYLE)),
     agentTimeoutSeconds: readPositiveInteger(env.AGENT_TIMEOUT_SECONDS, 45),
     openaiBaseUrl: normalizeBaseUrl(

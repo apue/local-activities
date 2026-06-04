@@ -17,7 +17,26 @@ describe("lightweight LLM extractor", () => {
   it("reports missing provider configuration without leaking provided secrets", () => {
     expect(readLlmExtractorConfig({ OPENAI_API_KEY: "sk-secret" })).toEqual({
       ok: false,
-      missing: ["COLLECTOR_ID", "AGENT_PROVIDER", "OPENAI_MODEL"],
+      missing: ["COLLECTOR_ID", "AGENT_PROVIDER"],
+    });
+  });
+
+  it("prefers explicit vision extraction model over legacy OPENAI_MODEL", () => {
+    expect(
+      readLlmExtractorConfig({
+        COLLECTOR_ID: "collector-1",
+        AGENT_PROVIDER: "openai_compatible",
+        OPENAI_API_KEY: "provider-secret",
+        OPENAI_MODEL: "legacy-model",
+        VISION_EXTRACTION_MODEL: "Qwen/Qwen3-VL-8B-Instruct",
+      }),
+    ).toMatchObject({
+      ok: true,
+      openaiModel: "Qwen/Qwen3-VL-8B-Instruct",
+      visionModelPolicy: {
+        extractionModel: "Qwen/Qwen3-VL-8B-Instruct",
+        legacyExtractionModel: undefined,
+      },
     });
   });
 
