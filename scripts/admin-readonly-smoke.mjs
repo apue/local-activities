@@ -8,7 +8,7 @@ import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 const invalidAdminToken = "smoke-invalid-admin-token";
 
 export function buildAdminReadonlySmokeRequests({
-  adminToken,
+  adminCookie,
   invalidToken = invalidAdminToken,
 }) {
   return [
@@ -27,10 +27,23 @@ export function buildAdminReadonlySmokeRequests({
       validate: (response) => expectStatus(response, 200),
     },
     {
+      name: "admin_login",
+      method: "POST",
+      path: "/api/admin/login",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: undefined,
+      validate: (response) => {
+        expectStatus(response, 200);
+        if (!readSetCookie(response)) throw new Error("admin_login_cookie_missing");
+      },
+    },
+    {
       name: "admin_jobs_json",
       method: "GET",
       path: "/api/admin/collector-jobs",
-      headers: buildAdminHeaders(adminToken),
+      headers: buildCookieHeaders(adminCookie),
       validate: (response) => {
         expectStatus(response, 200);
         if (response.json?.ok !== true || !Array.isArray(response.json.jobs)) {
@@ -42,7 +55,7 @@ export function buildAdminReadonlySmokeRequests({
       name: "admin_drafts_json",
       method: "GET",
       path: "/api/admin/event-drafts",
-      headers: buildAdminHeaders(adminToken),
+      headers: buildCookieHeaders(adminCookie),
       validate: (response) => {
         expectStatus(response, 200);
         if (
@@ -57,7 +70,7 @@ export function buildAdminReadonlySmokeRequests({
       name: "admin_invalid_token_json",
       method: "GET",
       path: "/api/admin/collector-jobs",
-      headers: buildAdminHeaders(invalidToken),
+      headers: buildBearerHeaders(invalidToken),
       validate: (response) => {
         expectStatus(response, 401);
         if (
@@ -76,24 +89,45 @@ export async function runAdminReadonlySmoke({
   requestImpl,
 }) {
   const config = readAdminReadonlySmokeConfig(env);
-  const requests = buildAdminReadonlySmokeRequests({
-    adminToken: config.adminToken,
+  const request = requestImpl ?? requestHttp;
+  const loginResponse = await request({
+    name: "admin_login",
+    method: "POST",
+    path: "/api/admin/login",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: config.adminToken }),
+    baseUrl: config.baseUrl,
+    proxyUrl: config.proxyUrl,
   });
+  expectStatus(loginResponse, 200);
+  const adminCookie = readSetCookie(loginResponse);
+  if (!adminCookie) throw new Error("admin_login_cookie_missing");
 
-  for (const request of requests) {
-    const response = await (requestImpl ?? requestHttp)({
-      ...request,
+  const requests = buildAdminReadonlySmokeRequests({ adminCookie }).filter(
+    (request) => request.name !== "admin_login",
+  );
+
+  for (const smokeRequest of requests) {
+    const response = await request({
+      ...smokeRequest,
       baseUrl: config.baseUrl,
       proxyUrl: config.proxyUrl,
     });
-    request.validate(response);
+    smokeRequest.validate(response);
   }
 
   return {
     kind: "passed",
     baseUrl: config.baseUrl,
-    checked: requests.map((request) => request.name),
+    checked: ["admin_login", ...requests.map((request) => request.name)],
     proxyUrl: config.proxyUrl,
+  };
+}
+
+function buildBearerHeaders(adminToken) {
+  return {
+    authorization: `Bearer ${adminToken}`,
+    "content-type": "application/json",
   };
 }
 
@@ -139,9 +173,9 @@ function selectProxyUrl(baseUrl, env) {
   );
 }
 
-function buildAdminHeaders(adminToken) {
+function buildCookieHeaders(adminCookie) {
   return {
-    authorization: `Bearer ${adminToken}`,
+    cookie: adminCookie,
     "content-type": "application/json",
   };
 }
@@ -155,6 +189,7 @@ async function requestWithFetch(request) {
   const response = await fetch(`${request.baseUrl}${request.path}`, {
     method: request.method,
     headers: request.headers,
+    body: request.body,
   });
   const text = await response.text();
 
@@ -162,6 +197,7 @@ async function requestWithFetch(request) {
     status: response.status,
     text,
     json: parseJson(text),
+    headers: Object.fromEntries(response.headers.entries()),
   };
 }
 
@@ -177,11 +213,13 @@ async function requestWithCurl(request) {
     curlConfigLine("max-time", "30"),
     curlConfigLine("proxy", request.proxyUrl),
     curlConfigLine("request", request.method),
+    curlConfigLine("include", ""),
   ];
 
   for (const [name, value] of Object.entries(request.headers)) {
     config.push(curlConfigLine("header", `${name}: ${value}`));
   }
+  if (request.body) config.push(curlConfigLine("data", request.body));
 
   config.push(
     curlConfigLine("write-out", "\n__HTTP_STATUS__:%{http_code}"),
@@ -198,16 +236,18 @@ async function requestWithCurl(request) {
 }
 
 function parseCurlResponse(request, stdout) {
-  const [text, statusText] = stdout.split("\n__HTTP_STATUS__:");
+  const [rawText, statusText] = stdout.split("\n__HTTP_STATUS__:");
   const status = Number.parseInt(statusText, 10);
   if (!Number.isInteger(status)) {
     throw new Error(`smoke_response_status_missing:${request.path}`);
   }
+  const { headers, body } = splitCurlHeaders(rawText);
 
   return {
     status,
-    text,
-    json: parseJson(text),
+    text: body,
+    json: parseJson(body),
+    headers,
   };
 }
 
@@ -251,6 +291,26 @@ function expectStatus(response, expectedStatus) {
   if (response.status !== expectedStatus) {
     throw new Error(`smoke_status_failed:${expectedStatus}:${response.status}`);
   }
+}
+
+function readSetCookie(response) {
+  const setCookie =
+    response.headers?.["set-cookie"] ?? response.headers?.["Set-Cookie"];
+  if (!setCookie) return "";
+  return String(setCookie).split(";")[0];
+}
+
+function splitCurlHeaders(rawText) {
+  const chunks = rawText.split(/\r?\n\r?\n/).filter(Boolean);
+  const body = chunks.pop() ?? "";
+  const headerText = chunks.at(-1) ?? "";
+  const headers = {};
+  for (const line of headerText.split(/\r?\n/)) {
+    const index = line.indexOf(":");
+    if (index <= 0) continue;
+    headers[line.slice(0, index).toLowerCase()] = line.slice(index + 1).trim();
+  }
+  return { headers, body };
 }
 
 function parseJson(text) {

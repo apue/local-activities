@@ -1,7 +1,12 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import {
+  adminApiRequest,
+  loadAdminState,
+  loginAdmin,
+} from "../../src/client/admin-portal-api";
 import {
   formatDateTime,
   formatLlmCostCny,
@@ -109,7 +114,7 @@ export function AdminPortal() {
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [reviewFilter, setReviewFilter] = useState("");
   const [status, setStatus] = useState<ApiState>("idle");
-  const [message, setMessage] = useState("Enter admin token to load data.");
+  const [message, setMessage] = useState("Loading admin state...");
 
   const selectedDraft = useMemo(
     () => drafts.find((draft) => draft.id === selectedDraftId) ?? drafts[0],
@@ -119,60 +124,45 @@ export function AdminPortal() {
     ? getDraftBlockingReasons(selectedDraft)
     : [];
 
-  async function api<T>(path: string, init: RequestInit = {}) {
-    const response = await fetch(path, {
-      ...init,
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-        ...init.headers,
-      },
-    });
-    const bodyText = await response.text();
-    let body = { error: `request_failed_${response.status}` } as T & {
-      error?: string;
-    };
-    try {
-      if (bodyText) body = JSON.parse(bodyText) as T & { error?: string };
-    } catch {
-      // Keep the HTTP status visible when an upstream error is not JSON.
-    }
-    if (!response.ok) {
-      throw new Error(body.error ?? "request_failed");
-    }
-    return body;
-  }
-
   async function refresh() {
-    if (!token.trim()) {
-      setMessage("Admin token is required.");
-      return;
-    }
-
+    const enteredToken = token.trim();
     setStatus("loading");
     setMessage("Loading admin state...");
     try {
-      const query = reviewFilter ? `?reviewState=${reviewFilter}` : "";
-      const [jobsResponse, draftsResponse, usageResponse] = await Promise.all([
-        api<{ jobs: CollectorJob[] }>("/api/admin/collector-jobs"),
-        api<{ drafts: EventDraft[] }>(`/api/admin/event-drafts${query}`),
-        api<{ usage: LlmUsageSummary }>("/api/admin/llm-usage"),
-      ]);
-      setJobs(jobsResponse.jobs);
-      setDrafts(draftsResponse.drafts);
-      setUsage(usageResponse.usage);
+      if (enteredToken) {
+        await loginAdmin({ token: enteredToken });
+        setToken("");
+      }
+      const adminState = await loadAdminState({ reviewFilter });
+      const loadedJobs = adminState.jobs as CollectorJob[];
+      const loadedDrafts = adminState.drafts as EventDraft[];
+      const loadedUsage = adminState.usage as LlmUsageSummary;
+      setJobs(loadedJobs);
+      setDrafts(loadedDrafts);
+      setUsage(loadedUsage);
       setSelectedDraftId((current) =>
-        current && draftsResponse.drafts.some((draft) => draft.id === current)
+        current && loadedDrafts.some((draft) => draft.id === current)
           ? current
-          : (draftsResponse.drafts[0]?.id ?? null),
+          : (loadedDrafts[0]?.id ?? null),
       );
       setStatus("ready");
       setMessage("Admin state loaded.");
     } catch (error) {
       setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Load failed.");
+      const message = error instanceof Error ? error.message : "Load failed.";
+      setMessage(
+        message !== "invalid_admin_token"
+          ? message
+          : "Enter admin token to load data.",
+      );
     }
   }
+
+  useEffect(() => {
+    void refresh();
+    // Run once on mount to let an existing HttpOnly cookie restore the session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function createSeedJob(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -186,7 +176,7 @@ export function AdminPortal() {
     setStatus("loading");
     setMessage("Creating collector job...");
     try {
-      await api("/api/admin/collector-jobs", {
+      await adminApiRequest("/api/admin/collector-jobs", {
         method: "POST",
         body: JSON.stringify({ seedUrl: extractedSeedUrl }),
       });
@@ -205,7 +195,7 @@ export function AdminPortal() {
     setStatus("loading");
     setMessage(`${action}...`);
     try {
-      await api(`/api/admin/event-drafts/${selectedDraft.id}/${action}`, {
+      await adminApiRequest(`/api/admin/event-drafts/${selectedDraft.id}/${action}`, {
         method: "POST",
       });
       await refresh();
