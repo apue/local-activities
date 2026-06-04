@@ -17,15 +17,26 @@ describe("admin readonly smoke", () => {
       }
 
       if (
+        request.path === "/api/admin/login" &&
+        request.method === "POST" &&
+        request.body === JSON.stringify({ token: "admin-secret" })
+      ) {
+        return {
+          ...jsonResult(200, { ok: true }),
+          headers: { "set-cookie": "admin_session=admin-secret; HttpOnly" },
+        };
+      }
+
+      if (
         request.path === "/api/admin/collector-jobs" &&
-        request.headers.authorization === "Bearer admin-secret"
+        request.headers.cookie === "admin_session=admin-secret"
       ) {
         return jsonResult(200, { ok: true, jobs: [] });
       }
 
       if (
         request.path === "/api/admin/event-drafts" &&
-        request.headers.authorization === "Bearer admin-secret"
+        request.headers.cookie === "admin_session=admin-secret"
       ) {
         return jsonResult(200, { ok: true, drafts: [] });
       }
@@ -50,19 +61,28 @@ describe("admin readonly smoke", () => {
     });
 
     expect(calls.map((call) => call.path)).toEqual([
+      "/api/admin/login",
       "/",
       "/admin",
       "/api/admin/collector-jobs",
       "/api/admin/event-drafts",
       "/api/admin/collector-jobs",
     ]);
-    expect(calls.every((call) => call.method === "GET")).toBe(true);
+    expect(calls.map((call) => call.method)).toEqual([
+      "POST",
+      "GET",
+      "GET",
+      "GET",
+      "GET",
+      "GET",
+    ]);
     expect(calls.every((call) => call.proxyUrl === "http://127.0.0.1:7897"))
       .toBe(true);
     expect(result).toEqual({
       kind: "passed",
       baseUrl: "https://local-activities.example",
       checked: [
+        "admin_login",
         "public_home",
         "admin_page",
         "admin_jobs_json",
@@ -76,30 +96,50 @@ describe("admin readonly smoke", () => {
   it("builds the expected read-only request plan", () => {
     expect(
       buildAdminReadonlySmokeRequests({
-        adminToken: "admin-secret",
+        adminCookie: "admin_session=admin-secret",
         invalidToken: "wrong",
       }).map((request) => ({
         name: request.name,
         path: request.path,
         authorization: request.headers.authorization,
+        cookie: request.headers.cookie,
       })),
     ).toEqual([
-      { name: "public_home", path: "/", authorization: undefined },
-      { name: "admin_page", path: "/admin", authorization: undefined },
+      {
+        name: "public_home",
+        path: "/",
+        authorization: undefined,
+        cookie: undefined,
+      },
+      {
+        name: "admin_page",
+        path: "/admin",
+        authorization: undefined,
+        cookie: undefined,
+      },
+      {
+        name: "admin_login",
+        path: "/api/admin/login",
+        authorization: undefined,
+        cookie: undefined,
+      },
       {
         name: "admin_jobs_json",
         path: "/api/admin/collector-jobs",
-        authorization: "Bearer admin-secret",
+        authorization: undefined,
+        cookie: "admin_session=admin-secret",
       },
       {
         name: "admin_drafts_json",
         path: "/api/admin/event-drafts",
-        authorization: "Bearer admin-secret",
+        authorization: undefined,
+        cookie: "admin_session=admin-secret",
       },
       {
         name: "admin_invalid_token_json",
         path: "/api/admin/collector-jobs",
         authorization: "Bearer wrong",
+        cookie: undefined,
       },
     ]);
   });
@@ -120,9 +160,9 @@ describe("admin readonly smoke", () => {
 });
 
 function jsonResult(status, json) {
-  return { status, json, text: JSON.stringify(json) };
+  return { status, json, text: JSON.stringify(json), headers: {} };
 }
 
 function textResult(status, text) {
-  return { status, json: undefined, text };
+  return { status, json: undefined, text, headers: {} };
 }

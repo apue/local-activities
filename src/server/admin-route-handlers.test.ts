@@ -240,6 +240,35 @@ describe("admin route handlers", () => {
     expect(response.headers.get("set-cookie")).toContain("HttpOnly");
   });
 
+  it("does not set an admin session cookie after invalid token login", async () => {
+    const response = await handleAdminLogin(
+      new Request("https://example.com/api/admin/login", {
+        method: "POST",
+        body: JSON.stringify({ token: "wrong-secret" }),
+      }),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("lists admin state with a valid session cookie and no bearer header", async () => {
+    const response = await handleAdminListCollectorJobs(
+      new Request("https://example.com/api/admin/collector-jobs", {
+        headers: { cookie: "admin_session=admin-secret" },
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      jobs: [],
+    });
+  });
+
   it("creates queued collector jobs for valid seed URLs", async () => {
     const startedJobs: CollectorJobRecord[] = [];
     const response = await handleAdminCreateCollectorJob(
