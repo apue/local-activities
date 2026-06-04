@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   AdminEventDraftRecord,
   AdminExcludedArticleRecord,
+  AdminLlmUsageSummary,
   AdminStore,
 } from "./admin-service";
 import {
@@ -12,6 +13,7 @@ import {
   handleAdminListExcludedArticles,
   handleAdminListCollectorJobs,
   handleAdminListEventDrafts,
+  handleAdminListLlmUsage,
   handleAdminPromoteExcludedArticle,
   handleAdminPatchEventDraft,
 } from "./admin-route-handlers";
@@ -51,6 +53,44 @@ class RouteAdminStore implements AdminStore {
     provider: "recorded",
     model: "fixture-model",
     processingState: "excluded",
+  };
+  llmUsageSummary: AdminLlmUsageSummary = {
+    totals: {
+      requestCount: 1,
+      successCount: 1,
+      errorCount: 0,
+      inputTokens: 900,
+      outputTokens: 250,
+      totalTokens: 1150,
+      costMicroCny: 2100,
+    },
+    byModel: [
+      {
+        provider: "openai",
+        model: "gpt-5-mini",
+        operation: "event_extraction",
+        requestCount: 1,
+        totalTokens: 1150,
+        costMicroCny: 2100,
+      },
+    ],
+    recent: [
+      {
+        id: "usage-1",
+        recordedAt: "2026-06-04T02:00:00.000Z",
+        operation: "event_extraction",
+        provider: "openai",
+        model: "gpt-5-mini",
+        status: "succeeded",
+        inputTokens: 900,
+        outputTokens: 250,
+        totalTokens: 1150,
+        cachedInputTokens: 0,
+        reasoningOutputTokens: 0,
+        costMicroCny: 2100,
+        metadata: {},
+      },
+    ],
   };
 
   async createCollectorJob(input: {
@@ -99,6 +139,10 @@ class RouteAdminStore implements AdminStore {
     return this.excludedArticle;
   }
 
+  async getLlmUsageSummary(): Promise<AdminLlmUsageSummary> {
+    return this.llmUsageSummary;
+  }
+
   async getEventDraft(draftId: string) {
     return draftId === this.draft.id ? this.draft : null;
   }
@@ -142,6 +186,10 @@ class FailingListAdminStore extends RouteAdminStore {
 
   async listExcludedArticles(): Promise<AdminExcludedArticleRecord[]> {
     throw new Error("admin_excluded_article_list_failed");
+  }
+
+  async getLlmUsageSummary(): Promise<AdminLlmUsageSummary> {
+    throw new Error("admin_llm_usage_list_failed");
   }
 }
 
@@ -330,6 +378,35 @@ describe("admin route handlers", () => {
           processingState: "excluded",
         }),
       ],
+    });
+  });
+
+  it("lists the admin LLM usage summary without prompt or response payloads", async () => {
+    const response = await handleAdminListLlmUsage(
+      new Request("https://example.com/api/admin/llm-usage", {
+        headers: { authorization: "Bearer admin-secret" },
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      usage: {
+        totals: {
+          requestCount: 1,
+          totalTokens: 1150,
+          costMicroCny: 2100,
+        },
+        byModel: [
+          {
+            provider: "openai",
+            model: "gpt-5-mini",
+            operation: "event_extraction",
+          },
+        ],
+      },
     });
   });
 

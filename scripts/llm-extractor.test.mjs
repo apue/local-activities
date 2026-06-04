@@ -145,6 +145,65 @@ describe("lightweight LLM extractor", () => {
     expect(JSON.stringify(calls)).not.toContain("openai-secret");
   });
 
+  it("uploads provider usage records without raw prompt or response payloads", async () => {
+    const uploads = [];
+    const result = await runLlmExtractionOnce({
+      env: {
+        ...validEnv(),
+        COLLECTOR_BASE_URL: "https://app.example.com",
+        COLLECTOR_API_KEY: "collector-secret",
+      },
+      articleSnapshot: textArticle(),
+      fetchImpl: async (url, init) => {
+        if (url === "https://api.openai.com/v1/responses") {
+          return jsonResponse(
+            openaiResponse(activityResponse(), {
+              input_tokens: 900,
+              output_tokens: 250,
+              total_tokens: 1150,
+              input_tokens_details: {
+                cached_tokens: 120,
+              },
+              output_tokens_details: {
+                reasoning_tokens: 40,
+              },
+            }),
+          );
+        }
+        uploads.push({
+          url,
+          body: JSON.parse(init.body),
+        });
+        return jsonResponse({ ok: true, id: `upload-${uploads.length}` });
+      },
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "extract-usage",
+      upload: true,
+    });
+
+    expect(result.uploadedLlmUsageIds).toEqual(["upload-3"]);
+    const usageUpload = uploads.find((entry) =>
+      entry.url.endsWith("/api/collector/llm-usage"),
+    );
+    expect(usageUpload?.body.payload).toMatchObject({
+      operation: "event_extraction",
+      provider: "openai",
+      model: "gpt-5-mini",
+      status: "succeeded",
+      inputTokens: 900,
+      outputTokens: 250,
+      totalTokens: 1150,
+      cachedInputTokens: 120,
+      reasoningOutputTokens: 40,
+      costMicroCny: 0,
+      sourceRunId: "extract-usage",
+    });
+    expect(usageUpload?.body.payload.usageId).toMatch(/^usage-/);
+    expect(JSON.stringify(usageUpload)).not.toContain("openai-secret");
+    expect(JSON.stringify(usageUpload)).not.toContain("collector-secret");
+    expect(JSON.stringify(usageUpload)).not.toContain("Weekend concert");
+  });
+
   it("normalizes string classifications from loose chat providers", async () => {
     const result = await runLlmExtractionOnce({
       env: {
@@ -579,7 +638,7 @@ function activityResponse() {
   };
 }
 
-function openaiResponse(data) {
+function openaiResponse(data, usage) {
   return {
     output: [
       {
@@ -591,10 +650,11 @@ function openaiResponse(data) {
         ],
       },
     ],
+    usage,
   };
 }
 
-function chatCompletionResponse(data) {
+function chatCompletionResponse(data, usage) {
   return {
     choices: [
       {
@@ -603,6 +663,7 @@ function chatCompletionResponse(data) {
         },
       },
     ],
+    usage,
   };
 }
 

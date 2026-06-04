@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   getDraftBlockingReasons,
+  formatLlmCostCny,
+  formatTokenCount,
   getReviewStateLabel,
   isDraftPublishableForDisplay,
 } from "./admin-portal-utils";
@@ -50,5 +52,11 @@ describe("admin portal utils", () => {
   it("formats known review states for compact UI labels", () => {
     expect(getReviewStateLabel("needs_info")).toBe("Needs info");
     expect(getReviewStateLabel("ready_for_review")).toBe("Ready");
+  });
+
+  it("formats LLM usage counts and micro-CNY costs for admin display", () => {
+    expect(formatTokenCount(1650)).toBe("1,650");
+    expect(formatLlmCostCny(2100)).toBe("¥0.0021");
+    expect(formatLlmCostCny(0)).toBe("¥0.0000");
   });
 });

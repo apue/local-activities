@@ -130,6 +130,57 @@ export const resolutionDecisionSchema = z.enum([
   "insufficient_info",
 ]);
 
+export const llmUsageOperationSchema = z.enum([
+  "event_extraction",
+  "event_resolution",
+  "vision_eval",
+  "editor_agent",
+  "other",
+]);
+
+export const llmUsageStatusSchema = z.enum(["succeeded", "failed"]);
+
+const llmUsageMetadataSchema = z
+  .record(
+    z.string().min(1),
+    z.union([z.string(), z.number(), z.boolean(), z.null()]),
+  )
+  .superRefine((metadata, context) => {
+    for (const key of Object.keys(metadata)) {
+      if (isSensitiveLlmUsageMetadataKey(key)) {
+        context.addIssue({
+          code: "custom",
+          message: "metadata key is not safe for the usage ledger",
+          path: [key],
+        });
+      }
+    }
+  });
+
+export const llmUsageEventSchema = z
+  .object({
+    usageId: z.string().min(1).optional(),
+    recordedAt: z.string().datetime({ offset: true }).optional(),
+    operation: llmUsageOperationSchema,
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    status: llmUsageStatusSchema,
+    inputTokens: z.number().int().nonnegative().optional(),
+    outputTokens: z.number().int().nonnegative().optional(),
+    totalTokens: z.number().int().nonnegative().optional(),
+    cachedInputTokens: z.number().int().nonnegative().optional(),
+    reasoningOutputTokens: z.number().int().nonnegative().optional(),
+    costMicroCny: z.number().int().nonnegative().optional(),
+    latencyMs: z.number().int().nonnegative().optional(),
+    sourceRunId: z.string().min(1).optional(),
+    collectorJobId: z.string().min(1).optional(),
+    articleSnapshotId: z.string().min(1).optional(),
+    eventDraftId: z.string().min(1).optional(),
+    excludedArticleId: z.string().min(1).optional(),
+    metadata: llmUsageMetadataSchema.optional(),
+  })
+  .strict();
+
 export const publishBlockerSchema = z
   .object({
     code: z.string().min(1),
@@ -301,3 +352,20 @@ export type EvidenceAsset = z.infer<typeof evidenceAssetSchema>;
 export type EventDraftUpload = z.infer<typeof eventDraftUploadSchema>;
 export type ExcludedArticleUpload = z.infer<typeof excludedArticleUploadSchema>;
 export type CollectorFailure = z.infer<typeof collectorFailureSchema>;
+export type LlmUsageEventUpload = z.infer<typeof llmUsageEventSchema>;
+
+function isSensitiveLlmUsageMetadataKey(key: string) {
+  const normalized = key.toLowerCase();
+  return [
+    "prompt",
+    "response",
+    "html",
+    "image",
+    "api_key",
+    "apikey",
+    "header",
+    "cookie",
+    "token",
+    "secret",
+  ].some((fragment) => normalized.includes(fragment));
+}

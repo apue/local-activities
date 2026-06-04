@@ -8,6 +8,7 @@ import {
   listAdminCollectorJobs,
   listAdminExcludedArticles,
   listAdminEventDrafts,
+  listAdminLlmUsageSummary,
   markAdminEventDraftNeedsInfo,
   patchAdminEventDraft,
   promoteAdminExcludedArticle,
@@ -218,6 +219,25 @@ export async function handleAdminListExcludedArticles(
     return Response.json({
       ok: true,
       excludedArticles,
+    });
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminListLlmUsage(
+  request: Request,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  try {
+    const usage = await listAdminLlmUsageSummary(store);
+    return Response.json({
+      ok: true,
+      usage,
     });
   } catch (error) {
     return serviceErrorResponse(error);

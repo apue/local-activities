@@ -7,6 +7,7 @@ import {
   excludedArticleUploadSchema,
   failureReasonSchema,
   eventDraftUploadSchema,
+  llmUsageEventSchema,
   sourceCandidateSchema,
 } from "./collector";
 
@@ -204,5 +205,45 @@ describe("collector contracts", () => {
 
     expect(result.payload.triageDecision).toBe("official_visit");
     expect(result.payload.triageAction).toBe("exclude");
+  });
+
+  it("accepts normalized LLM usage uploads with missing provider usage fields", () => {
+    const result = collectorEnvelopeSchema(llmUsageEventSchema).parse({
+      collectorId: "home-collector",
+      runId: "run-usage",
+      observedAt: "2026-06-04T08:00:00.000Z",
+      payloadVersion: "2026-05-collector-v1",
+      payload: {
+        operation: "event_extraction",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        status: "succeeded",
+        latencyMs: 1842,
+        metadata: {
+          schemaVersion: "event-extraction-schema-v1",
+          apiStyle: "chat_completions",
+        },
+      },
+    });
+
+    expect(result.payload.operation).toBe("event_extraction");
+    expect(result.payload.inputTokens).toBeUndefined();
+    expect(result.payload.metadata?.schemaVersion).toBe(
+      "event-extraction-schema-v1",
+    );
+  });
+
+  it("rejects sensitive LLM usage metadata keys", () => {
+    expect(() =>
+      llmUsageEventSchema.parse({
+        operation: "event_extraction",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        status: "failed",
+        metadata: {
+          promptText: "do not store this",
+        },
+      }),
+    ).toThrow();
   });
 });

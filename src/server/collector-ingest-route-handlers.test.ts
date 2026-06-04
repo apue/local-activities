@@ -5,12 +5,15 @@ import {
   handleArticleSnapshotIngest,
   handleEventDraftIngest,
   handleExcludedArticleIngest,
+  handleLlmUsageIngest,
   handleSourceCandidateIngest,
   handleSourceRunIngest,
 } from "./collector-ingest-route-handlers";
+import type { NormalizedLlmUsageEnvelope } from "./collector-ingest-service";
 
 class RouteIngestStore implements CollectorIngestStore {
   calls: string[] = [];
+  llmUsage?: NormalizedLlmUsageEnvelope;
 
   async upsertSourceCandidate() {
     this.calls.push("source");
@@ -45,6 +48,12 @@ class RouteIngestStore implements CollectorIngestStore {
   async upsertCollectorFailure() {
     this.calls.push("failure");
     return { id: "failure-1" };
+  }
+
+  async insertLlmUsage(input: NormalizedLlmUsageEnvelope) {
+    this.calls.push("llm-usage");
+    this.llmUsage = input;
+    return { id: input.payload.usageId };
   }
 }
 
@@ -388,5 +397,64 @@ describe("collector ingest route handlers", () => {
       autoPublished: false,
     });
     expect(store.calls).toEqual(["event-draft"]);
+  });
+
+  it("accepts normalized LLM usage records with missing token counts", async () => {
+    const store = new RouteIngestStore();
+    const response = await handleLlmUsageIngest(
+      post({
+        ...envelopeBase,
+        observedAt: "2026-06-04T08:00:00.000Z",
+        payload: {
+          operation: "event_extraction",
+          provider: "dashscope",
+          model: "qwen3-vl-plus",
+          status: "succeeded",
+          latencyMs: 842,
+          metadata: {
+            schemaVersion: "event-extraction-schema-v1",
+          },
+        },
+      }),
+      store,
+      { COLLECTOR_API_KEY: "collector-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.ok).toBe(true);
+    expect(body.id).toMatch(/^usage-/);
+    expect(store.calls).toEqual(["llm-usage"]);
+    expect(store.llmUsage?.payload).toMatchObject({
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      sourceRunId: "run-001",
+    });
+  });
+
+  it("rejects LLM usage records with sensitive metadata keys", async () => {
+    const response = await handleLlmUsageIngest(
+      post({
+        ...envelopeBase,
+        payload: {
+          operation: "event_extraction",
+          provider: "dashscope",
+          model: "qwen3-vl-plus",
+          status: "failed",
+          metadata: {
+            responseBody: "raw provider content",
+          },
+        },
+      }),
+      new RouteIngestStore(),
+      { COLLECTOR_API_KEY: "collector-secret" },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: "invalid_request",
+    });
   });
 });

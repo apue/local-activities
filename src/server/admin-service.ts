@@ -145,6 +145,53 @@ export type AdminExcludedArticleRecord = {
   createdAt?: string;
 };
 
+export type AdminLlmUsageStatus = "succeeded" | "failed";
+
+export type AdminLlmUsageRecord = {
+  id: string;
+  recordedAt: string;
+  operation: string;
+  provider: string;
+  model: string;
+  status: AdminLlmUsageStatus;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
+  costMicroCny: number;
+  latencyMs?: number;
+  sourceRunId?: string;
+  collectorJobId?: string;
+  articleSnapshotId?: string;
+  eventDraftId?: string;
+  excludedArticleId?: string;
+  metadata: Record<string, unknown>;
+};
+
+export type AdminLlmUsageModelSummary = {
+  provider: string;
+  model: string;
+  operation: string;
+  requestCount: number;
+  totalTokens: number;
+  costMicroCny: number;
+};
+
+export type AdminLlmUsageSummary = {
+  totals: {
+    requestCount: number;
+    successCount: number;
+    errorCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    costMicroCny: number;
+  };
+  byModel: AdminLlmUsageModelSummary[];
+  recent: AdminLlmUsageRecord[];
+};
+
 export type AdminStore = {
   createCollectorJob(input: {
     seedUrl: string;
@@ -171,6 +218,7 @@ export type AdminStore = {
     excludedArticleId: string,
     promotedAt: string,
   ): Promise<AdminExcludedArticleRecord | null>;
+  getLlmUsageSummary(): Promise<AdminLlmUsageSummary>;
   publishEventDraft(input: {
     draft: AdminEventDraftRecord;
     publishedAt: string;
@@ -213,6 +261,10 @@ export function listAdminExcludedArticles(
   store: AdminStore,
 ) {
   return store.listExcludedArticles(input);
+}
+
+export function listAdminLlmUsageSummary(store: AdminStore) {
+  return store.getLlmUsageSummary();
 }
 
 export async function promoteAdminExcludedArticle(

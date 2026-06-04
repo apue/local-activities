@@ -165,6 +165,98 @@ describe("supabase admin store", () => {
     ]);
   });
 
+  it("maps safe LLM usage rows into admin totals and model groups", async () => {
+    const store = getSupabaseAdminStore(
+      supabaseClientReturningLlmUsage([
+        {
+          usage_id: "usage-1",
+          recorded_at: "2026-06-04T02:00:00.000Z",
+          operation: "event_extraction",
+          provider: "openai",
+          model: "gpt-5-mini",
+          status: "succeeded",
+          input_tokens: 900,
+          output_tokens: 250,
+          total_tokens: 1150,
+          cached_input_tokens: 120,
+          reasoning_output_tokens: 40,
+          cost_micro_cny: 2100,
+          latency_ms: 1800,
+          source_run_id: "run-1",
+          collector_job_id: "job-1",
+          article_snapshot_id: "snapshot-1",
+          event_draft_id: "draft-1",
+          excluded_article_id: null,
+          metadata: { schemaVersion: "event-extraction-v2-schema-v1" },
+        },
+        {
+          usage_id: "usage-2",
+          recorded_at: "2026-06-04T02:05:00.000Z",
+          operation: "event_resolution",
+          provider: "openai",
+          model: "gpt-5-mini",
+          status: "failed",
+          input_tokens: 500,
+          output_tokens: 0,
+          total_tokens: 500,
+          cached_input_tokens: 0,
+          reasoning_output_tokens: 0,
+          cost_micro_cny: 0,
+          latency_ms: 900,
+          source_run_id: "run-1",
+          collector_job_id: "job-1",
+          article_snapshot_id: null,
+          event_draft_id: "draft-1",
+          excluded_article_id: null,
+          metadata: { failureReason: "agent_request_failed" },
+        },
+      ]),
+    );
+
+    await expect(store.getLlmUsageSummary()).resolves.toEqual({
+      totals: {
+        requestCount: 2,
+        successCount: 1,
+        errorCount: 1,
+        inputTokens: 1400,
+        outputTokens: 250,
+        totalTokens: 1650,
+        costMicroCny: 2100,
+      },
+      byModel: [
+        {
+          provider: "openai",
+          model: "gpt-5-mini",
+          operation: "event_extraction",
+          requestCount: 1,
+          totalTokens: 1150,
+          costMicroCny: 2100,
+        },
+        {
+          provider: "openai",
+          model: "gpt-5-mini",
+          operation: "event_resolution",
+          requestCount: 1,
+          totalTokens: 500,
+          costMicroCny: 0,
+        },
+      ],
+      recent: [
+        expect.objectContaining({
+          id: "usage-1",
+          operation: "event_extraction",
+          totalTokens: 1150,
+          metadata: { schemaVersion: "event-extraction-v2-schema-v1" },
+        }),
+        expect.objectContaining({
+          id: "usage-2",
+          status: "failed",
+          metadata: { failureReason: "agent_request_failed" },
+        }),
+      ],
+    });
+  });
+
   it("publishes drafts without poster fields when poster columns are pending", async () => {
     const inserts: Array<{ table: string; payload: Record<string, unknown> }> =
       [];
@@ -339,6 +431,27 @@ function supabaseClientReturning(rows: unknown[]) {
   return {
     from(table: string) {
       expect(table).toBe("collector_jobs");
+      return query;
+    },
+  } as never;
+}
+
+function supabaseClientReturningLlmUsage(rows: unknown[]) {
+  const query = {
+    select() {
+      return query;
+    },
+    order() {
+      return query;
+    },
+    limit() {
+      return Promise.resolve({ data: rows, error: null });
+    },
+  };
+
+  return {
+    from(table: string) {
+      expect(table).toBe("llm_usage_ledger");
       return query;
     },
   } as never;

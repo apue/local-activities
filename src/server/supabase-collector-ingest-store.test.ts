@@ -203,6 +203,72 @@ describe("supabase collector ingest store", () => {
     expect(upserts.map((entry) => entry.table)).toContain("excluded_articles");
     expect(upserts.map((entry) => entry.table)).not.toContain("event_drafts");
   });
+
+  it("inserts normalized LLM usage ledger rows", async () => {
+    const inserts: Array<{ table: string; payload: Record<string, unknown> }> =
+      [];
+    const store = getSupabaseCollectorIngestStore(
+      supabaseClientForLlmUsage(inserts),
+    );
+
+    await expect(
+      store.insertLlmUsage!({
+        collectorId: "collector-1",
+        runId: "run-usage",
+        observedAt: "2026-06-04T08:00:00.000Z",
+        payloadVersion: "2026-05-collector-v1",
+        payload: {
+          usageId: "usage-1",
+          recordedAt: "2026-06-04T08:00:01.000Z",
+          operation: "event_extraction",
+          provider: "dashscope",
+          model: "qwen3-vl-plus",
+          status: "succeeded",
+          inputTokens: 900,
+          outputTokens: 250,
+          totalTokens: 1150,
+          cachedInputTokens: 120,
+          reasoningOutputTokens: 0,
+          costMicroCny: 2100,
+          latencyMs: 1800,
+          sourceRunId: "run-usage",
+          articleSnapshotId: "snapshot-1",
+          metadata: {
+            schemaVersion: "event-extraction-schema-v1",
+          },
+        },
+      }),
+    ).resolves.toEqual({ id: "usage-1" });
+
+    expect(inserts).toEqual([
+      {
+        table: "llm_usage_ledger",
+        payload: {
+          usage_id: "usage-1",
+          recorded_at: "2026-06-04T08:00:01.000Z",
+          operation: "event_extraction",
+          provider: "dashscope",
+          model: "qwen3-vl-plus",
+          status: "succeeded",
+          input_tokens: 900,
+          output_tokens: 250,
+          total_tokens: 1150,
+          cached_input_tokens: 120,
+          reasoning_output_tokens: 0,
+          cost_micro_cny: 2100,
+          latency_ms: 1800,
+          source_run_id: "run-usage",
+          collector_job_id: null,
+          article_snapshot_id: "snapshot-1",
+          event_draft_id: null,
+          excluded_article_id: null,
+          metadata: {
+            schemaVersion: "event-extraction-schema-v1",
+          },
+        },
+      },
+    ]);
+  });
 });
 
 function eventDraftPayload(): EventDraftUpload {
@@ -319,6 +385,31 @@ function supabaseClientMissingPosterColumns(
               ? { event_id: "event-1" }
               : { id: 1 };
           return Promise.resolve({ data, error: null });
+        },
+      };
+      return query;
+    },
+  } as never;
+}
+
+function supabaseClientForLlmUsage(
+  inserts: Array<{ table: string; payload: Record<string, unknown> }>,
+) {
+  return {
+    from(table: string) {
+      const query = {
+        insert(payload: Record<string, unknown>) {
+          inserts.push({ table, payload });
+          return query;
+        },
+        select() {
+          return query;
+        },
+        single() {
+          return Promise.resolve({
+            data: { usage_id: inserts.at(-1)?.payload.usage_id },
+            error: null,
+          });
         },
       };
       return query;

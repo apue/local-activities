@@ -4,6 +4,8 @@ import { FormEvent, useMemo, useState } from "react";
 
 import {
   formatDateTime,
+  formatLlmCostCny,
+  formatTokenCount,
   getDraftBlockingReasons,
   getReviewStateLabel,
   isDraftPublishableForDisplay,
@@ -50,11 +52,60 @@ type EventDraft = {
 
 type ApiState = "idle" | "loading" | "ready" | "error";
 
+type LlmUsageRecord = {
+  id: string;
+  recordedAt: string;
+  operation: string;
+  provider: string;
+  model: string;
+  status: "succeeded" | "failed";
+  totalTokens: number;
+  costMicroCny: number;
+  latencyMs?: number;
+  metadata: Record<string, unknown>;
+};
+
+type LlmUsageSummary = {
+  totals: {
+    requestCount: number;
+    successCount: number;
+    errorCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    costMicroCny: number;
+  };
+  byModel: Array<{
+    provider: string;
+    model: string;
+    operation: string;
+    requestCount: number;
+    totalTokens: number;
+    costMicroCny: number;
+  }>;
+  recent: LlmUsageRecord[];
+};
+
+const emptyUsageSummary: LlmUsageSummary = {
+  totals: {
+    requestCount: 0,
+    successCount: 0,
+    errorCount: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    costMicroCny: 0,
+  },
+  byModel: [],
+  recent: [],
+};
+
 export function AdminPortal() {
   const [token, setToken] = useState("");
   const [seedUrl, setSeedUrl] = useState("");
   const [jobs, setJobs] = useState<CollectorJob[]>([]);
   const [drafts, setDrafts] = useState<EventDraft[]>([]);
+  const [usage, setUsage] = useState<LlmUsageSummary>(emptyUsageSummary);
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [reviewFilter, setReviewFilter] = useState("");
   const [status, setStatus] = useState<ApiState>("idle");
@@ -102,12 +153,14 @@ export function AdminPortal() {
     setMessage("Loading admin state...");
     try {
       const query = reviewFilter ? `?reviewState=${reviewFilter}` : "";
-      const [jobsResponse, draftsResponse] = await Promise.all([
+      const [jobsResponse, draftsResponse, usageResponse] = await Promise.all([
         api<{ jobs: CollectorJob[] }>("/api/admin/collector-jobs"),
         api<{ drafts: EventDraft[] }>(`/api/admin/event-drafts${query}`),
+        api<{ usage: LlmUsageSummary }>("/api/admin/llm-usage"),
       ]);
       setJobs(jobsResponse.jobs);
       setDrafts(draftsResponse.drafts);
+      setUsage(usageResponse.usage);
       setSelectedDraftId((current) =>
         current && draftsResponse.drafts.some((draft) => draft.id === current)
           ? current
@@ -234,6 +287,10 @@ export function AdminPortal() {
             <div>
               <span>{jobs.length}</span>
               <small>jobs</small>
+            </div>
+            <div>
+              <span>{usage.totals.requestCount}</span>
+              <small>LLM calls</small>
             </div>
           </div>
         </header>
@@ -372,6 +429,66 @@ export function AdminPortal() {
               <div className={styles.empty}>Select a draft to review.</div>
             )}
           </section>
+        </section>
+
+        <section className={styles.panel}>
+          <div className={styles.panelHeader}>
+            <div>
+              <p className={styles.eyebrow}>LLM ledger</p>
+              <h2>Usage</h2>
+            </div>
+          </div>
+
+          <div className={styles.usageSummary}>
+            <div>
+              <small>Tokens</small>
+              <span>{formatTokenCount(usage.totals.totalTokens)}</span>
+            </div>
+            <div>
+              <small>Estimated cost</small>
+              <span>{formatLlmCostCny(usage.totals.costMicroCny)}</span>
+            </div>
+            <div>
+              <small>Failures</small>
+              <span>{usage.totals.errorCount}</span>
+            </div>
+          </div>
+
+          <div className={styles.usageList}>
+            {usage.byModel.map((model) => (
+              <div
+                key={`${model.provider}:${model.model}:${model.operation}`}
+                className={styles.usageRow}
+              >
+                <strong>{model.model}</strong>
+                <span>{model.operation.replaceAll("_", " ")}</span>
+                <small>
+                  {model.provider} · {model.requestCount} calls ·{" "}
+                  {formatTokenCount(model.totalTokens)} tokens ·{" "}
+                  {formatLlmCostCny(model.costMicroCny)}
+                </small>
+              </div>
+            ))}
+            {usage.byModel.length === 0 ? (
+              <div className={styles.empty}>No LLM usage loaded.</div>
+            ) : null}
+          </div>
+
+          <div className={styles.usageFailures}>
+            {usage.recent
+              .filter((record) => record.status === "failed")
+              .slice(0, 5)
+              .map((record) => (
+                <div key={record.id} className={styles.usageRow}>
+                  <strong>{record.model}</strong>
+                  <span>{formatDateTime(record.recordedAt)}</span>
+                  <small>
+                    {record.operation.replaceAll("_", " ")}
+                    {record.latencyMs ? ` · ${record.latencyMs}ms` : ""}
+                  </small>
+                </div>
+              ))}
+          </div>
         </section>
 
         <section className={styles.panel}>
