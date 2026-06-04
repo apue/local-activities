@@ -93,6 +93,15 @@ describe("env inventory", () => {
     expect(result.optional).toContain("AMAP_WEB_SERVICE_API_KEY");
   });
 
+  it("does not advertise VISION_TRIAGE_MODEL as active MVP configuration", () => {
+    for (const targetName of targetNames) {
+      const result = evaluateTarget(targetName, {});
+
+      expect(result.required).not.toContain("VISION_TRIAGE_MODEL");
+      expect(result.optional).not.toContain("VISION_TRIAGE_MODEL");
+    }
+  });
+
   it("formats reports with variable names but without secret values", () => {
     const result = evaluateTarget("local-app", {
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",

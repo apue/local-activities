@@ -263,7 +263,6 @@ Environment:
 - `AGENT_PROVIDER`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
-- `VISION_TRIAGE_MODEL`
 - `VISION_EXTRACTION_MODEL`
 - `VISION_ESCALATION_MODEL`
 - `COLLECTOR_BROWSER_RUNNER` (`agent_browser` by default; `playwright` for comparison runs)
@@ -339,7 +338,6 @@ Environment:
 - `AGENT_PROVIDER`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` (legacy/current provider model; `VISION_EXTRACTION_MODEL` takes precedence when set)
-- `VISION_TRIAGE_MODEL`
 - `VISION_EXTRACTION_MODEL`
 - `VISION_ESCALATION_MODEL`
 - `OPENAI_BASE_URL`
@@ -357,23 +355,25 @@ Persist prompt version, model name, and extraction confidence with outputs for r
 
 Vision model policy:
 
-- Default first-pass triage model: `Qwen/Qwen3-VL-8B-Instruct`
 - Default extraction model: `Qwen/Qwen3-VL-8B-Instruct`
-- Default escalation model: `Qwen/Qwen3-VL-30B-A3B-Instruct`
+- Optional escalation model: `Qwen/Qwen3-VL-30B-A3B-Instruct`
 
 `VISION_EXTRACTION_MODEL` is preferred over `OPENAI_MODEL` for the extractor.
 `OPENAI_MODEL` remains supported as the generic provider model for older local
 env files and Vercel settings. For OpenAI-compatible providers such as
-SiliconFlow, set `OPENAI_BASE_URL` to that provider's `/v1` endpoint and use
-`OPENAI_API_STYLE=chat_completions` when the provider does not expose the
-OpenAI Responses API.
+Alibaba Cloud Bailian or SiliconFlow, set `OPENAI_BASE_URL` to the provider's
+OpenAI-compatible `/v1` endpoint and use `OPENAI_API_STYLE=chat_completions`
+when the provider does not expose the OpenAI Responses API. Bailian's Beijing
+endpoint is `https://dashscope.aliyuncs.com/compatible-mode/v1`; SiliconFlow's
+China endpoint is `https://api.siliconflow.cn/v1`.
 
-Escalate from the first-pass model to `VISION_ESCALATION_MODEL` when the
-first-pass result is low confidence, public eligibility is ambiguous, the page
-contains multiple events, the schedule is long-running or recurring, QR evidence
-exists but registration fields are incomplete, or required event fields are
-missing. The backend still owns validation, dedupe, review state, and final
-publication.
+The active MVP path is a single extraction call that also judges public
+eligibility. Escalate from `VISION_EXTRACTION_MODEL` to
+`VISION_ESCALATION_MODEL` only when the first-pass result is low confidence,
+public eligibility is ambiguous, the page contains multiple events, the
+schedule is long-running or recurring, QR evidence exists but registration
+fields are incomplete, or required event fields are missing. The backend still
+owns validation, dedupe, review state, and final publication.
 
 ## Local Development Environment
 

@@ -1,9 +1,9 @@
-export const defaultVisionTriageModel = "Qwen/Qwen3-VL-8B-Instruct";
-export const defaultVisionExtractionModel = defaultVisionTriageModel;
+export const defaultVisionExtractionModel = "Qwen/Qwen3-VL-8B-Instruct";
 export const defaultVisionEscalationModel = "Qwen/Qwen3-VL-30B-A3B-Instruct";
 
 export const escalationTriggerDescriptions = {
-  low_confidence: "First-pass confidence is below the escalation threshold.",
+  low_confidence:
+    "First-pass extraction confidence is below the escalation threshold.",
   ambiguous_public_eligibility:
     "The article may not be a public attendee-facing event.",
   multi_event_complexity: "The article appears to contain multiple events.",
@@ -19,7 +19,6 @@ const requiredEventFields = new Set(["title", "startsAt", "venueName"]);
 const complexScheduleKinds = new Set(["multi_day", "long_running", "recurring"]);
 
 export function readVisionModelPolicy(env = {}) {
-  const triageModel = clean(env.VISION_TRIAGE_MODEL) ?? defaultVisionTriageModel;
   const extractionModel =
     clean(env.VISION_EXTRACTION_MODEL) ??
     clean(env.OPENAI_MODEL) ??
@@ -28,7 +27,6 @@ export function readVisionModelPolicy(env = {}) {
     clean(env.VISION_ESCALATION_MODEL) ?? defaultVisionEscalationModel;
 
   return {
-    triageModel,
     extractionModel,
     escalationModel,
     legacyExtractionModel: !clean(env.VISION_EXTRACTION_MODEL)

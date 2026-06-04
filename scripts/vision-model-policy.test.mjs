@@ -4,14 +4,12 @@ import {
   classifyVisionEscalation,
   defaultVisionEscalationModel,
   defaultVisionExtractionModel,
-  defaultVisionTriageModel,
   readVisionModelPolicy,
 } from "./vision-model-policy.mjs";
 
 describe("vision model policy", () => {
-  it("defaults to Qwen 8B first-pass and Qwen 30B escalation", () => {
+  it("defaults to Qwen 8B extraction and Qwen 30B optional escalation", () => {
     expect(readVisionModelPolicy({})).toEqual({
-      triageModel: defaultVisionTriageModel,
       extractionModel: defaultVisionExtractionModel,
       escalationModel: defaultVisionEscalationModel,
       legacyExtractionModel: undefined,
@@ -22,21 +20,26 @@ describe("vision model policy", () => {
     expect(
       readVisionModelPolicy({
         OPENAI_MODEL: "legacy-model",
-        VISION_TRIAGE_MODEL: "triage-model",
         VISION_EXTRACTION_MODEL: "extraction-model",
         VISION_ESCALATION_MODEL: "escalation-model",
       }),
     ).toEqual({
-      triageModel: "triage-model",
       extractionModel: "extraction-model",
       escalationModel: "escalation-model",
       legacyExtractionModel: undefined,
     });
   });
 
+  it("does not treat VISION_TRIAGE_MODEL as active MVP configuration", () => {
+    expect(
+      readVisionModelPolicy({
+        VISION_TRIAGE_MODEL: "legacy-triage-model",
+      }),
+    ).not.toHaveProperty("triageModel");
+  });
+
   it("keeps legacy OPENAI_MODEL as extraction fallback", () => {
     expect(readVisionModelPolicy({ OPENAI_MODEL: "legacy-model" })).toMatchObject({
-      triageModel: defaultVisionTriageModel,
       extractionModel: "legacy-model",
       escalationModel: defaultVisionEscalationModel,
       legacyExtractionModel: "legacy-model",

@@ -86,7 +86,7 @@ responses. They must not call live LLM providers.
 Default tests validate how the system consumes LLM output, not whether a live
 model repeats the same answer.
 
-- Store recorded triage, extraction, and resolution responses in fixtures.
+- Store recorded extraction and resolution responses in fixtures.
 - Validate provider responses against versioned schemas.
 - Normalize recorded responses into backend-owned contracts.
 - Test malformed responses with focused mocks.
@@ -97,9 +97,10 @@ Live LLM calls are allowed only in operator-run capture or smoke workflows.
 
 ### Vision Model Policy Tests
 
-The default policy is triage-first: use `Qwen/Qwen3-VL-8B-Instruct` for the
-first pass and reserve `Qwen/Qwen3-VL-30B-A3B-Instruct` for complex or uncertain
-cases. `scripts/vision-model-policy.mjs` owns this policy so config parsing and
+The default policy is one extraction pass that also judges public eligibility:
+use `Qwen/Qwen3-VL-8B-Instruct` for extraction and reserve
+`Qwen/Qwen3-VL-30B-A3B-Instruct` for complex or uncertain cases.
+`scripts/vision-model-policy.mjs` owns this policy so config parsing and
 escalation triggers can be tested without calling a live model.
 
 Run the focused policy tests with:
