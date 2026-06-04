@@ -4,11 +4,14 @@ import {
   buildVisionEvalRequest,
   buildVisionEvalArticleFromHtml,
   defaultVisionEvalModels,
+  evaluateVisionCaseResult,
   estimateVisionEvalCostCny,
   formatVisionEvalMarkdownReport,
+  normalizeVisionEvalCaseFile,
   parseModelJson,
   parseVisionEvalArgs,
   scoreVisionEvalOutput,
+  summarizeVisionCaseMetrics,
   selectArticleImages,
 } from "./siliconflow-vision-eval.mjs";
 
@@ -30,6 +33,8 @@ describe("parseVisionEvalArgs", () => {
       "4096",
       "--timeout-ms",
       "45000",
+      "--case-file",
+      "tests/eval/vision-cases.json",
       "--live",
     ]);
 
@@ -40,6 +45,7 @@ describe("parseVisionEvalArgs", () => {
     expect(args.detail).toBe("high");
     expect(args.maxOutputTokens).toBe(4096);
     expect(args.timeoutMs).toBe(45000);
+    expect(args.caseFile).toBe("tests/eval/vision-cases.json");
     expect(args.live).toBe(true);
     expect(args.models).toEqual(defaultVisionEvalModels.map((model) => model.id));
   });
@@ -91,6 +97,136 @@ describe("buildVisionEvalArticleFromHtml", () => {
   });
 });
 
+describe("vision eval cases", () => {
+  it("normalizes labeled case files", () => {
+    const cases = normalizeVisionEvalCaseFile({
+      cases: [
+        {
+          id: "negative-news",
+          source: {
+            type: "supabase_snapshot",
+            snapshotId: 87,
+          },
+          tags: ["negative"],
+          label: {
+            expectedAction: "exclude",
+            triageDecision: "non_public_news",
+            publicEligibility: "not_public",
+            expectedEventCount: 0,
+          },
+          rationale: "News, not an event.",
+        },
+      ],
+    });
+
+    expect(cases).toEqual([
+      {
+        id: "negative-news",
+        title: "",
+        source: {
+          type: "supabase_snapshot",
+          snapshotId: 87,
+          articleUrl: "",
+        },
+        tags: ["negative"],
+        label: {
+          expectedAction: "exclude",
+          triageDecision: "non_public_news",
+          publicEligibility: "not_public",
+          expectedEventCount: 0,
+          requiresReservation: false,
+          expectsQrEvidence: false,
+        },
+        rationale: "News, not an event.",
+      },
+    ]);
+  });
+
+  it("calculates action, false-positive, event-count, and QR metrics", () => {
+    const positiveCase = normalizeVisionEvalCaseFile([
+      {
+        id: "positive-qr",
+        source: {
+          type: "live_url",
+          url: "https://mp.weixin.qq.com/s/example",
+        },
+        label: {
+          expectedAction: "extract",
+          publicEligibility: "public",
+          expectedEventCount: 1,
+          requiresReservation: true,
+          expectsQrEvidence: true,
+        },
+      },
+    ])[0];
+    const negativeCase = normalizeVisionEvalCaseFile([
+      {
+        id: "negative-news",
+        source: {
+          type: "supabase_snapshot",
+          snapshotId: 35,
+        },
+        label: {
+          expectedAction: "exclude",
+          publicEligibility: "not_public",
+          expectedEventCount: 0,
+        },
+      },
+    ])[0];
+
+    const positiveResult = evaluateVisionCaseResult({
+      visionCase: positiveCase,
+      parsed: {
+        classification: {
+          kind: "activity",
+          publicEligibility: "public",
+        },
+        events: [
+          {
+            qrEvidence: "yes",
+            reservationStatus: "required",
+          },
+        ],
+      },
+    });
+    const falsePositive = evaluateVisionCaseResult({
+      visionCase: negativeCase,
+      parsed: {
+        classification: {
+          kind: "activity",
+          publicEligibility: "public",
+        },
+        events: [{}],
+      },
+    });
+
+    expect(positiveResult).toMatchObject({
+      predictedAction: "extract",
+      actionMatch: true,
+      eventCountMatch: true,
+      qrMatch: true,
+      reservationMatch: true,
+      falseNegative: false,
+      falsePositive: false,
+    });
+    expect(falsePositive).toMatchObject({
+      predictedAction: "extract",
+      actionMatch: false,
+      falsePositive: true,
+    });
+    expect(summarizeVisionCaseMetrics([positiveResult, falsePositive])).toEqual({
+      caseCount: 2,
+      actionAccuracy: 0.5,
+      falsePositiveCount: 1,
+      falseNegativeCount: 0,
+      publicEligibilityAccuracy: 0.5,
+      eventCountAccuracy: 0.5,
+      qrRecall: 1,
+      reservationRecall: 1,
+    });
+  });
+});
+
 describe("selectArticleImages", () => {
   it("ranks likely visual evidence before ordinary article images", () => {
     const selected = selectArticleImages(
@@ -124,6 +260,32 @@ describe("selectArticleImages", () => {
     );
 
     expect(selected.map((image) => image.role)).toEqual(["qr", "poster"]);
+  });
+
+  it("preserves evidence roles loaded from Supabase assets", () => {
+    const selected = selectArticleImages(
+      [
+        {
+          url: "https://example.com/follow-account.png",
+          role: "qr",
+          source: "supabase_evidence_asset",
+        },
+        {
+          url: "https://example.com/plain.jpg",
+          role: "article_image",
+          source: "supabase_evidence_asset",
+        },
+      ],
+      { maxImages: 1 },
+    );
+
+    expect(selected).toEqual([
+      {
+        url: "https://example.com/follow-account.png",
+        role: "qr",
+        source: "supabase_evidence_asset",
+      },
+    ]);
   });
 });
 
@@ -231,11 +393,24 @@ describe("formatVisionEvalMarkdownReport", () => {
           averageLatencyMs: 1200,
         },
       ],
+      labelMetrics: {
+        "Qwen/Qwen3-VL-8B-Instruct": {
+          caseCount: 2,
+          actionAccuracy: 0.5,
+          falsePositiveCount: 1,
+          falseNegativeCount: 0,
+          publicEligibilityAccuracy: 0.5,
+          eventCountAccuracy: 0.5,
+          qrRecall: 1,
+          reservationRecall: 1,
+        },
+      },
       recommendation: "Qwen/Qwen3-VL-8B-Instruct",
       cases: [],
     });
 
     expect(markdown).toContain("| Qwen/Qwen3-VL-8B-Instruct | 1 | 0 | 88.0 |");
     expect(markdown).toContain("Recommended model: `Qwen/Qwen3-VL-8B-Instruct`");
+    expect(markdown).toContain("| Qwen/Qwen3-VL-8B-Instruct | 2 | 50.0% | 1 | 0 |");
   });
 });
