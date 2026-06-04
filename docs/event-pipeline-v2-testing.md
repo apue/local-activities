@@ -112,6 +112,9 @@ The escalation triggers are low confidence, ambiguous public eligibility,
 multi-event pages, long-running or recurring schedules, QR registration evidence
 with incomplete registration details, and missing required event fields.
 
+For the persistent labeled eval set and bad-case workflow, see
+`docs/vision-eval-workflow.md`.
+
 ### Supabase Validation
 
 Hosted Supabase validation is read-only by default.
