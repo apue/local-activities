@@ -15,7 +15,7 @@ import {
   extractImageCandidatesFromHtml,
 } from "./wechat-image-evidence.mjs";
 
-const defaultBaseUrl = "https://api.siliconflow.cn/v1";
+const defaultSiliconFlowBaseUrl = "https://api.siliconflow.cn/v1";
 const defaultOutputDir = ".local/vision-eval";
 const defaultLookbackDays = 14;
 const defaultSampleSize = 3;
@@ -53,6 +53,30 @@ export const defaultVisionEvalModels = [
 
 export const premiumVisionEvalModels = [
   {
+    id: "qwen3-vl-flash",
+    inputCnyPerMillion: 0.15,
+    outputCnyPerMillion: 1.5,
+    tier: "low_cost",
+  },
+  {
+    id: "qwen3-vl-plus",
+    inputCnyPerMillion: 1,
+    outputCnyPerMillion: 10,
+    tier: "mid_cost",
+  },
+  {
+    id: "qwen-vl-plus",
+    inputCnyPerMillion: 0.8,
+    outputCnyPerMillion: 2,
+    tier: "low_cost",
+  },
+  {
+    id: "qwen-vl-max",
+    inputCnyPerMillion: 1.6,
+    outputCnyPerMillion: 4,
+    tier: "mid_cost",
+  },
+  {
     id: "Pro/moonshotai/Kimi-K2.5",
     inputCnyPerMillion: undefined,
     outputCnyPerMillion: undefined,
@@ -84,6 +108,7 @@ export function parseVisionEvalArgs(argv) {
     maxImageBytes: defaultMaxImageBytes,
     maxOutputTokens: defaultMaxOutputTokens,
     timeoutMs: defaultTimeoutMs,
+    providerName: undefined,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -153,6 +178,9 @@ export function parseVisionEvalArgs(argv) {
         min: 1_000,
         max: 300_000,
       });
+      index += 1;
+    } else if (arg === "--provider-name") {
+      args.providerName = readRequiredValue(argv, index, arg);
       index += 1;
     } else if (arg === "--list-models") {
       args.listModels = true;
@@ -496,9 +524,10 @@ export function scoreVisionEvalOutput({ parsed, images = [] }) {
 
 export function formatVisionEvalMarkdownReport(result) {
   const lines = [
-    "# SiliconFlow Vision Eval",
+    "# Vision Eval",
     "",
     `Generated at: ${result.generatedAt}`,
+    `Provider: \`${result.providerName ?? "SiliconFlow"}\``,
     `Sample size: ${result.sampleSize}`,
     `Max images per article: ${result.maxImages}`,
     `Image detail: ${result.detail}`,
@@ -594,7 +623,9 @@ export async function runVisionEval({
     throw new Error("live_eval_requires_--live");
   }
 
-  const siliconflow = readSiliconFlowConfig(env);
+  const provider = readVisionProviderConfig(env, {
+    providerName: args.providerName,
+  });
   const samples = args.caseFile
     ? await loadCaseFileSamples({
         env,
@@ -641,7 +672,7 @@ export async function runVisionEval({
           detail: args.detail,
           maxOutputTokens: args.maxOutputTokens,
           timeoutMs: args.timeoutMs,
-          siliconflow,
+          provider,
           fetchImpl,
           visionCase,
         }),
@@ -680,6 +711,8 @@ export async function runVisionEval({
     timeoutMs: args.timeoutMs,
     detail: args.detail,
     lookbackDays: args.lookbackDays,
+    providerName: provider.providerName,
+    providerSource: provider.source,
     models: args.models,
     totals,
     labelMetrics,
@@ -775,18 +808,42 @@ Visible article text:
 ${truncateText(article.contentText || article.summary || article.title || "", maxArticleTextChars)}`;
 }
 
-function readSiliconFlowConfig(env) {
-  const apiKey = env.SILICONFLOW_API_KEY?.trim();
-  const baseUrl = normalizeBaseUrl(env.SILICONFLOW_BASE_URL ?? defaultBaseUrl);
+export function readVisionProviderConfig(env, { providerName } = {}) {
+  const openaiApiKey = env.OPENAI_API_KEY?.trim();
+  const openaiBaseUrl = env.OPENAI_BASE_URL?.trim();
+  if (openaiApiKey || openaiBaseUrl) {
+    const missing = [];
+    if (!openaiApiKey) missing.push("OPENAI_API_KEY");
+    if (!openaiBaseUrl) missing.push("OPENAI_BASE_URL");
+    if (missing.length > 0) {
+      throw new Error(`missing_openai_compatible_config:${missing.join(",")}`);
+    }
+    const resolvedProviderName = providerName?.trim() || "OpenAI-compatible";
+    return {
+      apiKey: openaiApiKey,
+      baseUrl: normalizeBaseUrl(openaiBaseUrl),
+      providerName: resolvedProviderName,
+      errorPrefix: normalizeErrorPrefix(resolvedProviderName),
+      source: "openai_compatible",
+    };
+  }
+
+  const siliconFlowApiKey = env.SILICONFLOW_API_KEY?.trim();
+  const siliconFlowBaseUrl = env.SILICONFLOW_BASE_URL?.trim();
   const missing = [];
-  if (!apiKey) missing.push("SILICONFLOW_API_KEY");
-  if (!baseUrl) missing.push("SILICONFLOW_BASE_URL");
+  if (!siliconFlowApiKey) missing.push("SILICONFLOW_API_KEY");
   if (missing.length > 0) {
     throw new Error(`missing_siliconflow_config:${missing.join(",")}`);
   }
+  const resolvedProviderName = providerName?.trim() || "SiliconFlow";
   return {
-    apiKey,
-    baseUrl,
+    apiKey: siliconFlowApiKey,
+    baseUrl: normalizeBaseUrl(
+      siliconFlowBaseUrl || defaultSiliconFlowBaseUrl,
+    ),
+    providerName: resolvedProviderName,
+    errorPrefix: normalizeErrorPrefix(resolvedProviderName),
+    source: "siliconflow_legacy",
   };
 }
 
@@ -1009,7 +1066,7 @@ async function evaluateArticleWithModel({
   detail,
   maxOutputTokens,
   timeoutMs,
-  siliconflow,
+  provider,
   fetchImpl,
   visionCase,
 }) {
@@ -1023,9 +1080,9 @@ async function evaluateArticleWithModel({
   });
   const startedAt = Date.now();
   try {
-    const response = await callSiliconFlowChatCompletions({
+    const response = await callOpenAiCompatibleChatCompletions({
       request,
-      siliconflow,
+      provider,
       fetchImpl,
       timeoutMs,
     });
@@ -1078,17 +1135,17 @@ async function evaluateArticleWithModel({
   }
 }
 
-async function callSiliconFlowChatCompletions({
+export async function callOpenAiCompatibleChatCompletions({
   request,
-  siliconflow,
+  provider,
   fetchImpl,
   timeoutMs,
 }) {
-  const url = new URL("chat/completions", siliconflow.baseUrl);
+  const url = new URL("chat/completions", provider.baseUrl);
   const first = await postChatCompletion({
     url,
     request,
-    siliconflow,
+    provider,
     fetchImpl,
     timeoutMs,
   });
@@ -1103,15 +1160,19 @@ async function callSiliconFlowChatCompletions({
     const retry = await postChatCompletion({
       url,
       request: retryRequest,
-      siliconflow,
+      provider,
       fetchImpl,
       timeoutMs,
     });
     if (retry.ok) return retry.json;
-    throw new Error(`siliconflow_${retry.status}:${truncateText(retry.text, 500)}`);
+    throw new Error(
+      `${provider.errorPrefix}_${retry.status}:${truncateText(retry.text, 500)}`,
+    );
   }
   if (!first.ok) {
-    throw new Error(`siliconflow_${first.status}:${truncateText(first.text, 500)}`);
+    throw new Error(
+      `${provider.errorPrefix}_${first.status}:${truncateText(first.text, 500)}`,
+    );
   }
   return first.json;
 }
@@ -1119,7 +1180,7 @@ async function callSiliconFlowChatCompletions({
 async function postChatCompletion({
   url,
   request,
-  siliconflow,
+  provider,
   fetchImpl,
   timeoutMs,
 }) {
@@ -1130,7 +1191,7 @@ async function postChatCompletion({
     response = await fetchImpl(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${siliconflow.apiKey}`,
+        Authorization: `Bearer ${provider.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(request),
@@ -1138,7 +1199,7 @@ async function postChatCompletion({
     });
   } catch (error) {
     if (controller.signal.aborted) {
-      throw new Error(`siliconflow_timeout:${timeoutMs}`);
+      throw new Error(`${provider.errorPrefix}_timeout:${timeoutMs}`);
     }
     throw error;
   } finally {
@@ -1507,6 +1568,15 @@ function normalizeBaseUrl(value) {
   }
 }
 
+function normalizeErrorPrefix(value) {
+  const normalized = String(value ?? "")
+    .trim()
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
+  return normalized || "openai_compatible";
+}
+
 function formatDate(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -1542,9 +1612,13 @@ function formatInteger(value) {
 function printHelp() {
   console.log(`Usage: pnpm eval:vision -- --env-file .env.local --env-file .env.collector --live [options]
 
-Evaluates SiliconFlow vision models on recent WeChat2RSS article samples.
+Evaluates OpenAI-compatible vision models on recent WeChat2RSS article samples.
 Live API calls require --live so local tests and CI do not spend provider credit.
 Reports are written under .local/vision-eval/ by default.
+
+Provider config:
+  OPENAI_API_KEY + OPENAI_BASE_URL are preferred for generic OpenAI-compatible providers.
+  SILICONFLOW_API_KEY + optional SILICONFLOW_BASE_URL remain supported for legacy SiliconFlow runs.
 
 Default models:
 ${defaultVisionEvalModels.map((model) => `  - ${model.id}`).join("\n")}
@@ -1561,9 +1635,10 @@ Options:
   --max-image-bytes <n>    Skip any single fetched image above this size. Default ${defaultMaxImageBytes}.
   --max-output-tokens <n>  Max completion tokens per model call. Default ${defaultMaxOutputTokens}.
   --timeout-ms <n>         Per model call timeout. Default ${defaultTimeoutMs}.
+  --provider-name <name>   Provider label for reports and error prefixes.
   --out-dir <path>         Report output directory. Default ${defaultOutputDir}.
   --list-models            Print known model IDs and pricing metadata.
-  --live                   Actually call SiliconFlow and spend credit.
+  --live                   Actually call the configured provider and spend credit.
   --help                   Show this help text.`);
 }
 
