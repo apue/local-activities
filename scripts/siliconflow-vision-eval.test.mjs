@@ -62,6 +62,12 @@ describe("parseVisionEvalArgs", () => {
     ]);
   });
 
+  it("allows full persistent case-file runs", () => {
+    const args = parseVisionEvalArgs(["--sample-size", "29"]);
+
+    expect(args.sampleSize).toBe(29);
+  });
+
   it("parses explicit article URLs for direct page evaluation", () => {
     const args = parseVisionEvalArgs([
       "--article-url",

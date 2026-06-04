@@ -320,6 +320,248 @@
         "expectsQrEvidence": false
       },
       "rationale": "Challenge/application announcement, likely not a Beijing attendable event, but should be reviewed rather than blindly auto-excluded."
+    },
+    {
+      "id": "iic-save-the-date-image-sparse-multi-event",
+      "title": "Save the Date 2026年5-6月活动计划",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 3,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917339&idx=1&sn=362eb4f1c54b84427a481d90ac3bcfb5"
+      },
+      "tags": [
+        "positive",
+        "multi_event",
+        "image_dominant",
+        "sparse_text",
+        "official_cultural"
+      ],
+      "label": {
+        "expectedAction": "extract",
+        "triageDecision": "public_activity",
+        "publicEligibility": "public",
+        "expectedEventCountMin": 5,
+        "expectedEventCountMax": 8,
+        "requiresReservation": false,
+        "expectsQrEvidence": false
+      },
+      "rationale": "Italian Cultural Institute save-the-date roundup where the captured text is nearly empty and event details must come from image evidence."
+    },
+    {
+      "id": "goethe-open-day-german-summer",
+      "title": "不出北京，度过一个“德式夏日” | 2026年歌德学院开放日来啦~~~",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 25,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MzU4MjYwMw==&mid=2692059683&idx=1&sn=babc07e505359fd6089df2af61e90311"
+      },
+      "tags": ["positive", "single_event", "image_heavy", "official_cultural"],
+      "label": {
+        "expectedAction": "extract",
+        "triageDecision": "public_activity",
+        "publicEligibility": "public",
+        "expectedEventCount": 1,
+        "requiresReservation": false,
+        "expectsQrEvidence": false
+      },
+      "rationale": "Goethe-Institut Beijing open day with clear Beijing time and venue but sparse text and many images."
+    },
+    {
+      "id": "korean-june-film-lineup-multi-event",
+      "title": "【6月片单】“初夏的心动”——清新浪漫电影展映月 | 5月中奖公告",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 21,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429098&idx=1&sn=6a0ea4b8c19f4d1af20d0825497b52d3"
+      },
+      "tags": ["positive", "multi_event", "film", "official_cultural"],
+      "label": {
+        "expectedAction": "extract",
+        "triageDecision": "public_activity",
+        "publicEligibility": "public",
+        "expectedEventCount": 3,
+        "requiresReservation": true,
+        "expectsQrEvidence": false
+      },
+      "rationale": "Korean Cultural Center monthly film lineup with three public screenings and reservation requirements."
+    },
+    {
+      "id": "korean-no-other-choice-two-screenings",
+      "title": "【观影预约】本周五放映《无可奈何》| 场次16:00/19:00（文末有奖）",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 49,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429071&idx=1&sn=1ae66e7a89162828511f7aeb2fd7c388"
+      },
+      "tags": [
+        "positive",
+        "single_event",
+        "multiple_occurrences",
+        "qr_registration",
+        "official_cultural",
+        "film"
+      ],
+      "label": {
+        "expectedAction": "extract",
+        "triageDecision": "public_activity",
+        "publicEligibility": "public",
+        "expectedEventCount": 1,
+        "requiresReservation": true,
+        "expectsQrEvidence": true
+      },
+      "rationale": "One public film with two same-day screening occurrences and explicit free reservation guidance."
+    },
+    {
+      "id": "beiping-friendship-beer-festival-guide",
+      "title": "这是一份友谊万岁精酿啤酒节「逛吃」指南！",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 34,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518529&idx=1&sn=e9c9ac36887462c411fa30041414de8f"
+      },
+      "tags": ["positive", "festival", "single_event", "qr_registration"],
+      "label": {
+        "expectedAction": "extract",
+        "triageDecision": "public_activity",
+        "publicEligibility": "public",
+        "expectedEventCount": 1,
+        "requiresReservation": false,
+        "expectsQrEvidence": true
+      },
+      "rationale": "Public Beijing beer festival guide; useful for duplicate/dedupe regression and QR/poster handling even though the organizer is outside the official-cultural first slice."
+    },
+    {
+      "id": "beiping-beer-festival-volunteer-recruitment",
+      "title": "北平机器·友谊万岁精酿啤酒节志愿者招募",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 32,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518529&idx=3&sn=42f0d4c80311aff6f16fb91bd6ea2ca4"
+      },
+      "tags": ["negative", "recruitment", "not_attendee_event"],
+      "label": {
+        "expectedAction": "exclude",
+        "triageDecision": "recruitment_not_attendee_event",
+        "publicEligibility": "not_public",
+        "expectedEventCount": 0,
+        "requiresReservation": false,
+        "expectsQrEvidence": false
+      },
+      "rationale": "Volunteer recruitment for an event is not itself a normal attendee-facing activity for the public catalog."
+    },
+    {
+      "id": "goethe-summer-language-course-signup",
+      "title": "北京歌德学院2026年暑期德语课程开始报名啦~~",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 20,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MzU4MjYwMw==&mid=2692059687&idx=1&sn=1f8f734e277b3214c2f819f3de7f6dec"
+      },
+      "tags": ["negative", "course_signup", "not_weekend_activity", "qr_not_registration"],
+      "label": {
+        "expectedAction": "exclude",
+        "triageDecision": "course_signup",
+        "publicEligibility": "not_public",
+        "expectedEventCount": 0,
+        "requiresReservation": false,
+        "expectsQrEvidence": false
+      },
+      "rationale": "Language course enrollment/service announcement, not a dated public cultural activity suitable for the event catalog."
+    },
+    {
+      "id": "japan-kaomoji-culture-article",
+      "title": "日本颜文字文化的诞生与演变——从符号表达走向全球沟通",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 22,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzA3MTg5NDIxOQ==&mid=2650993264&idx=1&sn=d4246738580e9a3e003783ba103ed1ba"
+      },
+      "tags": ["negative", "cultural_article", "not_event", "qr_not_registration"],
+      "label": {
+        "expectedAction": "exclude",
+        "triageDecision": "not_event",
+        "publicEligibility": "not_public",
+        "expectedEventCount": 0,
+        "requiresReservation": false,
+        "expectsQrEvidence": false
+      },
+      "rationale": "Cultural explainer article with footer QR-like material but no attendable activity."
+    },
+    {
+      "id": "brazil-world-cup-watch-timetable",
+      "title": "2026年国际足联世界杯——巴西国家队中国观赛时间表",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 19,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzI4MjE3OTcxMA==&mid=2247495023&idx=1&sn=cf9dfb811a3f9606eee92a24b78aaecc"
+      },
+      "tags": ["negative", "sports_timetable", "not_cultural_activity", "qr_not_registration"],
+      "label": {
+        "expectedAction": "exclude",
+        "triageDecision": "not_event",
+        "publicEligibility": "not_public",
+        "expectedEventCount": 0,
+        "requiresReservation": false,
+        "expectsQrEvidence": false
+      },
+      "rationale": "Sports broadcast timetable contains dates and times but is not a Beijing cultural activity or public event listing."
+    },
+    {
+      "id": "goethe-ai-animation-nanjing",
+      "title": "放映+讲座：AI时代的延展动画",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 38,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MzU4MjYwMw==&mid=2692059519&idx=1&sn=4a42e03147edfa0c44f6bda3c520c6db"
+      },
+      "tags": ["negative", "not_beijing_event", "official_cultural", "public_elsewhere"],
+      "label": {
+        "expectedAction": "exclude",
+        "triageDecision": "not_beijing_event",
+        "publicEligibility": "not_public",
+        "expectedEventCount": 0,
+        "requiresReservation": false,
+        "expectsQrEvidence": false
+      },
+      "rationale": "Public Goethe screening and lecture, but the venue is Nanjing, outside the Beijing catalog boundary."
+    },
+    {
+      "id": "open-m-hangzhou-art-festival",
+      "title": "扰动正式开始 | Open M艺术节·杭州 by abC 参展全阵容公布",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 33,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518529&idx=2&sn=e853bc633f10999f957c65687c5dd92d"
+      },
+      "tags": ["negative", "not_beijing_event", "festival_elsewhere", "qr_not_registration"],
+      "label": {
+        "expectedAction": "exclude",
+        "triageDecision": "not_beijing_event",
+        "publicEligibility": "not_public",
+        "expectedEventCount": 0,
+        "requiresReservation": false,
+        "expectsQrEvidence": false
+      },
+      "rationale": "Art festival announcement for Hangzhou, not an attendable Beijing event despite event-like wording and QR material."
+    },
+    {
+      "id": "mexico-embassy-world-cup-private-invitation",
+      "title": "¡Acompáñanos a vivir la inauguración del Mundial como en casa!",
+      "source": {
+        "type": "supabase_snapshot",
+        "snapshotId": 16,
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743873&idx=1&sn=be1ad3f8b02d04a0eb3ce542df95343f"
+      },
+      "tags": ["negative", "private_invitation", "embassy_event", "not_general_public"],
+      "label": {
+        "expectedAction": "exclude",
+        "triageDecision": "not_general_public",
+        "publicEligibility": "not_public",
+        "expectedEventCount": 0,
+        "requiresReservation": false,
+        "expectsQrEvidence": false
+      },
+      "rationale": "Embassy-hosted World Cup gathering addressed to the Mexican community; it is not a general-public Beijing cultural activity."
     }
   ]
 }

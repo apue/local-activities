@@ -19,6 +19,7 @@ const defaultBaseUrl = "https://api.siliconflow.cn/v1";
 const defaultOutputDir = ".local/vision-eval";
 const defaultLookbackDays = 14;
 const defaultSampleSize = 3;
+const defaultMaxSampleSize = 100;
 const defaultMaxImages = 2;
 const defaultDetail = "low";
 const defaultMaxImageBytes = 4_000_000;
@@ -97,7 +98,7 @@ export function parseVisionEvalArgs(argv) {
     } else if (arg === "--sample-size") {
       args.sampleSize = readPositiveIntegerArg(argv, index, arg, {
         min: 1,
-        max: 20,
+        max: defaultMaxSampleSize,
       });
       index += 1;
     } else if (arg === "--max-images") {
@@ -1550,7 +1551,7 @@ ${defaultVisionEvalModels.map((model) => `  - ${model.id}`).join("\n")}
 
 Options:
   --env-file <path>        Dotenv file to merge. May be repeated.
-  --sample-size <n>        Number of recent articles to evaluate. Default ${defaultSampleSize}.
+  --sample-size <n>        Number of recent articles to evaluate. Default ${defaultSampleSize}; max ${defaultMaxSampleSize}.
   --max-images <n>         Max image evidence items per article. Default ${defaultMaxImages}.
   --detail <low|high|auto> Vision detail hint. Default ${defaultDetail}.
   --models <csv>           Comma-separated model IDs.
