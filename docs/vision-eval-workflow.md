@@ -15,6 +15,7 @@ Useful commands:
 ```bash
 pnpm eval:vision -- --case-file tests/eval/vision-cases.json --help
 pnpm eval:vision -- --env-file .env.local --case-file tests/eval/vision-cases.json --models Qwen/Qwen3-VL-8B-Instruct --max-images 3 --detail low --live
+pnpm eval:vision -- --env-file .env.local --provider-name Bailian --case-file tests/eval/vision-cases.json --sample-size 29 --models qwen3-vl-flash,qwen3-vl-plus,qwen-vl-plus,qwen-vl-max --max-images 6 --detail low --live
 pnpm data:audit -- --env-file .env.local --limit 1000
 pnpm data:hygiene -- --env-file .env.local --limit 1000 --dry-run
 ```
@@ -27,6 +28,13 @@ operator approval in the current conversation.
 The active extraction policy is a single model call that extracts event details
 and judges public eligibility; `VISION_ESCALATION_MODEL` is reserved for
 difficult cases, not a mandatory prefilter stage.
+
+`pnpm eval:vision` uses OpenAI-compatible chat completions. For Alibaba Cloud
+Bailian, set `OPENAI_API_KEY` to the Bailian/DashScope key and
+`OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`, then pass
+`--provider-name Bailian` in live operator runs. SiliconFlow remains supported
+through either the generic `OPENAI_*` variables or the legacy
+`SILICONFLOW_API_KEY` / `SILICONFLOW_BASE_URL` variables.
 
 ## When To Add A Case
 

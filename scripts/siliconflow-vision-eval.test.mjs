@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  callOpenAiCompatibleChatCompletions,
   buildVisionEvalRequest,
   buildVisionEvalArticleFromHtml,
   defaultVisionEvalModels,
@@ -10,6 +11,7 @@ import {
   normalizeVisionEvalCaseFile,
   parseModelJson,
   parseVisionEvalArgs,
+  readVisionProviderConfig,
   scoreVisionEvalOutput,
   summarizeVisionCaseMetrics,
   selectArticleImages,
@@ -33,6 +35,8 @@ describe("parseVisionEvalArgs", () => {
       "4096",
       "--timeout-ms",
       "45000",
+      "--provider-name",
+      "Bailian",
       "--case-file",
       "tests/eval/vision-cases.json",
       "--live",
@@ -45,6 +49,7 @@ describe("parseVisionEvalArgs", () => {
     expect(args.detail).toBe("high");
     expect(args.maxOutputTokens).toBe(4096);
     expect(args.timeoutMs).toBe(45000);
+    expect(args.providerName).toBe("Bailian");
     expect(args.caseFile).toBe("tests/eval/vision-cases.json");
     expect(args.live).toBe(true);
     expect(args.models).toEqual(defaultVisionEvalModels.map((model) => model.id));
@@ -75,6 +80,50 @@ describe("parseVisionEvalArgs", () => {
     ]);
 
     expect(args.articleUrls).toEqual(["https://mp.weixin.qq.com/s/example"]);
+  });
+});
+
+describe("readVisionProviderConfig", () => {
+  it("prefers generic OpenAI-compatible provider config", () => {
+    const config = readVisionProviderConfig(
+      {
+        OPENAI_API_KEY: " openai-key ",
+        OPENAI_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        SILICONFLOW_API_KEY: "siliconflow-key",
+        SILICONFLOW_BASE_URL: "https://api.siliconflow.cn/v1",
+      },
+      { providerName: "Bailian" },
+    );
+
+    expect(config).toEqual({
+      apiKey: "openai-key",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+      providerName: "Bailian",
+      errorPrefix: "bailian",
+      source: "openai_compatible",
+    });
+  });
+
+  it("keeps legacy SiliconFlow key and default base URL fallback", () => {
+    const config = readVisionProviderConfig({
+      SILICONFLOW_API_KEY: " siliconflow-key ",
+    });
+
+    expect(config).toEqual({
+      apiKey: "siliconflow-key",
+      baseUrl: "https://api.siliconflow.cn/v1/",
+      providerName: "SiliconFlow",
+      errorPrefix: "siliconflow",
+      source: "siliconflow_legacy",
+    });
+  });
+
+  it("requires the generic base URL when generic provider env is present", () => {
+    expect(() =>
+      readVisionProviderConfig({
+        OPENAI_API_KEY: "openai-key",
+      }),
+    ).toThrow("missing_openai_compatible_config:OPENAI_BASE_URL");
   });
 });
 
@@ -330,6 +379,81 @@ describe("buildVisionEvalRequest", () => {
   });
 });
 
+describe("callOpenAiCompatibleChatCompletions", () => {
+  it("posts to the provider chat completions URL with bearer auth", async () => {
+    const calls = [];
+    const response = await callOpenAiCompatibleChatCompletions({
+      request: {
+        model: "qwen-vl-plus",
+        messages: [{ role: "user", content: "hello" }],
+        response_format: { type: "json_object" },
+      },
+      provider: {
+        apiKey: "provider-key",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+        providerName: "Bailian",
+        errorPrefix: "bailian",
+      },
+      timeoutMs: 10_000,
+      fetchImpl: async (url, options) => {
+        calls.push({ url: String(url), options });
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              choices: [{ message: { content: "{\"events\":[]}" } }],
+              usage: { prompt_tokens: 10, completion_tokens: 5 },
+            }),
+        };
+      },
+    });
+
+    expect(response.usage).toEqual({ prompt_tokens: 10, completion_tokens: 5 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe(
+      "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    );
+    expect(calls[0].options.method).toBe("POST");
+    expect(calls[0].options.headers.Authorization).toBe("Bearer provider-key");
+  });
+
+  it("uses provider-specific error prefixes and retries without response_format", async () => {
+    const bodies = [];
+    await expect(
+      callOpenAiCompatibleChatCompletions({
+        request: {
+          model: "qwen-vl-plus",
+          messages: [{ role: "user", content: "hello" }],
+          response_format: { type: "json_object" },
+        },
+        provider: {
+          apiKey: "provider-key",
+          baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+          providerName: "Bailian",
+          errorPrefix: "bailian",
+        },
+        timeoutMs: 10_000,
+        fetchImpl: async (_url, options) => {
+          bodies.push(JSON.parse(options.body));
+          return {
+            ok: false,
+            status: 400,
+            text: async () =>
+              bodies.length === 1
+                ? "response_format json_object is not supported"
+                : "still rejected",
+          };
+        },
+      }),
+    ).rejects.toThrow("bailian_400:still rejected");
+
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0].response_format).toEqual({ type: "json_object" });
+    expect(bodies[1].response_format).toBeUndefined();
+  });
+});
+
 describe("parseModelJson", () => {
   it("parses fenced JSON", () => {
     expect(parseModelJson("```json\n{\"classification\":{\"kind\":\"activity\"}}\n```"))
@@ -387,6 +511,7 @@ describe("formatVisionEvalMarkdownReport", () => {
     const markdown = formatVisionEvalMarkdownReport({
       generatedAt: "2026-06-03T00:00:00.000Z",
       sampleSize: 1,
+      providerName: "Bailian",
       maxImages: 2,
       detail: "low",
       totals: [
@@ -416,6 +541,7 @@ describe("formatVisionEvalMarkdownReport", () => {
     });
 
     expect(markdown).toContain("| Qwen/Qwen3-VL-8B-Instruct | 1 | 0 | 88.0 |");
+    expect(markdown).toContain("Provider: `Bailian`");
     expect(markdown).toContain("Recommended model: `Qwen/Qwen3-VL-8B-Instruct`");
     expect(markdown).toContain("| Qwen/Qwen3-VL-8B-Instruct | 2 | 50.0% | 1 | 0 |");
   });
