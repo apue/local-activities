@@ -26,6 +26,8 @@
     "extractor:wechat-url": "node scripts/wechat-url-extract.mjs",
     "editor:capture": "node scripts/editor-agent-capture.mjs",
     "eval:vision": "node scripts/siliconflow-vision-eval.mjs",
+    "data:audit": "node scripts/data-hygiene.mjs audit",
+    "data:hygiene": "node scripts/data-hygiene.mjs hygiene",
     "smoke:e2e-fixture": "node scripts/e2e-fixture-smoke.mjs",
     "smoke:e2e-mvp": "node scripts/e2e-fixture-smoke.mjs",
     "smoke:admin-readonly": "node scripts/admin-readonly-smoke.mjs",
