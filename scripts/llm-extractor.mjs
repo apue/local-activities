@@ -388,7 +388,7 @@ function buildLlmUsageEnvelope({
 }) {
   const usage = normalizeProviderUsage(providerResponse?.usage);
   const metadata = removeUndefined({
-    promptVersion,
+    extractorVersion: promptVersion,
     schemaVersion: extractionSchemaVersion,
     apiStyle: config.openaiApiStyle,
     articleUrl: articleSnapshot.canonicalUrl,
