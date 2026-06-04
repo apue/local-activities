@@ -133,6 +133,8 @@ export function parseFixtureArgs(argv) {
       index += 1;
     } else if (arg === "--allow-live") {
       args.allowLive = true;
+    } else if (arg === "--allow-hosted-write") {
+      args.allowHostedWrite = true;
     } else if (arg === "--url") {
       args.url = argv[index + 1];
       index += 1;
