@@ -6,7 +6,8 @@ cases, and audit dirty hosted data before cleanup.
 ## Files And Commands
 
 - Case file: `tests/eval/vision-cases.json`
-- Vision model runner: `scripts/siliconflow-vision-eval.mjs`
+- Vision model runner: `scripts/siliconflow-vision-eval.mjs` through
+  `pnpm eval:vision`
 - Data audit and hygiene runner: `scripts/data-hygiene.mjs`
 
 Useful commands:
@@ -22,6 +23,10 @@ pnpm data:hygiene -- --env-file .env.local --limit 1000 --dry-run
 data:audit` and `pnpm data:hygiene -- --dry-run` are read-only or non-mutating.
 Do not run cleanup or publish commands against hosted data without explicit
 operator approval in the current conversation.
+
+The active extraction policy is a single model call that extracts event details
+and judges public eligibility; `VISION_ESCALATION_MODEL` is reserved for
+difficult cases, not a mandatory prefilter stage.
 
 ## When To Add A Case
 
@@ -59,7 +64,8 @@ Each case should include:
 - `tags` such as `positive`, `negative`, `multi_event`, `qr_registration`, or
   `official_visit`
 - `label.expectedAction` as `extract` or `exclude`
-- `label.triageDecision`
+- `label.triageDecision` as the legacy stored decision label used by current
+  eval cases
 - `label.publicEligibility`
 - exact `expectedEventCount`, or `expectedEventCountMin` and
   `expectedEventCountMax`
