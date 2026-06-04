@@ -93,6 +93,91 @@ describe("WeChat image evidence helpers", () => {
     ).not.toThrow();
   });
 
+  it("stores supported image evidence through an injected public asset uploader", async () => {
+    const putCalls = [];
+    const fetchCalls = [];
+    const envelopes = await buildImageEvidenceAssetEnvelopes({
+      collectorId: "collector-1",
+      runId: "run-1",
+      observedAt: "2026-06-03T08:00:00.000Z",
+      articleUrl: "https://mp.weixin.qq.com/s/activity",
+      imageCandidates: [
+        {
+          url: "https://mmbiz.qpic.cn/poster.jpg",
+          alt: "活动海报",
+          width: 900,
+          height: 1200,
+        },
+        {
+          url: "https://mmbiz.qpic.cn/register-qr.jpg",
+          alt: "报名二维码",
+        },
+      ],
+      storeImages: true,
+      fetchImpl: async (url) => {
+        fetchCalls.push(url);
+        return new Response(Buffer.from(`bytes:${url}`), {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+        });
+      },
+      putPublicAsset: async (input) => {
+        putCalls.push(input);
+        return {
+          url: `https://blob.example.com/${input.role}/${input.keyHint}.jpg`,
+        };
+      },
+    });
+
+    expect(fetchCalls).toEqual([
+      "https://mmbiz.qpic.cn/poster.jpg",
+      "https://mmbiz.qpic.cn/register-qr.jpg",
+    ]);
+    expect(putCalls.map((call) => call.role)).toEqual([
+      "poster",
+      "registration_qr",
+    ]);
+    expect(envelopes.map((envelope) => envelope.payload.storagePath)).toEqual([
+      expect.stringContaining("https://blob.example.com/poster/"),
+      expect.stringContaining("https://blob.example.com/registration_qr/"),
+    ]);
+    expect(envelopes[0].payload.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(envelopes[0].payload.contentHash).not.toBe(
+      envelopes[1].payload.contentHash,
+    );
+  });
+
+  it("keeps source-only evidence when image storage fails", async () => {
+    const envelopes = await buildImageEvidenceAssetEnvelopes({
+      collectorId: "collector-1",
+      runId: "run-1",
+      observedAt: "2026-06-03T08:00:00.000Z",
+      articleUrl: "https://mp.weixin.qq.com/s/activity",
+      imageCandidates: [
+        {
+          url: "https://mmbiz.qpic.cn/poster.jpg",
+          alt: "活动海报",
+          width: 900,
+          height: 1200,
+        },
+      ],
+      storeImages: true,
+      fetchImpl: async () => {
+        throw new Error("image_fetch_failed");
+      },
+      putPublicAsset: async () => {
+        throw new Error("should_not_upload");
+      },
+    });
+
+    expect(envelopes).toHaveLength(1);
+    expect(envelopes[0].payload).toMatchObject({
+      role: "poster",
+      sourceUrl: "https://mmbiz.qpic.cn/poster.jpg",
+    });
+    expect(envelopes[0].payload.storagePath).toBeUndefined();
+  });
+
   it("keeps evidence asset ids distinct when different articles reuse the same image", () => {
     const sharedImage = {
       url: "https://mmbiz.qpic.cn/shared-poster.jpg",

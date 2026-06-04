@@ -22,6 +22,7 @@ const collectorPayloadVersion = "2026-05-collector-v1";
 export async function runWechat2RssSyncOnce({
   env = process.env,
   fetchImpl = fetch,
+  putPublicAsset,
   now = new Date(),
   runId = createRunId(now),
   extract = false,
@@ -121,14 +122,20 @@ export async function runWechat2RssSyncOnce({
 
   const query = await client.queryArticles({ after, content: extract });
   const articles = dedupeArticles(query.articles);
-  const articleArtifacts = articles.map((article) =>
-    articleSnapshotArtifact({
-      collectorId: config.collectorId,
-      runId,
-      observedAt,
-      article,
-    }),
-  );
+  const articleArtifacts = [];
+  for (const article of articles) {
+    articleArtifacts.push(
+      await articleSnapshotArtifact({
+        collectorId: config.collectorId,
+        runId,
+        observedAt,
+        article,
+        fetchImpl,
+        putPublicAsset,
+        storeImages: config.assetStorageEnabled || Boolean(putPublicAsset),
+      }),
+    );
+  }
   const articleEnvelopes = articleArtifacts.map(
     (artifact) => artifact.articleSnapshot,
   );
@@ -250,6 +257,7 @@ export function readWechat2RssSyncConfig(env) {
       collectorApiKey,
     }),
     wechat2rss,
+    assetStorageEnabled: Boolean(env.BLOB_READ_WRITE_TOKEN?.trim()),
   };
 }
 
@@ -282,19 +290,30 @@ function sourceRunEnvelope({ collectorId, runId, observedAt, payload }) {
   };
 }
 
-function articleSnapshotArtifact({ collectorId, runId, observedAt, article }) {
+async function articleSnapshotArtifact({
+  collectorId,
+  runId,
+  observedAt,
+  article,
+  fetchImpl,
+  putPublicAsset,
+  storeImages,
+}) {
   const visibleText = [article.title, article.summary, article.contentText]
     .filter(Boolean)
     .join("\n");
   const imageCandidates = extractImageCandidatesFromHtml(article.contentHtml, {
     articleUrl: article.url,
   });
-  const evidenceAssets = buildImageEvidenceAssetEnvelopes({
+  const evidenceAssets = await buildImageEvidenceAssetEnvelopes({
     collectorId,
     runId,
     observedAt,
     articleUrl: article.url,
     imageCandidates,
+    storeImages,
+    fetchImpl,
+    putPublicAsset,
   });
   return {
     articleSnapshot: {

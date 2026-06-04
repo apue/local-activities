@@ -347,6 +347,13 @@ describe("lightweight LLM extractor", () => {
       "qr-1",
       result.evidenceAssets[0].payload.assetId,
     ]);
+    expect(result.eventDrafts[0].payload).toMatchObject({
+      posterAssetId: "poster-1",
+      qrAssetId: "qr-1",
+      registrationQrAssetId: "qr-1",
+      posterImageUrl: "https://blob.example.com/posters/poster.jpg",
+      posterImageSourceUrl: "https://mmbiz.qpic.cn/poster.jpg",
+    });
   });
 
   it("creates multiple reviewable drafts for multi-mention activity posts", async () => {
@@ -620,6 +627,7 @@ function posterEvidence() {
     role: "poster",
     mediaType: "image",
     sourceUrl: "https://mmbiz.qpic.cn/poster.jpg",
+    storagePath: "https://blob.example.com/posters/poster.jpg",
     contentHash: "poster-hash",
     extractedBy: "vision",
     confidence: 0.82,
