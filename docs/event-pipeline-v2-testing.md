@@ -95,6 +95,23 @@ model repeats the same answer.
 
 Live LLM calls are allowed only in operator-run capture or smoke workflows.
 
+### Vision Model Policy Tests
+
+The default policy is triage-first: use `Qwen/Qwen3-VL-8B-Instruct` for the
+first pass and reserve `Qwen/Qwen3-VL-30B-A3B-Instruct` for complex or uncertain
+cases. `scripts/vision-model-policy.mjs` owns this policy so config parsing and
+escalation triggers can be tested without calling a live model.
+
+Run the focused policy tests with:
+
+```bash
+pnpm vitest run scripts/vision-model-policy.test.mjs scripts/llm-extractor.test.mjs
+```
+
+The escalation triggers are low confidence, ambiguous public eligibility,
+multi-event pages, long-running or recurring schedules, QR registration evidence
+with incomplete registration details, and missing required event fields.
+
 ### Supabase Validation
 
 Hosted Supabase validation is read-only by default.

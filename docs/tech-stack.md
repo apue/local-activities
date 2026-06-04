@@ -263,6 +263,9 @@ Environment:
 - `AGENT_PROVIDER`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
+- `VISION_TRIAGE_MODEL`
+- `VISION_EXTRACTION_MODEL`
+- `VISION_ESCALATION_MODEL`
 - `COLLECTOR_BROWSER_RUNNER` (`agent_browser` by default; `playwright` for comparison runs)
 
 ## Supabase
@@ -335,8 +338,12 @@ Environment:
 
 - `AGENT_PROVIDER`
 - `OPENAI_API_KEY`
-- `OPENAI_MODEL`
+- `OPENAI_MODEL` (legacy/current provider model; `VISION_EXTRACTION_MODEL` takes precedence when set)
+- `VISION_TRIAGE_MODEL`
+- `VISION_EXTRACTION_MODEL`
+- `VISION_ESCALATION_MODEL`
 - `OPENAI_BASE_URL`
+- `OPENAI_API_STYLE`
 - `AGENT_TIMEOUT_SECONDS`
 - `AGENT_MAX_ATTEMPTS`
 
@@ -347,6 +354,26 @@ response is validated locally before upload, and Vercel validates all uploaded p
 again before storage or publication routing.
 
 Persist prompt version, model name, and extraction confidence with outputs for reproducibility.
+
+Vision model policy:
+
+- Default first-pass triage model: `Qwen/Qwen3-VL-8B-Instruct`
+- Default extraction model: `Qwen/Qwen3-VL-8B-Instruct`
+- Default escalation model: `Qwen/Qwen3-VL-30B-A3B-Instruct`
+
+`VISION_EXTRACTION_MODEL` is preferred over `OPENAI_MODEL` for the extractor.
+`OPENAI_MODEL` remains supported as the generic provider model for older local
+env files and Vercel settings. For OpenAI-compatible providers such as
+SiliconFlow, set `OPENAI_BASE_URL` to that provider's `/v1` endpoint and use
+`OPENAI_API_STYLE=chat_completions` when the provider does not expose the
+OpenAI Responses API.
+
+Escalate from the first-pass model to `VISION_ESCALATION_MODEL` when the
+first-pass result is low confidence, public eligibility is ambiguous, the page
+contains multiple events, the schedule is long-running or recurring, QR evidence
+exists but registration fields are incomplete, or required event fields are
+missing. The backend still owns validation, dedupe, review state, and final
+publication.
 
 ## Local Development Environment
 
