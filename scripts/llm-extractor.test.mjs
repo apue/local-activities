@@ -5,6 +5,7 @@ import {
   collectorFailureSchema,
   eventDraftUploadSchema,
   evidenceAssetSchema,
+  llmUsageEventSchema,
 } from "../src/contracts/collector";
 import {
   buildExtractorPromptInput,
@@ -185,6 +186,15 @@ describe("lightweight LLM extractor", () => {
     const usageUpload = uploads.find((entry) =>
       entry.url.endsWith("/api/collector/llm-usage"),
     );
+    const parsedUsageUpload = collectorEnvelopeSchema(
+      llmUsageEventSchema,
+    ).safeParse(usageUpload?.body);
+    expect(
+      parsedUsageUpload.success,
+      JSON.stringify(
+        parsedUsageUpload.success ? [] : parsedUsageUpload.error.issues,
+      ),
+    ).toBe(true);
     expect(usageUpload?.body.payload).toMatchObject({
       operation: "event_extraction",
       provider: "openai",
