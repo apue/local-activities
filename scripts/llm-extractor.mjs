@@ -717,7 +717,7 @@ function buildEventDraftEnvelope({
   metadataId,
   config,
 }) {
-  const signals = normalizeSignals([...(event.signals ?? []), "possible_duplicate"]);
+  const signals = normalizeSignals(event.signals ?? []);
   const evidenceAssetIds = uniqueStrings([
     ...(event.evidenceAssetIds ?? []),
     metadataId,
