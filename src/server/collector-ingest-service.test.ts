@@ -6,6 +6,7 @@ import type {
   CollectorFailure,
   EventDraftUpload,
   EvidenceAsset,
+  LlmUsageEventUpload,
   SourceCandidate,
   SourceRunReport,
 } from "../contracts/collector";
@@ -14,8 +15,10 @@ import {
   ingestCollectorFailure,
   ingestEventDraft,
   ingestEvidenceAsset,
+  ingestLlmUsage,
   ingestSourceRun,
   type CollectorIngestStore,
+  type NormalizedLlmUsageEnvelope,
 } from "./collector-ingest-service";
 
 class MemoryIngestStore implements CollectorIngestStore {
@@ -25,6 +28,7 @@ class MemoryIngestStore implements CollectorIngestStore {
   eventDrafts = new Map<string, string>();
   failures = new Map<string, string>();
   sourceCandidates = new Map<string, string>();
+  llmUsage: NormalizedLlmUsageEnvelope[] = [];
   publishedDrafts: Array<{
     title: string;
     scheduleText?: string;
@@ -93,6 +97,11 @@ class MemoryIngestStore implements CollectorIngestStore {
       this.failures.get(input.failureId) ?? `failure-${this.failures.size + 1}`;
     this.failures.set(input.failureId, id);
     return { id };
+  }
+
+  async insertLlmUsage(input: NormalizedLlmUsageEnvelope) {
+    this.llmUsage.push(input);
+    return { id: input.payload.usageId };
   }
 }
 
@@ -268,6 +277,41 @@ describe("collector ingest service", () => {
     const second = await ingestCollectorFailure(envelope, store);
 
     expect(second.id).toBe(first.id);
+  });
+
+  it("normalizes LLM usage records with missing provider usage fields", async () => {
+    const store = new MemoryIngestStore();
+    const envelope: CollectorEnvelope<LlmUsageEventUpload> = {
+      ...envelopeBase,
+      observedAt: "2026-06-04T08:00:00.000Z",
+      payload: {
+        operation: "event_extraction",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        status: "succeeded",
+        latencyMs: 1200,
+        metadata: {
+          schemaVersion: "event-extraction-schema-v1",
+        },
+      },
+    };
+
+    const result = await ingestLlmUsage(envelope, store);
+
+    expect(result.id).toMatch(/^usage-/);
+    expect(store.llmUsage).toHaveLength(1);
+    expect(store.llmUsage[0].payload).toMatchObject({
+      recordedAt: "2026-06-04T08:00:00.000Z",
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
+      costMicroCny: 0,
+      sourceRunId: "run-001",
+      metadata: { schemaVersion: "event-extraction-schema-v1" },
+    });
+    expect(store.llmUsage[0].payload.usageId).toMatch(/^usage-/);
   });
 
   it("upserts evidence assets by article, role, and content hash", async () => {

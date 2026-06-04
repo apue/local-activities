@@ -15,6 +15,7 @@ import {
   createStableCollectorObjectId,
   type DraftBackendRouting,
   type CollectorIngestStore,
+  type NormalizedLlmUsageEnvelope,
 } from "./collector-ingest-service";
 import { getSupabaseAdminClient } from "./supabase-admin";
 
@@ -337,6 +338,39 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
     );
 
     return { id: String(row.id) };
+  }
+
+  async insertLlmUsage(envelope: NormalizedLlmUsageEnvelope) {
+    const payload = envelope.payload;
+    const row = await this.writeOne<{ usage_id: string }>(
+      this.client
+        .from("llm_usage_ledger")
+        .insert({
+          usage_id: payload.usageId,
+          recorded_at: payload.recordedAt,
+          operation: payload.operation,
+          provider: payload.provider,
+          model: payload.model,
+          status: payload.status,
+          input_tokens: payload.inputTokens,
+          output_tokens: payload.outputTokens,
+          total_tokens: payload.totalTokens,
+          cached_input_tokens: payload.cachedInputTokens,
+          reasoning_output_tokens: payload.reasoningOutputTokens,
+          cost_micro_cny: payload.costMicroCny,
+          latency_ms: payload.latencyMs ?? null,
+          source_run_id: payload.sourceRunId,
+          collector_job_id: payload.collectorJobId ?? null,
+          article_snapshot_id: payload.articleSnapshotId ?? null,
+          event_draft_id: payload.eventDraftId ?? null,
+          excluded_article_id: payload.excludedArticleId ?? null,
+          metadata: payload.metadata,
+        })
+        .select("usage_id")
+        .single(),
+    );
+
+    return { id: row.usage_id };
   }
 
   private async findSourceRunId(envelope: {

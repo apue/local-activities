@@ -4,6 +4,7 @@ import {
   createAdminCollectorJob,
   getAdminEventDraftDetail,
   listAdminExcludedArticles,
+  listAdminLlmUsageSummary,
   listAdminEventDrafts,
   markAdminEventDraftNeedsInfo,
   promoteAdminExcludedArticle,
@@ -19,6 +20,28 @@ class MemoryAdminStore implements AdminStore {
   jobs: CollectorJobRecord[] = [];
   drafts = new Map<string, AdminEventDraftRecord>();
   excludedArticles = new Map<string, AdminExcludedArticleRecord>();
+  llmUsageSummary = {
+    totals: {
+      requestCount: 2,
+      successCount: 1,
+      errorCount: 1,
+      inputTokens: 1400,
+      outputTokens: 450,
+      totalTokens: 1850,
+      costMicroCny: 3200,
+    },
+    byModel: [
+      {
+        provider: "openai",
+        model: "gpt-5-mini",
+        operation: "event_extraction",
+        requestCount: 2,
+        totalTokens: 1850,
+        costMicroCny: 3200,
+      },
+    ],
+    recent: [],
+  };
   publishedEvents: Array<{ draftId: string; title: string }> = [];
 
   constructor(
@@ -97,6 +120,10 @@ class MemoryAdminStore implements AdminStore {
     return articles.filter(
       (article) => article.processingState === input.processingState,
     );
+  }
+
+  async getLlmUsageSummary() {
+    return this.llmUsageSummary;
   }
 
   async promoteExcludedArticle(excludedArticleId: string, promotedAt: string) {
@@ -217,6 +244,14 @@ describe("admin service", () => {
     ).resolves.toEqual([
       expect.objectContaining({ id: "draft-2", reviewState: "needs_info" }),
     ]);
+  });
+
+  it("returns the read-only LLM usage summary from the admin store", async () => {
+    const store = new MemoryAdminStore();
+
+    await expect(listAdminLlmUsageSummary(store)).resolves.toEqual(
+      store.llmUsageSummary,
+    );
   });
 
   it("returns draft detail with review context", async () => {

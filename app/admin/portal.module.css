@@ -319,6 +319,57 @@
   background: #ffffff;
 }
 
+.usageSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.usageSummary div {
+  border: 1px solid #d6d9d1;
+  border-radius: 8px;
+  background: #fbfcf8;
+  padding: 10px;
+}
+
+.usageSummary small,
+.usageRow small {
+  color: #667062;
+}
+
+.usageSummary span {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.25rem;
+  font-weight: 850;
+}
+
+.usageList,
+.usageFailures {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.usageRow {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(120px, 0.8fr) minmax(0, 1.4fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #d6d9d1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.usageRow strong,
+.usageRow span,
+.usageRow small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .empty {
   border: 1px dashed #c8cec2;
   border-radius: 8px;
@@ -356,7 +407,9 @@
 
   .grid,
   .detail dl,
-  .jobRow {
+  .jobRow,
+  .usageSummary,
+  .usageRow {
     grid-template-columns: 1fr;
   }
 }

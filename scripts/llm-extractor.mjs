@@ -144,6 +144,7 @@ export async function runLlmExtractionOnce({
     evidenceAssets,
     fetchImpl,
     runId,
+    observedAt,
     providerResponse,
   });
   if (!providerResult.ok && providerResult.reason === "agent_request_failed") {
@@ -154,6 +155,7 @@ export async function runLlmExtractionOnce({
       reason: providerResult.reason,
       message: providerResult.message,
       now,
+      llmUsage: providerResult.llmUsage,
     });
   }
 
@@ -165,6 +167,7 @@ export async function runLlmExtractionOnce({
       reason: "agent_response_invalid_schema",
       message: providerResult.message,
       now,
+      llmUsage: providerResult.llmUsage,
     });
   }
 
@@ -196,6 +199,7 @@ export async function runLlmExtractionOnce({
       kind: "no_draft",
     });
     result.evidenceAssets = [metadata];
+    result.llmUsage = providerResult.llmUsage;
     return maybeUploadExtractionResult(result, { config, fetchImpl, upload });
   }
 
@@ -217,6 +221,7 @@ export async function runLlmExtractionOnce({
     eventDrafts,
     evidenceAssets: [metadata],
     failures: [],
+    llmUsage: providerResult.llmUsage,
   };
   if (!eventDrafts.length) {
     result.failures.push(
@@ -265,6 +270,7 @@ async function requestProvider({
     evidenceAssets,
     runId,
   });
+  const startedAt = Date.now();
   const response = await fetchImpl(`${config.openaiBaseUrl}${request.path}`, {
     method: "POST",
     signal: AbortSignal.timeout(config.agentTimeoutSeconds * 1000),
@@ -275,12 +281,19 @@ async function requestProvider({
     body: JSON.stringify(request.body),
   });
   const data = await response.json().catch(() => ({}));
+  const latencyMs = Math.max(0, Date.now() - startedAt);
   if (!response.ok) {
     throw Object.assign(new Error(`agent_request_failed:${response.status}`), {
       reason: "agent_request_failed",
+      statusCode: response.status,
+      data,
+      latencyMs,
     });
   }
-  return data;
+  return {
+    data,
+    latencyMs,
+  };
 }
 
 async function requestAndParseProvider({
@@ -289,6 +302,7 @@ async function requestAndParseProvider({
   evidenceAssets,
   fetchImpl,
   runId,
+  observedAt,
   providerResponse,
 }) {
   if (providerResponse !== undefined) {
@@ -303,6 +317,7 @@ async function requestAndParseProvider({
   }
 
   let lastFailure;
+  const llmUsage = [];
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const raw = await requestProvider({
@@ -312,22 +327,146 @@ async function requestAndParseProvider({
         fetchImpl,
         runId,
       });
-      const parsed = parseProviderResponse(raw);
-      if (parsed.ok) return { ok: true, data: parsed.data };
+      const parsed = parseProviderResponse(raw.data);
+      llmUsage.push(
+        buildLlmUsageEnvelope({
+          config,
+          articleSnapshot,
+          runId,
+          observedAt,
+          status: parsed.ok ? "succeeded" : "failed",
+          providerResponse: raw.data,
+          latencyMs: raw.latencyMs,
+          failureReason: parsed.ok ? undefined : "agent_response_invalid_schema",
+          attemptNumber: attempt + 1,
+        }),
+      );
+      if (parsed.ok) return { ok: true, data: parsed.data, llmUsage };
       lastFailure = {
         ok: false,
         reason: "agent_response_invalid_schema",
         message: parsed.message,
+        llmUsage,
       };
     } catch (error) {
+      llmUsage.push(
+        buildLlmUsageEnvelope({
+          config,
+          articleSnapshot,
+          runId,
+          observedAt,
+          status: "failed",
+          providerResponse: error?.data,
+          latencyMs: error?.latencyMs,
+          failureReason: error?.reason ?? "agent_request_failed",
+          statusCode: error?.statusCode,
+          attemptNumber: attempt + 1,
+        }),
+      );
       lastFailure = {
         ok: false,
         reason: error?.reason ?? "agent_request_failed",
         message: error instanceof Error ? error.message : String(error),
+        llmUsage,
       };
     }
   }
   return lastFailure;
+}
+
+function buildLlmUsageEnvelope({
+  config,
+  articleSnapshot,
+  runId,
+  observedAt,
+  status,
+  providerResponse,
+  latencyMs,
+  failureReason,
+  statusCode,
+  attemptNumber,
+}) {
+  const usage = normalizeProviderUsage(providerResponse?.usage);
+  const metadata = removeUndefined({
+    promptVersion,
+    schemaVersion: extractionSchemaVersion,
+    apiStyle: config.openaiApiStyle,
+    articleUrl: articleSnapshot.canonicalUrl,
+    failureReason,
+    statusCode,
+    attemptNumber,
+    usageSource: providerResponse?.usage ? "provider_usage" : "missing_usage",
+  });
+
+  return envelope({
+    collectorId: config.collectorId,
+    runId,
+    observedAt,
+    payload: removeUndefined({
+      usageId: createStableCollectorObjectId("usage", [
+        config.collectorId,
+        runId,
+        articleSnapshot.canonicalUrl,
+        config.provider,
+        config.openaiModel,
+        String(attemptNumber ?? 1),
+        status,
+      ]),
+      recordedAt: observedAt,
+      operation: "event_extraction",
+      provider: config.provider,
+      model: config.openaiModel,
+      status,
+      ...usage,
+      costMicroCny: 0,
+      latencyMs,
+      sourceRunId: runId,
+      metadata,
+    }),
+  });
+}
+
+function normalizeProviderUsage(usage) {
+  const inputTokens = integerOrZero(
+    usage?.input_tokens ??
+      usage?.prompt_tokens ??
+      usage?.inputTokens ??
+      usage?.promptTokens,
+  );
+  const outputTokens = integerOrZero(
+    usage?.output_tokens ??
+      usage?.completion_tokens ??
+      usage?.outputTokens ??
+      usage?.completionTokens,
+  );
+  const totalTokens = integerOrZero(
+    usage?.total_tokens ?? usage?.totalTokens ?? inputTokens + outputTokens,
+  );
+  const cachedInputTokens = integerOrZero(
+    usage?.cached_input_tokens ??
+      usage?.cachedInputTokens ??
+      usage?.input_tokens_details?.cached_tokens ??
+      usage?.prompt_tokens_details?.cached_tokens,
+  );
+  const reasoningOutputTokens = integerOrZero(
+    usage?.reasoning_output_tokens ??
+      usage?.reasoningOutputTokens ??
+      usage?.output_tokens_details?.reasoning_tokens ??
+      usage?.completion_tokens_details?.reasoning_tokens,
+  );
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    cachedInputTokens,
+    reasoningOutputTokens,
+  };
+}
+
+function integerOrZero(value) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function providerRequest({ config, articleSnapshot, evidenceAssets, runId }) {
@@ -665,6 +804,7 @@ function failureResult({
   message,
   now,
   kind = "failed",
+  llmUsage = [],
 }) {
   const observedAt = now.toISOString();
   return {
@@ -672,6 +812,7 @@ function failureResult({
     runId,
     eventDrafts: [],
     evidenceAssets: [],
+    llmUsage,
     failures: [
       failureEnvelope({
         collectorId,
@@ -757,11 +898,23 @@ async function maybeUploadExtractionResult(result, { config, fetchImpl, upload }
     });
     uploadedFailureIds.push(response.id);
   }
+  const uploadedLlmUsageIds = [];
+  for (const usageRecord of result.llmUsage ?? []) {
+    const response = await postJson({
+      baseUrl: config.collectorBaseUrl,
+      path: "/api/collector/llm-usage",
+      headers,
+      fetchImpl,
+      body: usageRecord,
+    });
+    uploadedLlmUsageIds.push(response.id);
+  }
   return {
     ...result,
     uploadedEvidenceAssetIds,
     uploadedEventDraftIds,
     uploadedFailureIds,
+    uploadedLlmUsageIds,
   };
 }
 
@@ -826,6 +979,14 @@ function removeUndefined(input) {
 
 function hashText(text) {
   return createHash("sha256").update(text).digest("hex");
+}
+
+function createStableCollectorObjectId(prefix, parts) {
+  const hash = createHash("sha256")
+    .update(parts.join("\u001f"))
+    .digest("hex")
+    .slice(0, 24);
+  return `${prefix}-${hash}`;
 }
 
 function normalizeBaseUrl(value) {

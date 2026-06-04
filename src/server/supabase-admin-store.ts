@@ -6,6 +6,8 @@ import type {
   AdminExcludedArticleRecord,
   AdminEventDraftPatch,
   AdminEventDraftRecord,
+  AdminLlmUsageRecord,
+  AdminLlmUsageSummary,
   AdminReviewState,
   AdminStore,
   PublishedAdminEvent,
@@ -106,6 +108,28 @@ type ExcludedArticleRow = {
   processing_state: AdminExcludedArticleRecord["processingState"];
   promoted_at: string | null;
   created_at: string | null;
+};
+
+type LlmUsageRow = {
+  usage_id: string;
+  recorded_at: string;
+  operation: string;
+  provider: string;
+  model: string;
+  status: AdminLlmUsageRecord["status"];
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cached_input_tokens: number;
+  reasoning_output_tokens: number;
+  cost_micro_cny: number;
+  latency_ms: number | null;
+  source_run_id: string | null;
+  collector_job_id: string | null;
+  article_snapshot_id: string | null;
+  event_draft_id: string | null;
+  excluded_article_id: string | null;
+  metadata: Record<string, unknown> | null;
 };
 
 export function getSupabaseAdminStore(
@@ -257,6 +281,42 @@ class SupabaseAdminStore implements AdminStore {
     return data ? toExcludedArticleRecord(data) : null;
   }
 
+  async getLlmUsageSummary(): Promise<AdminLlmUsageSummary> {
+    const { data, error } = await this.client
+      .from("llm_usage_ledger")
+      .select(
+        [
+          "usage_id",
+          "recorded_at",
+          "operation",
+          "provider",
+          "model",
+          "status",
+          "input_tokens",
+          "output_tokens",
+          "total_tokens",
+          "cached_input_tokens",
+          "reasoning_output_tokens",
+          "cost_micro_cny",
+          "latency_ms",
+          "source_run_id",
+          "collector_job_id",
+          "article_snapshot_id",
+          "event_draft_id",
+          "excluded_article_id",
+          "metadata",
+        ].join(","),
+      )
+      .order("recorded_at", { ascending: false })
+      .limit(500);
+
+    if (error) throw new Error("admin_llm_usage_list_failed");
+    const recent = ((data ?? []) as unknown as LlmUsageRow[]).map(
+      toLlmUsageRecord,
+    );
+    return summarizeLlmUsage(recent);
+  }
+
   async publishEventDraft(input: {
     draft: AdminEventDraftRecord;
     publishedAt: string;
@@ -367,6 +427,102 @@ class SupabaseAdminStore implements AdminStore {
     const { error } = await request;
     if (error) throw new Error("admin_write_failed");
   }
+}
+
+function summarizeLlmUsage(recent: AdminLlmUsageRecord[]): AdminLlmUsageSummary {
+  const totals: AdminLlmUsageSummary["totals"] = {
+    requestCount: 0,
+    successCount: 0,
+    errorCount: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    costMicroCny: 0,
+  };
+  const byModel = new Map<string, AdminLlmUsageSummary["byModel"][number]>();
+
+  for (const record of recent) {
+    totals.requestCount += 1;
+    if (record.status === "succeeded") totals.successCount += 1;
+    if (record.status === "failed") totals.errorCount += 1;
+    totals.inputTokens += record.inputTokens;
+    totals.outputTokens += record.outputTokens;
+    totals.totalTokens += record.totalTokens;
+    totals.costMicroCny += record.costMicroCny;
+
+    const key = `${record.provider}\u0000${record.model}\u0000${record.operation}`;
+    const summary =
+      byModel.get(key) ??
+      {
+        provider: record.provider,
+        model: record.model,
+        operation: record.operation,
+        requestCount: 0,
+        totalTokens: 0,
+        costMicroCny: 0,
+      };
+    summary.requestCount += 1;
+    summary.totalTokens += record.totalTokens;
+    summary.costMicroCny += record.costMicroCny;
+    byModel.set(key, summary);
+  }
+
+  return {
+    totals,
+    byModel: Array.from(byModel.values()),
+    recent,
+  };
+}
+
+function toLlmUsageRecord(row: LlmUsageRow): AdminLlmUsageRecord {
+  return {
+    id: row.usage_id,
+    recordedAt: row.recorded_at,
+    operation: row.operation,
+    provider: row.provider,
+    model: row.model,
+    status: row.status,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    totalTokens: row.total_tokens,
+    cachedInputTokens: row.cached_input_tokens,
+    reasoningOutputTokens: row.reasoning_output_tokens,
+    costMicroCny: row.cost_micro_cny,
+    latencyMs: row.latency_ms ?? undefined,
+    sourceRunId: row.source_run_id ?? undefined,
+    collectorJobId: row.collector_job_id ?? undefined,
+    articleSnapshotId: row.article_snapshot_id ?? undefined,
+    eventDraftId: row.event_draft_id ?? undefined,
+    excludedArticleId: row.excluded_article_id ?? undefined,
+    metadata: sanitizeLlmMetadata(row.metadata ?? {}),
+  };
+}
+
+function sanitizeLlmMetadata(
+  metadata: Record<string, unknown>,
+): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (isSensitiveMetadataKey(key)) continue;
+    sanitized[key] = value;
+  }
+  return sanitized;
+}
+
+function isSensitiveMetadataKey(key: string) {
+  const normalized = key.toLowerCase();
+  return [
+    "prompt",
+    "response",
+    "html",
+    "image",
+    "api_key",
+    "apikey",
+    "header",
+    "cookie",
+    "token",
+    "secret",
+  ].some((fragment) => normalized.includes(fragment));
 }
 
 function withoutOptionalPosterColumns(payload: Record<string, unknown>) {

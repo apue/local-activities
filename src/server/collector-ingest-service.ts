@@ -7,12 +7,45 @@ import type {
   EventDraftUpload,
   ExcludedArticleUpload,
   EvidenceAsset,
+  LlmUsageEventUpload,
   SourceCandidate,
   SourceRunReport,
 } from "../contracts/collector";
 
 export type StoredCollectorObject = {
   id: string;
+};
+
+export type NormalizedLlmUsagePayload = Omit<
+  LlmUsageEventUpload,
+  | "usageId"
+  | "recordedAt"
+  | "inputTokens"
+  | "outputTokens"
+  | "totalTokens"
+  | "cachedInputTokens"
+  | "reasoningOutputTokens"
+  | "costMicroCny"
+  | "sourceRunId"
+  | "metadata"
+> & {
+  usageId: string;
+  recordedAt: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedInputTokens: number;
+  reasoningOutputTokens: number;
+  costMicroCny: number;
+  sourceRunId: string;
+  metadata: Record<string, string | number | boolean | null>;
+};
+
+export type NormalizedLlmUsageEnvelope = Omit<
+  CollectorEnvelope<LlmUsageEventUpload>,
+  "payload"
+> & {
+  payload: NormalizedLlmUsagePayload;
 };
 
 export type CollectorIngestStore = {
@@ -37,6 +70,9 @@ export type CollectorIngestStore = {
   ): Promise<StoredCollectorObject>;
   upsertCollectorFailure(
     input: CollectorEnvelope<CollectorFailure> & { failureId: string },
+  ): Promise<StoredCollectorObject>;
+  insertLlmUsage?(
+    input: NormalizedLlmUsageEnvelope,
   ): Promise<StoredCollectorObject>;
   publishEventDraft?(
     input: {
@@ -140,6 +176,16 @@ export async function ingestCollectorFailure(
   });
 }
 
+export async function ingestLlmUsage(
+  envelope: CollectorEnvelope<LlmUsageEventUpload>,
+  store: CollectorIngestStore,
+) {
+  if (!store.insertLlmUsage) {
+    throw new Error("llm_usage_store_not_configured");
+  }
+  return store.insertLlmUsage(normalizeLlmUsageEnvelope(envelope));
+}
+
 export function createStableCollectorObjectId(prefix: string, parts: string[]) {
   const hash = createHash("sha256")
     .update(parts.join("\u001f"))
@@ -147,6 +193,46 @@ export function createStableCollectorObjectId(prefix: string, parts: string[]) {
     .slice(0, 24);
 
   return `${prefix}-${hash}`;
+}
+
+export function normalizeLlmUsageEnvelope(
+  envelope: CollectorEnvelope<LlmUsageEventUpload>,
+): NormalizedLlmUsageEnvelope {
+  const payload = envelope.payload;
+  const totalTokens =
+    payload.totalTokens ?? (payload.inputTokens ?? 0) + (payload.outputTokens ?? 0);
+  const normalizedPayload: NormalizedLlmUsagePayload = {
+    ...payload,
+    usageId:
+      payload.usageId ??
+      createStableCollectorObjectId("usage", [
+        envelope.collectorId,
+        envelope.runId,
+        envelope.observedAt,
+        payload.operation,
+        payload.provider,
+        payload.model,
+        payload.status,
+        payload.sourceRunId ?? "",
+        payload.articleSnapshotId ?? "",
+        payload.eventDraftId ?? "",
+        payload.excludedArticleId ?? "",
+      ]),
+    recordedAt: payload.recordedAt ?? envelope.observedAt,
+    inputTokens: payload.inputTokens ?? 0,
+    outputTokens: payload.outputTokens ?? 0,
+    totalTokens,
+    cachedInputTokens: payload.cachedInputTokens ?? 0,
+    reasoningOutputTokens: payload.reasoningOutputTokens ?? 0,
+    costMicroCny: payload.costMicroCny ?? 0,
+    sourceRunId: payload.sourceRunId ?? envelope.runId,
+    metadata: payload.metadata ?? {},
+  };
+
+  return {
+    ...envelope,
+    payload: normalizedPayload,
+  };
 }
 
 export function computeDraftReviewState(payload: EventDraftUpload) {

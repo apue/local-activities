@@ -58,3 +58,11 @@ export function formatDateTime(value: string | undefined) {
     timeZone: "Asia/Shanghai",
   }).format(new Date(value));
 }
+
+export function formatTokenCount(value: number | undefined) {
+  return new Intl.NumberFormat("en-US").format(value ?? 0);
+}
+
+export function formatLlmCostCny(value: number | undefined) {
+  return `¥${((value ?? 0) / 1_000_000).toFixed(4)}`;
+}

@@ -7,6 +7,7 @@ import {
   eventDraftUploadSchema,
   evidenceAssetSchema,
   excludedArticleUploadSchema,
+  llmUsageEventSchema,
   sourceCandidateSchema,
   sourceRunReportSchema,
   type ArticleSnapshot,
@@ -15,6 +16,7 @@ import {
   type EventDraftUpload,
   type EvidenceAsset,
   type ExcludedArticleUpload,
+  type LlmUsageEventUpload,
   type SourceCandidate,
   type SourceRunReport,
 } from "../contracts/collector";
@@ -25,6 +27,7 @@ import {
   ingestEventDraft,
   ingestExcludedArticle,
   ingestEvidenceAsset,
+  ingestLlmUsage,
   ingestSourceCandidate,
   ingestSourceRun,
   type CollectorIngestStore,
@@ -134,6 +137,20 @@ export function handleCollectorFailureIngest(
   );
 }
 
+export function handleLlmUsageIngest(
+  request: Request,
+  store: CollectorIngestStore,
+  env: CollectorEnv,
+) {
+  return handleCollectorIngest(
+    request,
+    store,
+    env,
+    llmUsageEventSchema,
+    ingestLlmUsage,
+  );
+}
+
 async function handleCollectorIngest<Payload extends IngestPayload>(
   request: Request,
   store: CollectorIngestStore,
@@ -219,4 +236,5 @@ type IngestPayload =
   | EvidenceAsset
   | EventDraftUpload
   | ExcludedArticleUpload
-  | CollectorFailure;
+  | CollectorFailure
+  | LlmUsageEventUpload;
