@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { put as vercelBlobPut } from "@vercel/blob";
+
 const payloadVersion = "2026-05-collector-v1";
 
 export function extractImageCandidatesFromHtml(html, { articleUrl } = {}) {
@@ -59,8 +61,11 @@ export function buildImageEvidenceAssetEnvelopes({
   observedAt,
   articleUrl,
   imageCandidates,
+  storeImages = false,
+  fetchImpl = fetch,
+  putPublicAsset = putPublicEvidenceAsset,
 }) {
-  return imageCandidates.map((candidate, index) => {
+  const envelopes = imageCandidates.map((candidate) => {
     const role = classifyImageCandidate(candidate);
     const contentHash = hashText(candidate.url);
     const assetHash = hashText(`${articleUrl}\n${role}\n${candidate.url}`);
@@ -84,6 +89,13 @@ export function buildImageEvidenceAssetEnvelopes({
       }),
     };
   });
+
+  if (!storeImages) return envelopes;
+  return Promise.all(
+    envelopes.map((envelope) =>
+      withStoredImageEvidence({ envelope, fetchImpl, putPublicAsset }),
+    ),
+  );
 }
 
 export function captureModeForImageEvidence({ visibleText, evidenceAssets }) {
@@ -130,6 +142,97 @@ function dedupeCandidates(candidates) {
 
 function hashText(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function hashBytes(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function withStoredImageEvidence({ envelope, fetchImpl, putPublicAsset }) {
+  try {
+    const sourceUrl = envelope.payload.sourceUrl;
+    if (!sourceUrl) return envelope;
+
+    const response = await fetchImpl(sourceUrl);
+    if (!response.ok) return envelope;
+
+    const contentType = normalizeImageContentType(
+      response.headers.get("content-type"),
+    );
+    if (!contentType) return envelope;
+
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (!bytes.length || bytes.byteLength > 5_000_000) return envelope;
+
+    const storageRole = storageRoleForEvidenceRole(envelope.payload.role);
+    const stored = await putPublicAsset({
+      bytes,
+      contentType,
+      keyHint: envelope.payload.assetId,
+      role: storageRole,
+    });
+
+    return {
+      ...envelope,
+      payload: removeUndefined({
+        ...envelope.payload,
+        storagePath: stored.url,
+        contentHash: hashBytes(bytes),
+      }),
+    };
+  } catch {
+    return envelope;
+  }
+}
+
+async function putPublicEvidenceAsset(input) {
+  const extension = extensionForContentType(input.contentType);
+  const pathname = `${assetDirectory(input.role)}/${slugify(input.keyHint)}-${Date.now()}${extension}`;
+  const blob = await vercelBlobPut(pathname, input.bytes, {
+    access: "public",
+    contentType: input.contentType,
+    addRandomSuffix: true,
+  });
+  return { url: blob.url };
+}
+
+function storageRoleForEvidenceRole(role) {
+  if (role === "qr" || role === "registration") return "registration_qr";
+  if (role === "poster") return "poster";
+  if (role === "screenshot") return "screenshot";
+  return "article_image";
+}
+
+function normalizeImageContentType(value) {
+  const contentType = String(value ?? "").split(";")[0].trim().toLowerCase();
+  return ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(
+    contentType,
+  )
+    ? contentType
+    : undefined;
+}
+
+function assetDirectory(role) {
+  if (role === "poster") return "event-posters";
+  return `event-assets/${role}`;
+}
+
+function slugify(value) {
+  const slug = value
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return slug || "event-asset";
+}
+
+function extensionForContentType(contentType) {
+  if (contentType === "image/jpeg") return ".jpg";
+  if (contentType === "image/webp") return ".webp";
+  if (contentType === "image/gif") return ".gif";
+  return ".png";
 }
 
 function removeUndefined(value) {

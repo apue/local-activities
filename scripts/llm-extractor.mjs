@@ -213,6 +213,7 @@ export async function runLlmExtractionOnce({
       index,
       metadataId,
       config,
+      evidenceAssets,
     }),
   );
   const result = {
@@ -716,10 +717,30 @@ function buildEventDraftEnvelope({
   index,
   metadataId,
   config,
+  evidenceAssets,
 }) {
   const signals = normalizeSignals(event.signals ?? []);
+  const posterEvidence = findEvidenceAssetByRole(evidenceAssets, ["poster"]);
+  const qrEvidence = findEvidenceAssetByRole(evidenceAssets, [
+    "registration",
+    "qr",
+  ]);
+  const posterAssetId = clean(event.posterAssetId) ?? posterEvidence?.assetId;
+  const qrAssetId = clean(event.qrAssetId) ?? qrEvidence?.assetId;
+  const registrationQrAssetId =
+    clean(event.registrationQrAssetId) ?? qrEvidence?.assetId;
+  const posterImageUrl =
+    clean(event.posterImageUrl) ?? publicStorageUrl(posterEvidence);
+  const posterImageSourceUrl =
+    clean(event.posterImageSourceUrl) ??
+    (posterEvidence?.sourceUrl && posterImageUrl
+      ? posterEvidence.sourceUrl
+      : undefined);
   const evidenceAssetIds = uniqueStrings([
     ...(event.evidenceAssetIds ?? []),
+    posterAssetId,
+    qrAssetId,
+    registrationQrAssetId,
     metadataId,
   ]);
   const fieldEvidence = normalizeFieldEvidence(event.fieldEvidence);
@@ -754,9 +775,12 @@ function buildEventDraftEnvelope({
       registrationAction: clean(event.registrationAction),
       registrationUrl: clean(event.registrationUrl),
       scheduleText: clean(event.scheduleText) ?? scheduleTextFallback(event),
-      posterImageUrl: clean(event.posterImageUrl),
+      posterAssetId,
+      qrAssetId,
+      registrationQrAssetId,
+      posterImageUrl,
       posterImageAlt: clean(event.posterImageAlt),
-      posterImageSourceUrl: clean(event.posterImageSourceUrl),
+      posterImageSourceUrl,
       summary: clean(event.summary),
       entryNotes: clean(event.entryNotes),
       signals,
@@ -961,6 +985,26 @@ function normalizeReservationStatus(value) {
   return ["required", "not_required", "unknown"].includes(value)
     ? value
     : "unknown";
+}
+
+function findEvidenceAssetByRole(evidenceAssets, roles) {
+  return evidenceAssets.find(
+    (asset) =>
+      roles.includes(asset?.role) &&
+      typeof asset?.assetId === "string" &&
+      asset.assetId,
+  );
+}
+
+function publicStorageUrl(evidenceAsset) {
+  const value = clean(evidenceAsset?.storagePath);
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function uniqueStrings(values) {

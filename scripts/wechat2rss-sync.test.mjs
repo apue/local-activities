@@ -183,6 +183,81 @@ describe("Wechat2RSS one-shot sync", () => {
     ).not.toThrow();
   });
 
+  it("stores Wechat2RSS image evidence when asset storage is configured", async () => {
+    const calls = [];
+    const putCalls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init, body: init?.body ? JSON.parse(init.body) : null });
+      if (url.includes("/login/list")) {
+        return jsonResponse({ accounts: [{ nickname: "reader", status: "正常" }] });
+      }
+      if (url.includes("/api/query")) {
+        return jsonResponse({
+          data: [
+            {
+              title: "Stored QR Poster Activity",
+              url: "https://mp.weixin.qq.com/s/stored-qr-poster",
+              date: "2026-06-01T12:00:00+08:00",
+              mpName: "Culture Org",
+              digest: "Scan the QR poster to register.",
+              content:
+                '<img data-src="https://mmbiz.qpic.cn/activity-poster.jpg" alt="活动海报" width="900" height="1200" /><img data-src="https://mmbiz.qpic.cn/register-qr.jpg" alt="报名二维码" />',
+            },
+          ],
+        });
+      }
+      if (url === "https://mmbiz.qpic.cn/activity-poster.jpg") {
+        return imageResponse("poster-bytes");
+      }
+      if (url === "https://mmbiz.qpic.cn/register-qr.jpg") {
+        return imageResponse("qr-bytes");
+      }
+      if (url.endsWith("/api/collector/source-run")) {
+        return jsonResponse({ ok: true, id: "source-run-1" });
+      }
+      if (url.endsWith("/api/collector/article-snapshot")) {
+        return jsonResponse({ ok: true, id: "snapshot-1" });
+      }
+      if (url.endsWith("/api/collector/evidence-asset")) {
+        return jsonResponse({ ok: true, id: `evidence-${calls.length}` });
+      }
+      throw new Error(`unexpected_url:${url}`);
+    };
+
+    const result = await runWechat2RssSyncOnce({
+      env: {
+        ...validEnv(),
+        BLOB_READ_WRITE_TOKEN: "blob-token",
+      },
+      fetchImpl,
+      putPublicAsset: async (input) => {
+        putCalls.push(input);
+        return {
+          url: `https://blob.example.com/${input.role}/${input.keyHint}.jpg`,
+        };
+      },
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "wechat2rss-stored-images",
+    });
+
+    const evidenceUploads = calls.filter((call) =>
+      call.url.endsWith("/api/collector/evidence-asset"),
+    );
+
+    expect(result).toMatchObject({
+      kind: "uploaded",
+      uploadedEvidenceAssetCount: 2,
+    });
+    expect(putCalls.map((call) => call.role)).toEqual([
+      "poster",
+      "registration_qr",
+    ]);
+    expect(evidenceUploads.map((call) => call.body.payload.storagePath)).toEqual([
+      expect.stringContaining("https://blob.example.com/poster/"),
+      expect.stringContaining("https://blob.example.com/registration_qr/"),
+    ]);
+  });
+
   it("optionally extracts uploaded Wechat2RSS snapshots into reviewable drafts", async () => {
     const calls = [];
     const fetchImpl = async (url, init) => {
@@ -517,6 +592,21 @@ function jsonResponse(body, status = 200) {
     status,
     async json() {
       return body;
+    },
+  };
+}
+
+function imageResponse(body) {
+  return {
+    ok: true,
+    status: 200,
+    headers: {
+      get(name) {
+        return name.toLowerCase() === "content-type" ? "image/jpeg" : null;
+      },
+    },
+    async arrayBuffer() {
+      return Buffer.from(body);
     },
   };
 }
