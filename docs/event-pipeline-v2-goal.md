@@ -1,5 +1,9 @@
 # Event Pipeline V2 Goal Pack
 
+> Superseded for current implementation planning by
+> [Event Pipeline V3 Goal Pack](event-pipeline-v3-goal.md). Keep this file for
+> historical context only.
+
 This document is the execution contract for a future Codex goal-mode session.
 It must be enough for that session to implement the Event Pipeline V2 refactor
 without relying on chat history.

@@ -11,6 +11,12 @@ Testing should make each feature independently verifiable. Every GitHub issue sh
 - Keep high-risk logic out of UI components so it can be unit tested.
 - Record validation commands in the PR and issue handoff.
 - Do not claim a task is complete without running the relevant checks.
+- For Event Pipeline V3, every pipeline node must have an independent module
+  contract and test path as defined in
+  [Event Pipeline Architecture](event-pipeline-architecture.md).
+- Eval and fixture/replay commands must not publish production public events by
+  default. Deliberate production acceptance uses a separate production seed
+  import command.
 
 ## Public Frontend
 
@@ -82,6 +88,8 @@ Expected checks:
 - integration tests against local or mocked ingest endpoints
 - no tests should require bypassing captcha or platform protections
 - fixtures for text-dominant, image-dominant, QR-registration, multi-mention, blocked, and expired source posts
+- current production source provider behavior through Mac-local Wechat2RSS
+  with live smoke only when `.env.collector` and login state are present
 
 ## Extraction / LLM
 
@@ -102,6 +110,7 @@ Expected checks:
 - fixture-based extraction tests with saved poster and QR images
 - schema validation tests for model output
 - regression fixtures for known extraction failures
+- provider mock tests proving extractor modules do not upload to production
 
 ## Matching / Revision
 
@@ -118,6 +127,29 @@ Expected checks:
 - deterministic unit tests for matching scores and thresholds
 - fixtures for multi-source duplicates such as a shared embassy event
 - tests proving missing or failed source fetches do not imply cancellation
+
+## Production Seed Acceptance
+
+Production seed import is a final product acceptance workflow, not a default
+test. It uses a curated manifest of real official-account pages and writes
+through the production backend only after explicit operator approval.
+
+Test focus:
+
+- manifest validation and dry-run behavior
+- public events become canonical public cards
+- duplicate mentions do not create duplicate public cards
+- non-public official news and private/internal items stay out of public pages
+- incomplete cases remain reviewable in admin
+- poster and QR evidence render when relevant
+- live token usage is visible with a production acceptance environment label
+
+Expected checks:
+
+- dry-run tests with fake upload clients
+- manifest contract tests
+- operator-run production import report
+- browser/admin inspection after the import
 
 ## Location
 

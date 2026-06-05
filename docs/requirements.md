@@ -74,8 +74,9 @@ Detailed admin portal behavior is defined in [Admin Portal Requirements](admin-p
 
 ## Collector Requirements
 
-- Vercel Sandbox is the default MVP collector runner for admin-created seed jobs.
-- A local collector remains a fallback for Sandbox quota exhaustion or source pages that fail in Sandbox.
+- The current MVP collector runner is the Mac-local Wechat2RSS collector.
+- Vercel hosts the app and ingest APIs, but does not run the production WeChat
+  crawler in Event Pipeline V3.
 - Future tracked-source polling should check supported sources at a low cadence, initially every 4 hours.
 - The collector uploads normalized results to the backend instead of writing directly to the database.
 - The backend receives:
@@ -128,7 +129,9 @@ Recent seed-page analysis established the following MVP fixture patterns:
 ## Success Criteria
 
 - A user can open the mobile web app and quickly understand what admin-curated activities are relevant for the coming weekend.
-- An admin can paste one seed URL or shared text and get a published activity when parsing succeeds.
-- Sandbox quota exhaustion can be handled by a local collector fallback without changing the ingestion contract.
+- The Mac-local Wechat2RSS collector can ingest subscribed official-account
+  articles and produce reviewable or publishable events when parsing succeeds.
+- A future collector implementation can be swapped in without changing the
+  backend ingestion contract.
 - Failures are visible and actionable in the admin UI.
 - Duplicate or updated events do not create confusing public listings.

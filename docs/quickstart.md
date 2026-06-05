@@ -1,6 +1,7 @@
 # Bootstrap Quickstart
 
-This repository is documentation-first until the app scaffold is approved. Use this quickstart when creating the first implementation PR.
+Use this quickstart for local development and the current Mac-local
+Wechat2RSS collector workflow.
 
 ## Prerequisites
 
@@ -37,7 +38,8 @@ Minimum groups to prepare:
 - runtime public assets: `BLOB_READ_WRITE_TOKEN` when uploading event posters to Vercel Blob
 - Supabase CLI/local compatibility: `SUPA_API_URL`, `SUPA_DB_URL`, `SUPA_ANON_KEY`, `SUPA_SERVICE_KEY`
 - map/geocoding: `NEXT_PUBLIC_AMAP_JS_API_KEY`, `AMAP_WEB_SERVICE_API_KEY`
-- sandbox extraction provider: `AGENT_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_MODEL`, optional `OPENAI_BASE_URL`
+- LLM extraction provider: `AGENT_PROVIDER`, `OPENAI_API_KEY`,
+  `OPENAI_MODEL`, optional `OPENAI_BASE_URL`
 - search/crawling: `EXA_API_KEY`, `SERPER_API_KEY`, `FIRECRAWL_API_KEY`
 - Vercel: `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID`, `VERCEL_TOKEN`, `CRON_SECRET`
 
@@ -134,7 +136,8 @@ Keep these boundaries:
 
 - Vercel Cron can trigger lightweight callbacks or kick off workflow runs.
 - Workflow can coordinate resumable backend steps and preserve run state.
-- Browser-heavy collection still belongs in a local or VM collector runtime unless a later issue proves a bounded Vercel-native path.
+- Browser-heavy or WeChat-account-bound collection belongs in the Mac-local
+  collector runtime for this MVP slice.
 - Do not place unbounded Playwright sessions inside ordinary request/response handlers.
 
 Only enable `VERCEL_WORKFLOW_ENABLED=true` after the first concrete workflow implementation lands.
@@ -158,20 +161,23 @@ Project-level skills live in `.agents/skills`.
 
 ## Local Capture Commands
 
-There are two separate capture paths:
+The current production source path is Mac-local Wechat2RSS:
 
-- `/capture-event <url-or-shared-text>` is a Codex runtime workflow. The
-  current Codex session uses local `agent-browser` to open the page, inspect the
-  content, infer the event draft, and upload through the existing backend APIs.
-  This path must not require `EDITOR_AGENT_API_KEY`, `EDITOR_AGENT_MODEL`,
-  `OPENAI_API_KEY`, or `OPENAI_MODEL`.
-- `pnpm editor:capture -- --env-file .env.local <url-or-shared-text>` is the
-  autonomous API-agent collector path for local collector or Vercel Sandbox
-  execution. It runs project scripts and requires an OpenAI-compatible editor
-  model provider configuration.
+```bash
+pnpm smoke:wechat2rss --env-file .env.collector
+pnpm collector:wechat2rss:once --env-file .env.collector --extract
+```
 
-Both paths must report structured failures such as `captcha_required`,
+`smoke:wechat2rss` is read-only against the local Wechat2RSS service.
+`collector:wechat2rss:once --extract` uploads through the configured collector
+API and is production-mutating when `COLLECTOR_BASE_URL` points at the deployed
+app backed by production Supabase.
+
+The collector must report structured failures such as `captcha_required`,
 `login_required`, or `fetch_blocked` instead of bypassing platform protections.
+
+For Event Pipeline V3 architecture and module boundaries, see
+[Event Pipeline Architecture](event-pipeline-architecture.md).
 
 Current project skills:
 

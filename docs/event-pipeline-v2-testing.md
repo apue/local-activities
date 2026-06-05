@@ -1,5 +1,11 @@
 # Event Pipeline V2 Testing And Environment Isolation
 
+> Superseded for current implementation planning by
+> [Event Pipeline V3 Goal Pack](event-pipeline-v3-goal.md),
+> [Event Pipeline Architecture](event-pipeline-architecture.md), and
+> [Testing Strategy](testing-strategy.md). Keep this file for historical context
+> only.
+
 This document defines the testing and environment isolation contract for Event
 Pipeline V2. It is referenced by `docs/event-pipeline-v2-goal.md` and should be
 followed before running fixture, Supabase, Vercel, or live-source validation.

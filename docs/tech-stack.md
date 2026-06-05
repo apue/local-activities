@@ -239,15 +239,17 @@ Planned use:
 - Preview deployments for PR review
 - Production deployment for the public app
 - Vercel Cron for lightweight scheduled triggers
-- Vercel Sandbox as the default hosted Agent runner for bounded collection attempts
-- Vercel Workflow as the likely durable serverless execution option for bounded multi-step backend tasks, including Sandbox orchestration
+- Vercel Workflow as the likely durable serverless execution option for bounded
+  multi-step backend tasks that do not require WeChat login state
 - Vercel Queue is TBD
 
 Important boundary:
 
 - Use Workflow for durable orchestration and resumable backend steps, not as a place to hide unbounded browser sessions.
 - Do not make long-running browser automation depend on ordinary Vercel request/response functions.
-- Keep the collector runtime replaceable and preserve local/VM execution for fallback, captcha/login/manual recovery, and operator-controlled reruns.
+- Use the Mac-local Wechat2RSS collector as the current production WeChat
+  official-account source path.
+- Keep the collector runtime replaceable for future source providers.
 
 Environment:
 
@@ -258,14 +260,12 @@ Environment:
 - `CRON_SECRET`
 - `VERCEL_WORKFLOW_ENABLED`
 - `VERCEL_QUEUE_ENABLED`
-- `VERCEL_SANDBOX_ENABLED`
 - `COLLECTOR_SCOPED_TOKEN_SECRET`
 - `AGENT_PROVIDER`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
 - `VISION_EXTRACTION_MODEL`
 - `VISION_ESCALATION_MODEL`
-- `COLLECTOR_BROWSER_RUNNER` (`agent_browser` by default; `playwright` for comparison runs)
 
 ## Supabase
 
@@ -432,4 +432,5 @@ Suggested order for future PRs:
 7. Search and crawling provider adapters.
 8. Text inference extraction pipeline.
 9. Optional TTS audio summaries.
-10. Vercel Workflow for the first concrete durable orchestration problem; Sandbox/Queue experiments only when a concrete extraction or queueing problem exists.
+10. Vercel Workflow for the first concrete durable orchestration problem; queue
+    experiments only when a concrete queueing problem exists.
