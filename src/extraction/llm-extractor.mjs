@@ -719,7 +719,10 @@ function buildEventDraftEnvelope({
       scheduleKind: normalizeScheduleKind(event.scheduleKind),
       title: clean(event.title),
       originalTitle: clean(event.originalTitle),
-      organizer: clean(event.organizer),
+      organizer:
+        clean(event.organizer) ??
+        clean(articleSnapshot.authorName) ??
+        clean(articleSnapshot.sourceName),
       startsAt,
       endsAt,
       recurrenceRule: clean(event.recurrenceRule),

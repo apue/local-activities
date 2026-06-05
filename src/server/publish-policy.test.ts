@@ -7,6 +7,7 @@ const baseDraft: AdminEventDraftRecord = {
   id: "draft-1",
   articleUrl: "https://mp.weixin.qq.com/s/activity",
   title: "Korean Culture Activity",
+  organizer: "Korean Cultural Center",
   startsAt: "2026-06-20T07:00:00.000Z",
   endsAt: "2026-06-20T09:00:00.000Z",
   timezone: "Asia/Shanghai",
@@ -91,6 +92,18 @@ describe("publish policy", () => {
     expect(decision.canPublish).toBe(false);
     expect(decision.hardBlockers[0]).toMatchObject({
       code: "missing_required_qr_evidence",
+    });
+  });
+
+  it("hard-blocks drafts without a usable organizer", () => {
+    const decision = computePublishDecision({
+      ...baseDraft,
+      organizer: undefined,
+    });
+
+    expect(decision.canPublish).toBe(false);
+    expect(decision.hardBlockers[0]).toMatchObject({
+      code: "missing_organizer",
     });
   });
 

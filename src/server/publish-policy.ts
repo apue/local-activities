@@ -45,10 +45,20 @@ export function computePublishDecision(
 
 function backendHardBlockers(draft: AdminEventDraftRecord) {
   const blockers: AdminPublishBlocker[] = [];
-  if (!draft.title || !draft.startsAt || !(draft.venueName || draft.venueAddress)) {
+  if (
+    !draft.title ||
+    !draft.startsAt ||
+    !(draft.venueName || draft.venueAddress)
+  ) {
     blockers.push({
       code: "missing_required_public_field",
       message: "Missing required public event fields",
+    });
+  }
+  if (!draft.organizer) {
+    blockers.push({
+      code: "missing_organizer",
+      message: "Missing public organizer",
     });
   }
   if (["approved", "rejected"].includes(draft.reviewState)) {

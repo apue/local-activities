@@ -455,12 +455,11 @@ describe("admin service", () => {
     ]);
   });
 
-  it("publishes drafts with only minimum public fields", async () => {
+  it("publishes drafts with minimum public venue fields and organizer", async () => {
     const store = new MemoryAdminStore([
       {
         ...completeDraft,
         id: "draft-minimum",
-        organizer: undefined,
         venueName: undefined,
         venueAddress: "北京市朝阳区朝阳公园",
         reservationStatus: undefined,
