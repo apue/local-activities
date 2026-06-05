@@ -605,6 +605,63 @@ describe("collector agent processor", () => {
     });
   });
 
+  it("defaults collector-owned event draft metadata from deterministic context", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
+      if (url === "https://api.openai.com/v1/responses") {
+        const {
+          articleUrl: _articleUrl,
+          extractionAttemptId: _extractionAttemptId,
+          captureMode: _captureMode,
+          timezone: _timezone,
+          city: _city,
+          confidence: _confidence,
+          ...contentDraft
+        } = agentSuccessResponse().eventDraft;
+        const { articleSnapshot: _articleSnapshot, ...response } =
+          agentSuccessResponse();
+        return jsonResponse(
+          openaiResponse({
+            ...response,
+            eventDraft: contentDraft,
+          }),
+        );
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const observation = pageObservation({
+      finalUrl: "https://mp.weixin.qq.com/s/draft-defaults",
+      canonicalUrl: "https://mp.weixin.qq.com/s/draft-defaults",
+      title: "Draft Defaults Event",
+    });
+
+    const result = await runCollectorAgent({
+      env: agentEnv(),
+      seedUrl: "https://mp.weixin.qq.com/s/draft-defaults",
+      runId: "agent-draft-defaults",
+      fetchImpl,
+      browserObserver: async () => observation,
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    const draftUpload = calls.find((call) =>
+      call.url.endsWith("/api/collector/event-draft"),
+    );
+    expect(draftUpload.body.payload).toMatchObject({
+      articleUrl: "https://mp.weixin.qq.com/s/draft-defaults",
+      extractionAttemptId: "agent-draft-defaults-agent",
+      captureMode: "text_complete",
+      timezone: "Asia/Shanghai",
+      city: "Beijing",
+      confidence: 0.93,
+      title: "Agent Event",
+      scheduleText: "6月6日 14:00-16:00",
+    });
+    expect(result.uploadedIds.eventDraftId).toBe("id-6");
+  });
+
   it("uploads a structured failure after OpenAI schema retry exhaustion", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {

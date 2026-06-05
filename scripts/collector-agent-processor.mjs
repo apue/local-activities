@@ -477,6 +477,11 @@ async function requestModelWithRetries({
       const parsed = parseAgentResponse(parseOpenAIJson(data), {
         publicAssetUrlPrefixes: config.publicAssetUrlPrefixes,
         articleSnapshotFallback: articleSnapshotFromObservation(observation),
+        eventDraftDefaults: {
+          extractionAttemptId: `${runId}-agent`,
+          timezone: "Asia/Shanghai",
+          city: "Beijing",
+        },
       });
       if (parsed.ok) return parsed;
       if (parsed.retryable === false) return parsed;
@@ -725,7 +730,15 @@ function parseAgentResponse(data, options = {}) {
     const eventDraft = normalizeEventDraft(
       data.eventDraft,
       data.missingFields,
-      options,
+      {
+        ...options,
+        eventDraftDefaults: {
+          ...options.eventDraftDefaults,
+          articleUrl: articleSnapshot.finalUrl,
+          captureMode: articleSnapshot.captureMode,
+          confidence: data.confidence,
+        },
+      },
     );
     if (!eventDraft) {
       return invalidAgentResponse("Agent response missed valid event draft.");
@@ -957,6 +970,7 @@ function normalizeEvidenceAssets(inputs) {
 
 function normalizeEventDraft(input, missingFields, options = {}) {
   if (!input || typeof input !== "object") return undefined;
+  input = applyEventDraftDefaults(input, options.eventDraftDefaults);
   if (
     !isUrl(input.articleUrl) ||
     !nonEmpty(input.extractionAttemptId) ||
@@ -1025,6 +1039,23 @@ function normalizeEventDraft(input, missingFields, options = {}) {
     fieldEvidence: normalizeFieldEvidence(input.fieldEvidence),
     confidence: input.confidence,
   });
+}
+
+function applyEventDraftDefaults(input, defaults = {}) {
+  return {
+    ...input,
+    articleUrl: isUrl(input.articleUrl)
+      ? input.articleUrl
+      : defaults.articleUrl,
+    extractionAttemptId:
+      nonEmpty(input.extractionAttemptId) ?? defaults.extractionAttemptId,
+    captureMode: nonEmpty(input.captureMode) ?? defaults.captureMode,
+    timezone: nonEmpty(input.timezone) ?? defaults.timezone,
+    city: nonEmpty(input.city) ?? defaults.city,
+    confidence: isNumberInRange(input.confidence, 0, 1)
+      ? input.confidence
+      : defaults.confidence,
+  };
 }
 
 function normalizePublicPosterImageUrl(value, publicAssetUrlPrefixes = []) {
