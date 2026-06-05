@@ -169,6 +169,48 @@ describe("single WeChat URL extractor", () => {
     ]);
   });
 
+  it("stores URL browser image evidence before extraction when enabled", async () => {
+    const calls = [];
+    await runWechatUrlExtractionOnce({
+      env: { COLLECTOR_ID: "collector-1" },
+      url: "https://mp.weixin.qq.com/s/image-page",
+      now: new Date("2026-06-03T04:00:00.000Z"),
+      storeImages: true,
+      readArticlePage: async () => ({
+        text: "Poster event\nEmbassy Culture\n2026年6月1日 21:44 北京\n扫码报名",
+        html: `
+          <img data-src="https://mmbiz.qpic.cn/poster.jpg" alt="活动海报" width="900" height="1200" />
+        `,
+      }),
+      fetchImpl: async () => ({
+        ok: true,
+        headers: new Map([["content-type", "image/jpeg"]]),
+        arrayBuffer: async () => Buffer.from("poster-bytes").buffer,
+      }),
+      putPublicAsset: async ({ keyHint, role, contentType, bytes }) => ({
+        url: `https://blob.example/${role}/${keyHint}.jpg`,
+        contentType,
+        byteLength: bytes.byteLength,
+      }),
+      extract: async (input) => {
+        calls.push(input);
+        return {
+          kind: "drafts",
+          runId: input.runId,
+          failures: [],
+          eventDrafts: [],
+        };
+      },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].evidenceAssets[0]).toMatchObject({
+      role: "poster",
+      sourceUrl: "https://mmbiz.qpic.cn/poster.jpg",
+      storagePath: expect.stringMatching(/^https:\/\/blob\.example\/poster\//),
+    });
+  });
+
   it("passes upload through only when explicitly requested", async () => {
     const result = await runWechatUrlExtractionOnce({
       env: {},

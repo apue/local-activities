@@ -173,6 +173,7 @@ describe("production seed events", () => {
       ],
       env: {
         COLLECTOR_BASE_URL: "http://localhost:3000",
+        BLOB_READ_WRITE_TOKEN: "blob-token",
       },
       importLiveUrl: async (input) => {
         imports.push(input);
@@ -199,6 +200,7 @@ describe("production seed events", () => {
         COLLECTOR_BASE_URL: "https://local-activities.vercel.app",
         APP_BASE_URL: "https://local-activities.vercel.app",
       },
+      storeImages: true,
     });
     expect(result.imported).toEqual([
       expect.objectContaining({
