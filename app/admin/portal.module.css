@@ -335,6 +335,43 @@
   color: #4d5549;
 }
 
+.editGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.editGrid label {
+  display: grid;
+  gap: 6px;
+}
+
+.editGrid label:last-child {
+  grid-column: 1 / -1;
+}
+
+.editGrid span {
+  color: #667062;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.editGrid input,
+.editGrid textarea {
+  width: 100%;
+  border: 1px solid #c8cec2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #20231f;
+  font: inherit;
+  padding: 9px 10px;
+}
+
+.editGrid textarea {
+  resize: vertical;
+}
+
 .evidenceGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
