@@ -165,11 +165,13 @@ describe("production seed events", () => {
         "IMPORT_PRODUCTION_SEED_EVENTS",
         "--confirm-target",
         "https://local-activities.vercel.app",
+        "--target-base-url",
+        "https://local-activities.vercel.app",
         "--run-id",
         "production-seed-test",
       ],
       env: {
-        COLLECTOR_BASE_URL: "https://local-activities.vercel.app",
+        COLLECTOR_BASE_URL: "http://localhost:3000",
       },
       importLiveUrl: async (input) => {
         imports.push(input);
@@ -193,6 +195,8 @@ describe("production seed events", () => {
       env: {
         USAGE_ENVIRONMENT: "production_seed_acceptance",
         PRODUCTION_SEED_USAGE_ENVIRONMENT: "production_seed_acceptance",
+        COLLECTOR_BASE_URL: "https://local-activities.vercel.app",
+        APP_BASE_URL: "https://local-activities.vercel.app",
       },
     });
     expect(result.imported).toEqual([
