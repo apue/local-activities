@@ -7,6 +7,18 @@ import {
 } from "./e2e-fixture-smoke.mjs";
 
 describe("e2e fixture smoke", () => {
+  it("refuses hosted fixture publish smoke without explicit write approval", async () => {
+    await expect(
+      runE2eFixtureSmoke({
+        env: {
+          ...validEnv(),
+          APP_BASE_URL: "https://branch-local-activities.vercel.app",
+        },
+        seedUrl: "https://mp.weixin.qq.com/s/e2e-fixture",
+      }),
+    ).rejects.toThrow("e2e_fixture_smoke_requires_allow_hosted_write");
+  });
+
   it("creates a job, uploads a claimed fixture, publishes it, and verifies public detail", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {
@@ -68,6 +80,8 @@ describe("e2e fixture smoke", () => {
       now: new Date("2026-05-28T10:00:00.000Z"),
       seedUrl: "https://mp.weixin.qq.com/s/e2e-fixture",
       runId: "fixture-e2e",
+      allowHostedWrite: true,
+      allowPublicFixtureData: true,
     });
 
     expect(calls.map((call) => call.url)).toEqual([
@@ -94,6 +108,12 @@ describe("e2e fixture smoke", () => {
       draftId: "draft-1",
       eventId: "event-1",
       publicUrl: "https://local-activities.example/events/event-1",
+      target: {
+        baseUrl: "https://local-activities.example",
+        hostname: "local-activities.example",
+        kind: "test",
+      },
+      writeMode: "publish_fixture_event",
     });
   });
 
@@ -105,9 +125,16 @@ describe("e2e fixture smoke", () => {
       draftId: "draft-1",
       eventId: "event-1",
       publicUrl: "https://local-activities.example/events/event-1",
+      target: {
+        baseUrl: "https://local-activities.example",
+        hostname: "local-activities.example",
+        kind: "test",
+      },
+      writeMode: "publish_fixture_event",
     });
 
     expect(summary).toContain("event-1");
+    expect(summary).toContain("writeMode=publish_fixture_event");
     expect(summary).toContain("https://local-activities.example/events/event-1");
     expect(summary).not.toContain("admin-secret");
     expect(summary).not.toContain("collector-secret");
@@ -120,6 +147,15 @@ describe("e2e fixture smoke", () => {
     });
   });
 });
+
+function validEnv() {
+  return {
+    APP_BASE_URL: "https://local-activities.example",
+    ADMIN_ACCESS_TOKEN: "admin-secret",
+    COLLECTOR_API_KEY: "collector-secret",
+    COLLECTOR_ID: "home-1",
+  };
+}
 
 function jsonResponse(body, status = 200) {
   return {

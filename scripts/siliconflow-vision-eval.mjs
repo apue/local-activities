@@ -9,9 +9,9 @@ import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 import {
   buildLlmUsageEnvelope,
   readCollectorUsageUploadConfig,
-  readUsageEnvironment,
   uploadLlmUsageEnvelopes,
 } from "./llm-usage-ledger.mjs";
+import { normalizeEvalUsageEnvironment } from "../src/config/write-guard.mjs";
 import {
   createWechat2RssClient,
   readWechat2RssConfig,
@@ -633,7 +633,7 @@ export async function runVisionEval({
     providerName: args.providerName,
   });
   const usageUploadConfig = readCollectorUsageUploadConfig(env);
-  const usageEnvironment = readUsageEnvironment(env);
+  const usageEnvironment = normalizeEvalUsageEnvironment(env);
   const runId = createVisionEvalRunId(now);
   const samples = args.caseFile
     ? await loadCaseFileSamples({

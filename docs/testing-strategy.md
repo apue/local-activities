@@ -112,6 +112,22 @@ Expected checks:
 - regression fixtures for known extraction failures
 - provider mock tests proving extractor modules do not upload to production
 
+## Write Isolation
+
+Default validation commands must be deterministic and non-mutating. `pnpm test`,
+`pnpm fixture:replay`, `pnpm fixture:e2e -- --all`, and non-live eval paths must
+not upload drafts, publish public events, or mutate hosted production data.
+
+Commands that write through hosted APIs must print the target base URL, target
+kind, run id when available, and write mode without printing secrets. Fixture
+upload and E2E fixture smoke require explicit write flags; fixture data must not
+become public production catalog data unless the operator uses the deliberate
+production seed path.
+
+Live eval may upload LLM usage because it spends real provider credit, but usage
+records must use an `eval:*` environment label so they remain separate from
+production collector usage.
+
 ## Matching / Revision
 
 Test focus:

@@ -574,7 +574,7 @@ describe("runVisionEval usage upload", () => {
       sourceRunId: "vision-eval-20260604020000",
       metadata: {
         workload: "vision_eval",
-        environment: "test",
+        environment: "eval:test",
         chargeable: true,
         usageSource: "provider_usage",
         pricingSource: "known_model_pricing",
