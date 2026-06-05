@@ -122,6 +122,35 @@ export async function runCollectorAgent({
     });
   }
 
+  const verificationPage = detectWechatVerificationPage(
+    observationResult.observation,
+  );
+  if (verificationPage) {
+    const payloads = buildAgentFailurePayloads({
+      config,
+      seedUrl,
+      runId,
+      sourceCandidate: observationResult.observation.sourceCandidate,
+      reason: "captcha_required",
+      stage: "page_fetch",
+      message: verificationPage.message,
+      retryable: true,
+      now,
+      diagnostics: [
+        ...observationResult.diagnostics,
+        ...verificationPage.diagnostics,
+      ],
+      runStartedAt,
+    });
+    return uploadAgentPayloads({
+      config,
+      fetchImpl,
+      payloads,
+      runId,
+      vercelJobId: reportVercelJob ? vercelJobId : undefined,
+    });
+  }
+
   if (config.browserSmokeOnly) {
     const payloads = buildBrowserSmokePayloads({
       config,
@@ -895,6 +924,46 @@ function inferPlatform(url) {
 
 function inferLanguageHints(text) {
   return /[\u4e00-\u9fff]/.test(text) ? ["zh-CN"] : [];
+}
+
+function detectWechatVerificationPage(observation) {
+  const finalUrl = String(observation?.finalUrl ?? "");
+  if (isWechatAppmsgCaptchaUrl(finalUrl)) {
+    return {
+      message: "WeChat environment verification page detected before extraction.",
+      diagnostics: [
+        { key: "wechat_verification_page", value: "appmsgcaptcha" },
+      ],
+    };
+  }
+
+  const text = [observation?.title, observation?.visibleText]
+    .filter(Boolean)
+    .join("\n");
+  if (
+    /环境异常|访问验证|完成验证后继续访问|appmsgcaptcha|验证码|captcha/i.test(
+      text,
+    )
+  ) {
+    return {
+      message: "WeChat environment verification text detected before extraction.",
+      diagnostics: [{ key: "wechat_verification_page", value: "text" }],
+    };
+  }
+
+  return undefined;
+}
+
+function isWechatAppmsgCaptchaUrl(value) {
+  try {
+    const url = new URL(value);
+    return (
+      url.hostname === "mp.weixin.qq.com" &&
+      url.pathname.includes("/mp/wappoc_appmsgcaptcha")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function normalizeArticleSnapshot(input) {
