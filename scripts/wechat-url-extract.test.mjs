@@ -131,6 +131,38 @@ describe("single WeChat URL extractor", () => {
     expect(formatWechatUrlExtractionSummary(result)).toContain("drafts=1");
   });
 
+  it("reports WeChat verification pages as capture failures before extraction", async () => {
+    const calls = [];
+    const result = await runWechatUrlExtractionOnce({
+      env: { COLLECTOR_ID: "collector-1" },
+      url: "https://mp.weixin.qq.com/s/blocked",
+      now: new Date("2026-06-03T04:00:00.000Z"),
+      readArticlePage: async () => ({
+        finalUrl:
+          "https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?poc_token=token",
+        text: "var PAGE_MID='mmbizwap:secitptpage/verify.html';",
+        html: "<body>verify</body>",
+      }),
+      extract: async (input) => {
+        calls.push(input);
+        throw new Error("extractor_should_not_run");
+      },
+    });
+
+    expect(calls).toHaveLength(0);
+    expect(result.extraction.kind).toBe("failed");
+    expect(result.draftSummaries).toEqual([]);
+    expect(result.failureSummaries).toEqual([
+      expect.objectContaining({
+        articleUrl: "https://mp.weixin.qq.com/s/blocked",
+        reason: "captcha_required",
+        stage: "page_fetch",
+        retryable: true,
+      }),
+    ]);
+    expect(formatWechatUrlExtractionSummary(result)).toContain("failures=1");
+  });
+
   it("passes URL browser HTML image evidence into the extractor", async () => {
     const calls = [];
     const result = await runWechatUrlExtractionOnce({

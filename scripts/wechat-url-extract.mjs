@@ -18,6 +18,7 @@ import { createUrlBrowserArticleBundle } from "../src/capture/source-adapters.mj
 
 const execFileAsync = promisify(execFile);
 const maxVisibleTextLength = 12_000;
+const collectorPayloadVersion = "2026-05-collector-v1";
 
 export function parseWechatUrlExtractionArgs(argv) {
   const args = {
@@ -91,9 +92,35 @@ export async function runWechatUrlExtractionOnce({
   extract = runLlmExtractionOnce,
 }) {
   if (!url) throw new Error("missing_url");
+  const runId = `wechat-url-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}`;
   const page = readArticleText
     ? { text: await readArticleText({ url, session }) }
     : await readArticlePage({ url, session });
+  const captureFailure = detectWechatArticleCaptureFailure({
+    url,
+    finalUrl: page.finalUrl,
+    text: page.text,
+    html: page.html,
+  });
+  if (captureFailure) {
+    const extraction = captureFailureExtractionResult({
+      env,
+      url,
+      runId,
+      now,
+      failure: captureFailure,
+    });
+    return {
+      url,
+      runId,
+      articleTitle: undefined,
+      articleBundle: undefined,
+      articleSnapshot: undefined,
+      extraction,
+      draftSummaries: [],
+      failureSummaries: extraction.failures.map((failure) => failure.payload),
+    };
+  }
   const articleBundle = buildWechatArticleBundleFromPage({
     url,
     finalUrl: page.finalUrl,
@@ -116,7 +143,6 @@ export async function runWechatUrlExtractionOnce({
     ...extractionInput.articleSnapshot,
     evidenceAssetIds: evidenceAssets.map((asset) => asset.assetId),
   };
-  const runId = `wechat-url-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}`;
   const extraction = await extract({
     env,
     articleSnapshot,
@@ -136,6 +162,38 @@ export async function runWechatUrlExtractionOnce({
     draftSummaries: summarizeDrafts(extraction.eventDrafts ?? []),
     failureSummaries: (extraction.failures ?? []).map((failure) => failure.payload),
   };
+}
+
+export function detectWechatArticleCaptureFailure({ finalUrl, text, html }) {
+  const finalUrlText = String(finalUrl ?? "");
+  if (isWechatCaptchaUrl(finalUrlText)) {
+    return {
+      reason: "captcha_required",
+      message: "WeChat opened a verification page instead of the article.",
+      marker: "final_url_wappoc_appmsgcaptcha",
+      finalUrl: finalUrlText,
+    };
+  }
+
+  const body = `${text ?? ""}\n${html ?? ""}`;
+  if (/mmbizwap:secitptpage\/verify\.html/i.test(body)) {
+    return {
+      reason: "captcha_required",
+      message: "WeChat article capture returned a verification page.",
+      marker: "secitptpage_verify_html",
+      finalUrl: finalUrlText || undefined,
+    };
+  }
+  if (/wappoc_appmsgcaptcha/i.test(body)) {
+    return {
+      reason: "captcha_required",
+      message: "WeChat article capture returned a captcha page.",
+      marker: "body_wappoc_appmsgcaptcha",
+      finalUrl: finalUrlText || undefined,
+    };
+  }
+
+  return undefined;
 }
 
 export function formatWechatUrlExtractionSummary(result) {
@@ -231,6 +289,67 @@ function cleanText(text) {
     .replace(/\r\n/g, "\n")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
+}
+
+function captureFailureExtractionResult({ env, url, runId, now, failure }) {
+  return {
+    kind: "failed",
+    runId,
+    eventDrafts: [],
+    evidenceAssets: [],
+    llmUsage: [],
+    failures: [
+      {
+        collectorId: clean(env.COLLECTOR_ID) ?? "unknown-collector",
+        runId,
+        observedAt: now.toISOString(),
+        payloadVersion: collectorPayloadVersion,
+        payload: removeUndefined({
+          articleUrl: url,
+          stage: "page_fetch",
+          reason: failure.reason,
+          message: failure.message,
+          retryable: true,
+          diagnostics: [
+            {
+              key: "capture_failure_marker",
+              value: failure.marker,
+            },
+            failure.finalUrl
+              ? {
+                  key: "final_url",
+                  value: failure.finalUrl,
+                }
+              : undefined,
+          ].filter(Boolean),
+        }),
+      },
+    ],
+  };
+}
+
+function isWechatCaptchaUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return (
+      parsed.hostname === "mp.weixin.qq.com" &&
+      parsed.pathname === "/mp/wappoc_appmsgcaptcha"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function removeUndefined(input) {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  );
+}
+
+function clean(value) {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
 }
 
 function usage() {

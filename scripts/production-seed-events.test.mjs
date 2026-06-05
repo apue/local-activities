@@ -21,11 +21,16 @@ describe("production seed events", () => {
     const plan = buildProductionSeedPlan(manifest);
 
     expect(plan.caseCount).toBeGreaterThanOrEqual(9);
-    expect(plan.liveImportCaseCount).toBeGreaterThanOrEqual(3);
+    expect(plan.liveImportCaseCount).toBeGreaterThanOrEqual(2);
     expect(plan.coverage.qr_registration).toContain(
       "us-center-qr-lecture-2026-06",
     );
     expect(plan.coverage.duplicate_pair).toHaveLength(2);
+    expect(
+      plan.cases
+        .filter((item) => item.autoImportSupported)
+        .map((item) => item.id),
+    ).not.toContain("beiping-friendship-beer-festival-live-short-url");
     expect(plan.cases.map((item) => item.sourceUrl).join("\n")).not.toContain(
       "fixture",
     );
@@ -239,7 +244,7 @@ describe("production seed events", () => {
         "--run-id",
         "production-seed-live",
         "--case",
-        "beiping-friendship-beer-festival-live-short-url",
+        "thai-festival-beijing-2026",
       ],
       env: {
         COLLECTOR_BASE_URL: "http://localhost:3000",
@@ -260,7 +265,7 @@ describe("production seed events", () => {
     });
 
     expect(imports).toHaveLength(1);
-    expect(imports[0].url).toBe("https://mp.weixin.qq.com/s/ToCTUmZumqYvCkWzz8-Igg");
+    expect(imports[0].url).toBe("https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg");
     expect(imports[0].session.length).toBeLessThanOrEqual(40);
     expect(result.plan).toMatchObject({
       caseCount: 1,
