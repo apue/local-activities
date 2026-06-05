@@ -74,6 +74,28 @@ Expected live verification flow:
    source URL is the original official source, posters/QRs render when present,
    and no test fixture copy appears.
 
+### Hosted Data Cleanup
+
+Use the audit first; it is read-only:
+
+```bash
+pnpm data:audit -- --env-file .env.local --limit 1000
+```
+
+Build a reset dry-run before requesting approval:
+
+```bash
+pnpm data:hygiene -- --env-file .env.local --reset-all-event-data --target-base-url https://local-activities.vercel.app --run-id data-reset-YYYYMMDD-dry-run
+```
+
+The reset command preserves `llm_usage_ledger`. Applying the reset is
+production-mutating and requires explicit operator approval in the current
+conversation plus:
+
+```bash
+pnpm data:hygiene -- --env-file .env.local --apply --allow-hosted-write --confirm-cleanup DELETE_EVENT_PIPELINE_DATA --confirm-target https://local-activities.vercel.app --run-id data-reset-YYYYMMDD
+```
+
 ### Fixture End-To-End Smoke
 
 Use this only when it is acceptable to create disposable fixture data:
