@@ -37,10 +37,41 @@ The command checks:
 - `/admin` returns `200`
 - `/api/admin/collector-jobs` returns `200` JSON with a `jobs` array
 - `/api/admin/event-drafts` returns `200` JSON with a `drafts` array
+- `/api/admin/llm-usage?range=today`, `7d`, and `all` return usage JSON
 - the same admin API with an invalid token returns `401` JSON
 
 This command is read-only and should be safe against production. It does not
 create collector jobs, drafts, or public events.
+
+### Public Catalog Quality Smoke
+
+Use this after live extraction, admin publishing, fixture cleanup, or public UI
+changes:
+
+```bash
+pnpm smoke:public-catalog --env-file .env.local
+```
+
+The command is read-only. It checks:
+
+- public homepage returns `200`
+- public event detail links from the homepage return `200`
+- public pages do not contain fixture copy such as `Fixture case`,
+  `*-fixture`, or `fixture-assets/`
+- public pages do not contain fake `example.com` source/register URLs
+- public pages do not render WeChat source-site image URLs such as
+  `mp.weixin.qq.com` or `mmbiz.qpic.cn`
+- public pages do not show `Organizer TBA`, which is too weak for published
+  high-confidence events when organizer/source evidence exists
+
+Expected live verification flow:
+
+1. Run one real extraction smoke or collector job against a real source URL.
+2. Review drafts in `/admin`; publish only real public events.
+3. Run `pnpm smoke:public-catalog --env-file .env.local`.
+4. Open the public homepage and one detail page on mobile width. Confirm the
+   source URL is the original official source, posters/QRs render when present,
+   and no test fixture copy appears.
 
 ### Fixture End-To-End Smoke
 
