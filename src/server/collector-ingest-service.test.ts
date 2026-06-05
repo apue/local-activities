@@ -182,7 +182,7 @@ describe("collector ingest service", () => {
     expect(store.publishedDrafts).toEqual([]);
   });
 
-  it("auto-publishes admin-curated drafts when minimum public fields are present", async () => {
+  it("keeps low-confidence complete drafts in review even when auto-publish is enabled", async () => {
     const store = new MemoryIngestStore();
     const envelope = completeDraftEnvelope({
       confidence: 0.51,
@@ -198,18 +198,10 @@ describe("collector ingest service", () => {
       }),
     ).resolves.toMatchObject({
       id: "draft-1",
-      reviewState: "approved",
-      autoPublished: true,
-      publishedEventId: "event-1",
+      reviewState: "needs_review",
+      autoPublished: false,
     });
-    expect(store.publishedDrafts).toEqual([
-      {
-        title: "Policy Event",
-        scheduleText: "5月30日至31日每日10:30-18:00",
-        posterImageUrl: "https://cdn.example.com/posters/policy.png",
-        publishedAt: "2026-05-28T08:00:00.000Z",
-      },
-    ]);
+    expect(store.publishedDrafts).toEqual([]);
   });
 
   it("auto-publishes high-confidence complete drafts through backend policy", async () => {
@@ -255,6 +247,29 @@ describe("collector ingest service", () => {
     ).resolves.toMatchObject({
       id: "draft-1",
       reviewState: "needs_review",
+      autoPublished: false,
+    });
+    expect(store.publishedDrafts).toEqual([]);
+  });
+
+  it("does not auto-publish QR-required drafts without registration evidence", async () => {
+    const store = new MemoryIngestStore();
+    const envelope = completeDraftEnvelope({
+      confidence: 0.98,
+      reservationStatus: "required",
+      registrationAction: undefined,
+      registrationUrl: undefined,
+      registrationQrAssetId: undefined,
+    });
+
+    await expect(
+      ingestEventDraft(envelope, store, {
+        autoPublishEnabled: true,
+        now: new Date("2026-05-28T08:00:00.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      id: "draft-1",
+      reviewState: "ready_for_review",
       autoPublished: false,
     });
     expect(store.publishedDrafts).toEqual([]);
@@ -350,6 +365,7 @@ function completeDraftEnvelope(
       venueName: "Cultural Center Hall",
       city: "Beijing",
       reservationStatus: "required",
+      registrationAction: "Register from source article",
       posterImageUrl: "https://cdn.example.com/posters/policy.png",
       posterImageAlt: "Policy Event poster",
       posterImageSourceUrl: "https://example.com/source-poster.png",

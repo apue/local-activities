@@ -107,6 +107,20 @@ describe("publish policy", () => {
     expect(decision.hardBlockers).toEqual([]);
   });
 
+  it("allows QR-required events with an explicit registration action", () => {
+    const decision = computePublishDecision({
+      ...baseDraft,
+      reservationStatus: "required",
+      registrationUrl: undefined,
+      registrationQrAssetId: undefined,
+      registrationQrImageUrl: undefined,
+      registrationAction: "Email the cultural center to reserve a seat.",
+    });
+
+    expect(decision.canPublish).toBe(true);
+    expect(decision.hardBlockers).toEqual([]);
+  });
+
   it("soft-blocks low-confidence or missing end time until override reason exists", () => {
     const softBlocked = computePublishDecision({
       ...baseDraft,
