@@ -12,8 +12,8 @@ import {
 import {
   articleBundleToArticleSnapshot,
   articleBundleToExtractionInput,
-  createCapturedArticleBundle,
 } from "../src/capture/article-bundle.mjs";
+import { createUrlBrowserArticleBundle } from "../src/capture/source-adapters.mjs";
 
 const execFileAsync = promisify(execFile);
 const maxVisibleTextLength = 12_000;
@@ -45,6 +45,16 @@ export function buildWechatArticleSnapshotFromText({ url, text, now = new Date()
 }
 
 export function buildWechatArticleBundleFromText({ url, text, now = new Date() }) {
+  return buildWechatArticleBundleFromPage({ url, text, now });
+}
+
+export function buildWechatArticleBundleFromPage({
+  url,
+  finalUrl,
+  text,
+  html,
+  now = new Date(),
+}) {
   const visibleText = cleanText(text).slice(0, maxVisibleTextLength);
   const lines = visibleText
     .split("\n")
@@ -53,18 +63,16 @@ export function buildWechatArticleBundleFromText({ url, text, now = new Date() }
   const title = lines[0] ?? "Untitled WeChat article";
   const authorName = inferAuthorName(lines, title);
   const publishedAt = inferPublishedAt(lines);
-  return createCapturedArticleBundle({
-    provider: "url_browser",
+  return createUrlBrowserArticleBundle({
     sourceUrl: url,
-    finalUrl: url,
+    finalUrl: finalUrl ?? url,
     title,
     authorName,
     publishedAt,
     capturedAt: now.toISOString(),
     languageHints: inferLanguageHints(visibleText),
-    captureMode: "text_complete",
     text: visibleText,
-    images: [],
+    html,
   });
 }
 
@@ -75,12 +83,21 @@ export async function runWechatUrlExtractionOnce({
   session = "wechat-url-extract",
   now = new Date(),
   fetchImpl = fetch,
+  readArticlePage,
   readArticleText = readWechatArticleTextWithAgentBrowser,
   extract = runLlmExtractionOnce,
 }) {
   if (!url) throw new Error("missing_url");
-  const text = await readArticleText({ url, session });
-  const articleBundle = buildWechatArticleBundleFromText({ url, text, now });
+  const page = readArticlePage
+    ? await readArticlePage({ url, session })
+    : { text: await readArticleText({ url, session }) };
+  const articleBundle = buildWechatArticleBundleFromPage({
+    url,
+    finalUrl: page.finalUrl,
+    text: page.text,
+    html: page.html,
+    now,
+  });
   const { articleSnapshot, evidenceAssets } =
     articleBundleToExtractionInput(articleBundle);
   const runId = `wechat-url-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}`;
@@ -116,9 +133,24 @@ export function formatWechatUrlExtractionSummary(result) {
 }
 
 export async function readWechatArticleTextWithAgentBrowser({ url, session }) {
+  return (await readWechatArticlePageWithAgentBrowser({ url, session })).text;
+}
+
+export async function readWechatArticlePageWithAgentBrowser({ url, session }) {
   await execAgentBrowser(["--session", session, "open", url]);
   await execAgentBrowser(["--session", session, "wait", "--load", "networkidle"]);
-  return execAgentBrowser(["--session", session, "get", "text", "body"]);
+  const [text, html, finalUrl] = await Promise.all([
+    execAgentBrowser(["--session", session, "get", "text", "body"]),
+    execAgentBrowser(["--session", session, "get", "html", "body"]).catch(
+      () => undefined,
+    ),
+    execAgentBrowser(["--session", session, "get", "url"]).catch(() => url),
+  ]);
+  return {
+    text,
+    html,
+    finalUrl,
+  };
 }
 
 async function execAgentBrowser(args) {
