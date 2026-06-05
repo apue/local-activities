@@ -420,6 +420,7 @@ describe("local collector console runtime", () => {
         sourceRunId: "id-3",
         articleSnapshotId: "id-4",
         eventDraftId: "id-5",
+        llmUsageIds: ["id-6"],
       },
     });
     expect(calls.map((call) => call.url)).toEqual([
@@ -428,6 +429,7 @@ describe("local collector console runtime", () => {
       "https://local-activities.example/api/collector/source-run",
       "https://local-activities.example/api/collector/article-snapshot",
       "https://local-activities.example/api/collector/event-draft",
+      "https://local-activities.example/api/collector/llm-usage",
     ]);
     expect(JSON.stringify(calls.map((call) => call.body))).not.toContain(
       "openai-secret",
