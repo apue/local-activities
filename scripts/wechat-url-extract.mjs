@@ -13,6 +13,7 @@ import {
   articleBundleToArticleSnapshot,
   articleBundleToExtractionInput,
 } from "../src/capture/article-bundle.mjs";
+import { storeImageEvidenceAssets } from "../src/collector/evidence/wechat-images.mjs";
 import { createUrlBrowserArticleBundle } from "../src/capture/source-adapters.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -83,14 +84,16 @@ export async function runWechatUrlExtractionOnce({
   session = "wechat-url-extract",
   now = new Date(),
   fetchImpl = fetch,
-  readArticlePage,
-  readArticleText = readWechatArticleTextWithAgentBrowser,
+  readArticlePage = readWechatArticlePageWithAgentBrowser,
+  readArticleText,
+  storeImages,
+  putPublicAsset,
   extract = runLlmExtractionOnce,
 }) {
   if (!url) throw new Error("missing_url");
-  const page = readArticlePage
-    ? await readArticlePage({ url, session })
-    : { text: await readArticleText({ url, session }) };
+  const page = readArticleText
+    ? { text: await readArticleText({ url, session }) }
+    : await readArticlePage({ url, session });
   const articleBundle = buildWechatArticleBundleFromPage({
     url,
     finalUrl: page.finalUrl,
@@ -98,8 +101,21 @@ export async function runWechatUrlExtractionOnce({
     html: page.html,
     now,
   });
-  const { articleSnapshot, evidenceAssets } =
-    articleBundleToExtractionInput(articleBundle);
+  const extractionInput = articleBundleToExtractionInput(articleBundle);
+  const shouldStoreImages =
+    storeImages ?? Boolean(putPublicAsset || env.BLOB_READ_WRITE_TOKEN?.trim());
+  const evidenceAssets =
+    shouldStoreImages && extractionInput.evidenceAssets.length
+      ? await storeImageEvidenceAssets({
+          evidenceAssets: extractionInput.evidenceAssets,
+          fetchImpl,
+          putPublicAsset,
+        })
+      : extractionInput.evidenceAssets;
+  const articleSnapshot = {
+    ...extractionInput.articleSnapshot,
+    evidenceAssetIds: evidenceAssets.map((asset) => asset.assetId),
+  };
   const runId = `wechat-url-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}`;
   const extraction = await extract({
     env,

@@ -174,6 +174,7 @@ export async function runProductionSeedImport({
       session: createSeedSessionName({ runId, caseId: articleCase.id }),
       now,
       fetchImpl,
+      storeImages: Boolean(seedEnv.BLOB_READ_WRITE_TOKEN?.trim()),
     });
     imported.push({
       caseId: articleCase.id,

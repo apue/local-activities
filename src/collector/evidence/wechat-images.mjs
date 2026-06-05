@@ -98,6 +98,23 @@ export function buildImageEvidenceAssetEnvelopes({
   );
 }
 
+export async function storeImageEvidenceAssets({
+  evidenceAssets,
+  fetchImpl = fetch,
+  putPublicAsset = putPublicEvidenceAsset,
+}) {
+  return Promise.all(
+    evidenceAssets.map(async (payload) => {
+      const envelope = await withStoredImageEvidence({
+        envelope: { payload },
+        fetchImpl,
+        putPublicAsset,
+      });
+      return envelope.payload;
+    }),
+  );
+}
+
 export function captureModeForImageEvidence({ visibleText, evidenceAssets }) {
   const roles = evidenceAssets.map((asset) => asset.payload.role);
   const hasQr = roles.includes("qr") || roles.includes("registration");
