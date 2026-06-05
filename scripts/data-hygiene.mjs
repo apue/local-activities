@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 
 import { createClient } from "@supabase/supabase-js";
 
+import {
+  assertHostedWriteAllowed,
+  writeTargetSummary,
+} from "../src/config/write-guard.mjs";
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 
 const defaultLimit = 1_000;
@@ -20,6 +24,9 @@ export async function fetchDataAuditRows({ client, limit = defaultLimit }) {
     articleSnapshots,
     evidenceAssets,
     canonicalEvents,
+    sourceRuns,
+    collectorFailures,
+    collectorJobs,
   ] = await Promise.all([
     selectRows(
       client,
@@ -48,7 +55,25 @@ export async function fetchDataAuditRows({ client, limit = defaultLimit }) {
     selectRows(
       client,
       "canonical_events",
-      "id,event_id,title,summary,source_url,created_at",
+      "id,event_id,title,summary,source_url,status,created_at",
+      limit,
+    ),
+    selectRows(
+      client,
+      "source_runs",
+      "id,run_id,status,seed_url,started_at,finished_at,created_at",
+      limit,
+    ),
+    selectRows(
+      client,
+      "collector_failures",
+      "id,failure_id,article_url,stage,reason,created_at",
+      limit,
+    ),
+    selectRows(
+      client,
+      "collector_jobs",
+      "id,job_id,seed_url,state,requested_at,finished_at,created_at",
       limit,
     ),
   ]);
@@ -59,6 +84,9 @@ export async function fetchDataAuditRows({ client, limit = defaultLimit }) {
     articleSnapshots,
     evidenceAssets,
     canonicalEvents,
+    sourceRuns,
+    collectorFailures,
+    collectorJobs,
   };
 }
 
@@ -68,6 +96,9 @@ export function summarizeDataAudit(rows) {
   const articleSnapshots = rows.articleSnapshots ?? [];
   const evidenceAssets = rows.evidenceAssets ?? [];
   const canonicalEvents = rows.canonicalEvents ?? [];
+  const sourceRuns = rows.sourceRuns ?? [];
+  const collectorFailures = rows.collectorFailures ?? [];
+  const collectorJobs = rows.collectorJobs ?? [];
 
   const duplicateDraftGroups = duplicateGroups(eventDrafts, (draft) =>
     `${draft.article_url ?? ""}\n${normalizeTitle(draft.title)}`,
@@ -144,6 +175,9 @@ export function summarizeDataAudit(rows) {
       articleSnapshots: articleSnapshots.length,
       evidenceAssets: evidenceAssets.length,
       canonicalEvents: canonicalEvents.length,
+      sourceRuns: sourceRuns.length,
+      collectorFailures: collectorFailures.length,
+      collectorJobs: collectorJobs.length,
     },
     draftReviewStates: countBy(eventDrafts, (draft) => draft.review_state ?? "unknown"),
     draftProcessingStates: countBy(
@@ -173,7 +207,15 @@ export function summarizeDataAudit(rows) {
       brokenEvidenceUrlCount: brokenEvidenceUrls.length,
       localProxyEvidenceUrlCount: localProxyEvidenceUrls.length,
       excludedArticleCount: excludedArticles.length,
+      sourceRunCount: sourceRuns.length,
+      collectorFailureCount: collectorFailures.length,
+      collectorJobCount: collectorJobs.length,
     },
+    preservationCandidates: buildPreservationCandidates(rows, {
+      likelyNegativeDrafts,
+      likelyTestRows,
+      canonicalEvents,
+    }),
   };
 }
 
@@ -321,6 +363,92 @@ export function formatDataHygieneMarkdown(actions) {
     .join("\n");
 }
 
+export function planDataReset(rows) {
+  const tables = [
+    ["canonical_events", rows.canonicalEvents ?? []],
+    ["event_drafts", rows.eventDrafts ?? []],
+    ["excluded_articles", rows.excludedArticles ?? []],
+    ["evidence_assets", rows.evidenceAssets ?? []],
+    ["article_snapshots", rows.articleSnapshots ?? []],
+    ["collector_failures", rows.collectorFailures ?? []],
+    ["source_runs", rows.sourceRuns ?? []],
+    ["collector_jobs", rows.collectorJobs ?? []],
+  ];
+  return tables.map(([table, tableRows]) => ({
+    table,
+    idColumn: "id",
+    ids: tableRows.map((row) => row.id).filter((id) => id !== undefined && id !== null),
+  }));
+}
+
+export async function applyDataReset({ client, plan, runId }) {
+  const results = [];
+  for (const action of plan) {
+    if (action.ids.length === 0) {
+      results.push({ ...action, deletedCount: 0, deletedIds: [] });
+      continue;
+    }
+    const { data, error } = await client
+      .from(action.table)
+      .delete()
+      .in(action.idColumn, action.ids)
+      .select(action.idColumn);
+    if (error) {
+      throw new Error(`data_reset_delete_failed:${action.table}:${error.message}`);
+    }
+    const deletedIds = (data ?? [])
+      .map((row) => row[action.idColumn])
+      .filter((id) => id !== undefined && id !== null);
+    results.push({
+      ...action,
+      deletedCount: deletedIds.length,
+      deletedIds,
+      runId,
+    });
+  }
+  return results;
+}
+
+export function formatDataResetMarkdown({ targetSummary, audit, plan, results }) {
+  const applied = Array.isArray(results);
+  const rows = applied ? results : plan;
+  return [
+    applied ? "# Data Reset Applied" : "# Data Reset Dry Run",
+    "",
+    targetSummary,
+    "",
+    "Usage ledger rows are preserved by this command.",
+    "",
+    "## Table Counts Before Reset",
+    "",
+    "| Table | Count |",
+    "| --- | ---: |",
+    `| event_drafts | ${audit.tableCounts.eventDrafts} |`,
+    `| excluded_articles | ${audit.tableCounts.excludedArticles} |`,
+    `| article_snapshots | ${audit.tableCounts.articleSnapshots} |`,
+    `| evidence_assets | ${audit.tableCounts.evidenceAssets} |`,
+    `| canonical_events | ${audit.tableCounts.canonicalEvents} |`,
+    `| source_runs | ${audit.tableCounts.sourceRuns} |`,
+    `| collector_failures | ${audit.tableCounts.collectorFailures} |`,
+    `| collector_jobs | ${audit.tableCounts.collectorJobs} |`,
+    "",
+    "## Reset Plan",
+    "",
+    "| Table | Count | IDs |",
+    "| --- | ---: | --- |",
+    ...rows.map((row) => {
+      const ids = applied ? row.deletedIds : row.ids;
+      const count = applied ? row.deletedCount : row.ids.length;
+      return `| ${row.table} | ${count} | ${ids.slice(0, 50).join(", ")}${ids.length > 50 ? `, ... ${ids.length - 50} more` : ""} |`;
+    }),
+    "",
+    "## Preservation Candidates",
+    "",
+    ...formatPreservationCandidates(audit.preservationCandidates),
+    "",
+  ].join("\n");
+}
+
 export async function runDataAuditCli({
   argv = process.argv.slice(2),
   env = process.env,
@@ -333,7 +461,7 @@ export async function runDataAuditCli({
     return 0;
   }
   if (mode === "hygiene" && args.apply) {
-    throw new Error("data_hygiene_apply_not_enabled");
+    assertDataResetApproval(args);
   }
 
   const mergedEnv = mergeEnvs(
@@ -348,9 +476,36 @@ export async function runDataAuditCli({
     printResult(audit, args.format, formatDataAuditMarkdown);
   } else {
     const actions = planDataHygieneActions(rows, audit);
-    printResult({ audit, actions }, args.format, (result) =>
-      formatDataHygieneMarkdown(result.actions),
-    );
+    if (args.apply || args.resetAll) {
+      const runId = args.runId ?? createDataResetRunId(new Date());
+      const target = assertHostedWriteAllowed({
+        command: "data_hygiene",
+        baseUrl: args.targetBaseUrl ?? readTargetBaseUrl(mergedEnv),
+        allowHostedWrite: args.apply ? args.allowHostedWrite : true,
+      });
+      if (args.confirmTarget && args.confirmTarget !== target.baseUrl) {
+        throw new Error("data_hygiene_confirm_target_mismatch");
+      }
+      const targetSummary = writeTargetSummary({
+        command: "data_hygiene",
+        target,
+        runId,
+        writeMode: args.apply ? "apply_reset" : "dry_run_reset",
+      });
+      const plan = planDataReset(rows);
+      const results = args.apply
+        ? await applyDataReset({ client: runtimeClient, plan, runId })
+        : undefined;
+      printResult(
+        { audit, plan, results, targetSummary },
+        args.format,
+        (result) => formatDataResetMarkdown(result),
+      );
+    } else {
+      printResult({ audit, actions }, args.format, (result) =>
+        formatDataHygieneMarkdown(result.actions),
+      );
+    }
   }
 
   return 0;
@@ -393,6 +548,12 @@ function parseArgs(argv) {
     limit: defaultLimit,
     dryRun: true,
     apply: false,
+    resetAll: false,
+    allowHostedWrite: false,
+    confirmCleanup: undefined,
+    confirmTarget: undefined,
+    targetBaseUrl: undefined,
+    runId: undefined,
     help: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -420,6 +581,23 @@ function parseArgs(argv) {
     } else if (arg === "--apply") {
       args.apply = true;
       args.dryRun = false;
+      args.resetAll = true;
+    } else if (arg === "--reset-all-event-data") {
+      args.resetAll = true;
+    } else if (arg === "--allow-hosted-write") {
+      args.allowHostedWrite = true;
+    } else if (arg === "--confirm-cleanup") {
+      args.confirmCleanup = requiredValue(argv, index, arg);
+      index += 1;
+    } else if (arg === "--confirm-target") {
+      args.confirmTarget = normalizeBaseUrl(requiredValue(argv, index, arg));
+      index += 1;
+    } else if (arg === "--target-base-url") {
+      args.targetBaseUrl = normalizeBaseUrl(requiredValue(argv, index, arg));
+      index += 1;
+    } else if (arg === "--run-id") {
+      args.runId = requiredValue(argv, index, arg);
+      index += 1;
     } else {
       throw new Error(`unknown_arg:${arg}`);
     }
@@ -438,8 +616,42 @@ Options:
   --format <type>    markdown or json. Default markdown.
   --limit <n>        Max rows per table to inspect. Default ${defaultLimit}.
   --dry-run          Hygiene mode default; performs no writes.
-  --apply            Refused for now; cleanup policy needs explicit approval.
+  --reset-all-event-data
+                    Build a reset plan for current event pipeline data.
+  --apply            Apply reset plan. Requires explicit approval flags.
+  --allow-hosted-write
+                    Required when target is preview/hosted/production.
+  --confirm-cleanup DELETE_EVENT_PIPELINE_DATA
+                    Required for --apply.
+  --confirm-target <url>
+                    Required for --apply and must match target base URL.
+  --target-base-url <url>
+                    Explicit target base URL for write guarding.
+  --run-id <id>      Optional reset run id printed in the report.
   --help             Show this help text.`);
+}
+
+function assertDataResetApproval(args) {
+  if (!args.resetAll) throw new Error("data_hygiene_apply_requires_reset_plan");
+  if (args.confirmCleanup !== "DELETE_EVENT_PIPELINE_DATA") {
+    throw new Error("data_hygiene_apply_requires_confirm_cleanup");
+  }
+  if (!args.confirmTarget) {
+    throw new Error("data_hygiene_apply_requires_confirm_target");
+  }
+}
+
+function readTargetBaseUrl(env) {
+  return (
+    env.NEXT_PUBLIC_APP_URL?.trim() ??
+    env.APP_BASE_URL?.trim() ??
+    env.COLLECTOR_BASE_URL?.trim() ??
+    ""
+  );
+}
+
+function createDataResetRunId(now) {
+  return `data-reset-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}`;
 }
 
 function printResult(result, format, markdownFormatter) {
@@ -519,6 +731,68 @@ function normalizeTitle(value) {
 
 function isLikelyTestRow(...values) {
   return values.some((value) => likelyTestPattern.test(String(value ?? "")));
+}
+
+function buildPreservationCandidates(rows, context) {
+  const candidates = new Map();
+  for (const draft of context.likelyNegativeDrafts) {
+    addPreservationCandidate(candidates, {
+      reason: "likely_negative_draft",
+      articleUrl: draft.article_url,
+      title: draft.title,
+      table: "event_drafts",
+      id: draft.id,
+    });
+  }
+  for (const event of context.canonicalEvents.filter((row) =>
+    isLikelyTestRow(row.source_url, row.title, row.summary, row.event_id),
+  )) {
+    addPreservationCandidate(candidates, {
+      reason: "published_test_or_fixture_event",
+      articleUrl: event.source_url,
+      title: event.title,
+      table: "canonical_events",
+      id: event.id,
+    });
+  }
+  for (const row of context.likelyTestRows) {
+    addPreservationCandidate(candidates, {
+      reason: "likely_test_row",
+      articleUrl: row.url,
+      table: row.table,
+      id: row.id,
+    });
+  }
+  for (const article of rows.excludedArticles ?? []) {
+    addPreservationCandidate(candidates, {
+      reason: "excluded_article",
+      articleUrl: article.article_url,
+      title: article.triage_decision,
+      table: "excluded_articles",
+      id: article.id,
+    });
+  }
+  return [...candidates.values()];
+}
+
+function addPreservationCandidate(candidates, candidate) {
+  const key = `${candidate.articleUrl ?? ""}\u0000${candidate.table}\u0000${candidate.id}`;
+  if (!candidate.articleUrl && !candidate.title) return;
+  candidates.set(key, candidate);
+}
+
+function formatPreservationCandidates(candidates) {
+  if (!candidates?.length) return ["_None_"];
+  return candidates
+    .slice(0, 40)
+    .map(
+      (candidate) =>
+        `- ${candidate.reason} ${candidate.table}#${candidate.id}: ${candidate.title ?? candidate.articleUrl ?? "untitled"}`,
+    );
+}
+
+function normalizeBaseUrl(value) {
+  return new URL(String(value ?? "").trim()).toString().replace(/\/+$/, "");
 }
 
 function formatCounts(counts) {

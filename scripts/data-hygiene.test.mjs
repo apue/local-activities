@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   formatDataAuditMarkdown,
   formatDataHygieneMarkdown,
+  formatDataResetMarkdown,
+  planDataReset,
   planDataHygieneActions,
   runDataAuditCli,
   summarizeDataAudit,
@@ -104,6 +106,38 @@ function fixtureRows() {
         created_at: "2026-06-04T08:00:00.000Z",
       },
     ],
+    sourceRuns: [
+      {
+        id: 50,
+        run_id: "run-fixture",
+        status: "success",
+        seed_url: "https://mp.weixin.qq.com/s/beiping-fixture",
+        started_at: "2026-06-04T08:00:00.000Z",
+        finished_at: "2026-06-04T08:01:00.000Z",
+        created_at: "2026-06-04T08:00:00.000Z",
+      },
+    ],
+    collectorFailures: [
+      {
+        id: 60,
+        failure_id: "failure-fixture",
+        article_url: "https://mp.weixin.qq.com/s/failure-fixture",
+        stage: "agent_extraction",
+        reason: "agent_response_invalid_schema",
+        created_at: "2026-06-04T09:00:00.000Z",
+      },
+    ],
+    collectorJobs: [
+      {
+        id: 70,
+        job_id: "job-fixture",
+        seed_url: "https://mp.weixin.qq.com/s/job-fixture",
+        state: "completed",
+        requested_at: "2026-06-04T09:00:00.000Z",
+        finished_at: "2026-06-04T09:01:00.000Z",
+        created_at: "2026-06-04T09:00:00.000Z",
+      },
+    ],
   };
 }
 
@@ -112,6 +146,7 @@ describe("data hygiene audit", () => {
     const audit = summarizeDataAudit(fixtureRows());
 
     expect(audit.tableCounts.eventDrafts).toBe(4);
+    expect(audit.tableCounts.sourceRuns).toBe(1);
     expect(audit.draftTriageDecisions).toEqual({
       missing: 1,
       event: 3,
@@ -124,6 +159,9 @@ describe("data hygiene audit", () => {
       brokenEvidenceUrlCount: 1,
       localProxyEvidenceUrlCount: 1,
       excludedArticleCount: 1,
+      sourceRunCount: 1,
+      collectorFailureCount: 1,
+      collectorJobCount: 1,
     });
     expect(audit.duplicateDraftGroups[0]).toMatchObject({
       articleUrl: "https://mp.weixin.qq.com/s/real-event",
@@ -161,6 +199,30 @@ describe("data hygiene audit", () => {
     expect(formatDataHygieneMarkdown(actions)).toContain("review_duplicate_draft");
   });
 
+  it("builds a reset plan without usage ledger deletion", () => {
+    const plan = planDataReset(fixtureRows());
+
+    expect(plan).toContainEqual({
+      table: "canonical_events",
+      idColumn: "id",
+      ids: [40],
+    });
+    expect(plan).toContainEqual({
+      table: "collector_jobs",
+      idColumn: "id",
+      ids: [70],
+    });
+    expect(plan.map((action) => action.table)).not.toContain("llm_usage_ledger");
+    expect(
+      formatDataResetMarkdown({
+        targetSummary:
+          "command=data_hygiene target=test baseUrl=https://activities.example runId=reset-1 writeMode=dry_run_reset",
+        audit: summarizeDataAudit(fixtureRows()),
+        plan,
+      }),
+    ).toContain("Usage ledger rows are preserved");
+  });
+
   it("refuses apply mode before creating a Supabase client", async () => {
     const client = { from: vi.fn() };
 
@@ -171,7 +233,135 @@ describe("data hygiene audit", () => {
         env: {},
         client,
       }),
-    ).rejects.toThrow("data_hygiene_apply_not_enabled");
+    ).rejects.toThrow("data_hygiene_apply_requires_confirm_cleanup");
     expect(client.from).not.toHaveBeenCalled();
   });
+
+  it("refuses apply mode without explicit cleanup and target confirmation", async () => {
+    const client = { from: vi.fn() };
+
+    await expect(
+      runDataAuditCli({
+        mode: "hygiene",
+        argv: ["--apply", "--allow-hosted-write"],
+        env: {
+          APP_BASE_URL: "https://local-activities.vercel.app",
+        },
+        client,
+      }),
+    ).rejects.toThrow("data_hygiene_apply_requires_confirm_cleanup");
+    expect(client.from).not.toHaveBeenCalled();
+  });
+
+  it("applies a confirmed reset plan through guarded table deletes", async () => {
+    const calls = [];
+    await expect(
+      runDataAuditCli({
+        mode: "hygiene",
+        argv: [
+          "--apply",
+          "--allow-hosted-write",
+          "--confirm-cleanup",
+          "DELETE_EVENT_PIPELINE_DATA",
+          "--confirm-target",
+          "https://local-activities.vercel.app",
+          "--run-id",
+          "data-reset-test",
+        ],
+        env: {
+          APP_BASE_URL: "https://local-activities.vercel.app",
+        },
+        client: supabaseClientForReset(fixtureRows(), calls),
+      }),
+    ).resolves.toBe(0);
+
+    expect(calls.filter((call) => call[0] === "delete").map((call) => call[1]))
+      .toEqual([
+        "canonical_events",
+        "event_drafts",
+        "excluded_articles",
+        "evidence_assets",
+        "article_snapshots",
+        "collector_failures",
+        "source_runs",
+        "collector_jobs",
+      ]);
+    expect(calls.map((call) => call[1])).not.toContain("llm_usage_ledger");
+  });
+
+  it("allows hosted reset dry-run without the hosted write flag", async () => {
+    const calls = [];
+
+    await expect(
+      runDataAuditCli({
+        mode: "hygiene",
+        argv: [
+          "--reset-all-event-data",
+          "--target-base-url",
+          "https://local-activities.vercel.app",
+          "--run-id",
+          "data-reset-dry-run",
+        ],
+        env: {},
+        client: supabaseClientForReset(fixtureRows(), calls),
+      }),
+    ).resolves.toBe(0);
+
+    expect(calls.some((call) => call[0] === "delete")).toBe(false);
+  });
 });
+
+function supabaseClientForReset(rows, calls) {
+  const tableRows = {
+    event_drafts: rows.eventDrafts,
+    excluded_articles: rows.excludedArticles,
+    article_snapshots: rows.articleSnapshots,
+    evidence_assets: rows.evidenceAssets,
+    canonical_events: rows.canonicalEvents,
+    source_runs: rows.sourceRuns,
+    collector_failures: rows.collectorFailures,
+    collector_jobs: rows.collectorJobs,
+  };
+  return {
+    from(table) {
+      const query = {
+        selectedRows: tableRows[table] ?? [],
+        deleteMode: false,
+        selectedIds: [],
+        select() {
+          calls.push(["select", table]);
+          return query;
+        },
+        order() {
+          calls.push(["order", table]);
+          return query;
+        },
+        limit() {
+          calls.push(["limit", table]);
+          return Promise.resolve({ data: query.selectedRows, error: null });
+        },
+        delete() {
+          calls.push(["delete", table]);
+          query.deleteMode = true;
+          return query;
+        },
+        in(column, ids) {
+          calls.push(["in", table, column, ids]);
+          query.selectedIds = ids;
+          return query;
+        },
+      };
+      query.select = function select() {
+        calls.push(["select", table]);
+        if (query.deleteMode) {
+          return Promise.resolve({
+            data: query.selectedIds.map((id) => ({ id })),
+            error: null,
+          });
+        }
+        return query;
+      };
+      return query;
+    },
+  };
+}
