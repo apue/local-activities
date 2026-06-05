@@ -476,6 +476,7 @@ async function requestModelWithRetries({
       });
       const parsed = parseAgentResponse(parseOpenAIJson(data), {
         publicAssetUrlPrefixes: config.publicAssetUrlPrefixes,
+        articleSnapshotFallback: articleSnapshotFromObservation(observation),
       });
       if (parsed.ok) return parsed;
       if (parsed.retryable === false) return parsed;
@@ -711,7 +712,11 @@ function parseAgentResponse(data, options = {}) {
   if (!isNumberInRange(data.confidence, 0, 1)) {
     return invalidAgentResponse("Agent response missed confidence.");
   }
-  const articleSnapshot = normalizeArticleSnapshot(data.articleSnapshot);
+  const articleSnapshot =
+    normalizeArticleSnapshot(data.articleSnapshot) ??
+    (data.eventDraft
+      ? normalizeArticleSnapshot(options.articleSnapshotFallback)
+      : undefined);
   if (!articleSnapshot) {
     return invalidAgentResponse("Agent response missed article snapshot.");
   }
