@@ -562,6 +562,49 @@ describe("collector agent processor", () => {
     );
   });
 
+  it("uses the browser observation as article snapshot fallback when the model omits it", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
+      if (url === "https://api.openai.com/v1/responses") {
+        const { articleSnapshot: _articleSnapshot, ...response } =
+          agentSuccessResponse();
+        return jsonResponse(openaiResponse(response));
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const observation = pageObservation({
+      finalUrl: "https://mp.weixin.qq.com/s/fallback-snapshot",
+      canonicalUrl: "https://mp.weixin.qq.com/s/fallback-snapshot",
+      title: "Fallback Snapshot Event",
+      visibleText: "Fallback Snapshot Event\n2026-06-06\nCultural Center Hall",
+    });
+
+    const result = await runCollectorAgent({
+      env: agentEnv(),
+      seedUrl: "https://mp.weixin.qq.com/s/fallback-snapshot",
+      runId: "agent-fallback-snapshot",
+      fetchImpl,
+      browserObserver: async () => observation,
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    const snapshotUpload = calls.find((call) =>
+      call.url.endsWith("/api/collector/article-snapshot"),
+    );
+    expect(snapshotUpload.body.payload).toMatchObject({
+      canonicalUrl: "https://mp.weixin.qq.com/s/fallback-snapshot",
+      finalUrl: "https://mp.weixin.qq.com/s/fallback-snapshot",
+      title: "Fallback Snapshot Event",
+      captureMode: "text_complete",
+    });
+    expect(result.uploadedIds).toMatchObject({
+      articleSnapshotId: "id-5",
+      eventDraftId: "id-6",
+    });
+  });
+
   it("uploads a structured failure after OpenAI schema retry exhaustion", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {
