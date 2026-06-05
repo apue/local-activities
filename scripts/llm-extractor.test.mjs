@@ -118,6 +118,23 @@ describe("lightweight LLM extractor", () => {
     expect(formatLlmExtractionSummary(result)).not.toContain("openai-secret");
   });
 
+  it("falls back to the article author when the provider omits organizer", async () => {
+    const response = activityResponse();
+    delete response.events[0].organizer;
+
+    const result = await runLlmExtractionOnce({
+      env: validEnv(),
+      articleSnapshot: textArticle(),
+      fetchImpl: async () => jsonResponse(openaiResponse(response)),
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "extract-organizer-fallback",
+    });
+
+    expect(result.eventDrafts[0].payload.organizer).toBe(
+      "Embassy Cultural Office",
+    );
+  });
+
   it("supports chat completions providers for activity extraction", async () => {
     const calls = [];
     const result = await runLlmExtractionOnce({
