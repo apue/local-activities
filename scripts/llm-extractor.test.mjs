@@ -12,7 +12,7 @@ import {
   formatLlmExtractionSummary,
   readLlmExtractorConfig,
   runLlmExtractionOnce,
-} from "./llm-extractor.mjs";
+} from "../src/extraction/llm-extractor.mjs";
 
 describe("lightweight LLM extractor", () => {
   it("reports missing provider configuration without leaking provided secrets", () => {
