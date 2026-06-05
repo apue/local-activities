@@ -161,6 +161,9 @@ describe("supabase admin store", () => {
         evidenceAssetIds: ["evidence-1"],
         failureIds: ["failure-1"],
         finishedAt: "2026-05-28T08:02:00.000Z",
+        preferredRunner: "local_collector",
+        actualRunner: "local_collector",
+        runnerState: "failed",
       },
     ]);
   });

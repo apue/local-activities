@@ -25,8 +25,7 @@ class RouteMemoryStore implements CollectorJobStore {
     if (!this.job || this.job.state !== "queued") return null;
     if (
       input.runner === "local_collector" &&
-      this.job.preferredRunner !== "local_collector" &&
-      this.job.fallbackEligible !== true
+      this.job.preferredRunner !== "local_collector"
     ) {
       return null;
     }
@@ -36,18 +35,12 @@ class RouteMemoryStore implements CollectorJobStore {
     this.job.leaseExpiresAt = input.leaseExpiresAt;
     this.job.attemptNumber += 1;
     this.job.actualRunner = input.runner;
-    this.job.runnerState = this.job.fallbackEligible
-      ? "fallback_claimed"
-      : "local_claimed";
+    this.job.runnerState = "local_claimed";
     return this.job;
   }
 
   async findByJobId(jobId: string) {
     return this.job?.jobId === jobId ? this.job : null;
-  }
-
-  async updateSandboxStarted() {
-    return null;
   }
 
   async updateHeartbeat(input: {
@@ -85,10 +78,6 @@ class RouteMemoryStore implements CollectorJobStore {
     this.job.finishedAt = input.reportedAt;
     this.job.runnerState = input.status === "failed" ? "failed" : "completed";
     return this.job;
-  }
-
-  async updateSandboxFailure() {
-    return null;
   }
 }
 

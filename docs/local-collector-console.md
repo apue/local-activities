@@ -19,14 +19,16 @@ For operational bootstrap on Vercel and the first home collector machine, see [D
 The historical V2 design had three ways to start collection work:
 
 - local console seed: the operator opens a local page on the home machine, pastes a URL, and starts a local collector run
-- admin portal seed: the operator pastes a URL in the Vercel admin portal, which creates a queued job whose preferred runner is `vercel_sandbox`
-- local fallback: Sandbox failures with expected platform/browser reasons make the same job claimable by the home-machine collector
+- admin portal seed: the operator pastes a URL in the Vercel admin portal,
+  which creates a queued job for the historical hosted runner
+- local fallback: hosted-runner failures with expected platform/browser reasons
+  make the same job claimable by the home-machine collector
 
 All paths converge on the same backend-validated upload boundary:
 
 ```text
 admin portal job
--> Vercel Sandbox Agent runner or local fallback collector
+-> hosted Agent runner or local fallback collector
 -> external agent API for classification and extraction
 -> normalized upload to Vercel ingest API with collector contract
 -> Vercel validates and stores in Supabase
@@ -37,7 +39,7 @@ The home machine observes pages and proposes results. Vercel and the backend val
 
 ## Non-Goals
 
-- Do not let Sandbox, the local collector, or the Agent write directly to Supabase.
+- Do not let the hosted runner, local collector, or Agent write directly to Supabase.
 - Do not expose the home-machine console as a public internet service.
 - Do not let the collector write directly to Supabase.
 - Do not let the collector or agent publish canonical events.
@@ -135,13 +137,13 @@ Collector jobs preserve the execution runner separately from terminal job state:
 - `preferredRunner`: historical hosted runner or `local_collector`
 - `actualRunner`: runner used by the current or latest attempt
 - `runnerState`: historical hosted-runner states, `local_pending`,
-  `local_claimed`, `local_running`, `fallback_claimed`, `fallback_running`,
-  `completed`, or `failed`
+  `local_claimed`, `local_running`, historical fallback states, `completed`, or
+  `failed`
 - `fallbackEligible`: whether the local collector may claim a hosted-runner
   failure
 - `fallbackReason`: structured reason such as `captcha_required`,
   `login_required`, `fetch_blocked`, `fetch_timeout`,
-  `region_network_failed`, or `sandbox_runtime_timeout`
+  `region_network_failed`, or a hosted-runner timeout
 
 ### Job States
 
@@ -205,8 +207,8 @@ type ClaimJobResponse = {
     leaseExpiresAt: string;
     attemptNumber: number;
     requestedMode?: "auto" | "text_only" | "image_heavy_debug";
-    preferredRunner: "vercel_sandbox" | "local_collector";
-    actualRunner?: "vercel_sandbox" | "local_collector";
+    preferredRunner: "historical_hosted_runner" | "local_collector";
+    actualRunner?: "historical_hosted_runner" | "local_collector";
     runnerState: string;
     fallbackEligible: boolean;
     fallbackReason?: string;
@@ -313,8 +315,8 @@ The collector should not claim a new job while one is running in the MVP. It can
 
 ## Authentication
 
-The MVP uses one shared local collector token and a separate scoped token secret
-for short-lived Sandbox ingest credentials.
+The V2 MVP design used one shared local collector token and a separate scoped
+token secret for short-lived hosted-runner ingest credentials.
 
 Vercel environment:
 
@@ -339,12 +341,12 @@ Authorization: Bearer <COLLECTOR_API_KEY>
 X-Collector-Id: <COLLECTOR_ID>
 ```
 
-Sandbox ingest requests use a signed scoped token instead of the long-lived
-collector token:
+Historical hosted-runner ingest requests used a signed scoped token instead of
+the long-lived collector token:
 
 ```text
 Authorization: Bearer scoped.<payload>.<signature>
-X-Collector-Id: sandbox-<job-id>
+X-Collector-Id: hosted-<job-id>
 X-Collector-Job-Id: <job-id>
 ```
 
@@ -354,7 +356,7 @@ MVP token rules:
 - Do not log the token.
 - Do not expose the token in browser-side code.
 - Rotate the token if the home machine is lost, shared, or suspected compromised.
-- Scoped Sandbox tokens expire and are limited to one signed job ID.
+- Scoped hosted-runner tokens expire and are limited to one signed job ID.
 
 ## Admin Portal Integration
 

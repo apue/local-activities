@@ -20,20 +20,12 @@ export const collectorJobStateSchema = z.enum([
   "expired",
 ]);
 
-export const collectorJobRunnerSchema = z.enum([
-  "vercel_sandbox",
-  "local_collector",
-]);
+export const collectorJobRunnerSchema = z.enum(["local_collector"]);
 
 export const collectorJobRunnerStateSchema = z.enum([
-  "sandbox_pending",
-  "sandbox_running",
-  "sandbox_failed_fallback_eligible",
   "local_pending",
   "local_claimed",
   "local_running",
-  "fallback_claimed",
-  "fallback_running",
   "completed",
   "failed",
 ]);
@@ -44,7 +36,6 @@ export const collectorJobFallbackReasonSchema = z.enum([
   "fetch_blocked",
   "fetch_timeout",
   "region_network_failed",
-  "sandbox_runtime_timeout",
   "agent_config_missing",
   "agent_request_failed",
   "agent_response_invalid_schema",

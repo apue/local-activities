@@ -34,7 +34,6 @@
     "smoke:admin-readonly": "node scripts/admin-readonly-smoke.mjs",
     "smoke:collector-ping": "node scripts/collector-ping-smoke.mjs",
     "smoke:wechat2rss": "node scripts/wechat2rss-smoke.mjs",
-    "smoke:agent-job": "node scripts/agent-job-smoke.mjs",
     "smoke:public-catalog": "node scripts/public-catalog-smoke.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -42,7 +41,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
     "@vercel/blob": "^2.4.0",
-    "@vercel/sandbox": "^2.0.0",
     "next": "16.2.6",
     "playwright": "^1.60.0",
     "react": "19.2.6",

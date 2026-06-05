@@ -38,9 +38,9 @@ type CollectorJobRow = {
   failure_ids: string[] | null;
   result_message: string | null;
   finished_at: string | null;
-  preferred_runner: CollectorJobRecord["preferredRunner"];
-  actual_runner: CollectorJobRecord["actualRunner"] | null;
-  runner_state: CollectorJobRecord["runnerState"];
+  preferred_runner: string;
+  actual_runner: string | null;
+  runner_state: string;
   fallback_eligible: boolean;
   fallback_reason: CollectorJobRecord["fallbackReason"] | null;
   sandbox_run_id: string | null;
@@ -181,10 +181,7 @@ class SupabaseAdminStore implements AdminStore {
           state: "queued",
           requested_at: input.requestedAt,
           preferred_runner: input.preferredRunner,
-          runner_state:
-            input.preferredRunner === "local_collector"
-              ? "local_pending"
-              : "sandbox_pending",
+          runner_state: "local_pending",
           fallback_eligible: false,
         })
         .select("*")
@@ -655,13 +652,40 @@ function toJobRecord(row: CollectorJobRow): CollectorJobRecord {
     failureIds: row.failure_ids ?? [],
     resultMessage: row.result_message ?? undefined,
     finishedAt: row.finished_at ?? undefined,
-    preferredRunner: row.preferred_runner,
-    actualRunner: row.actual_runner ?? undefined,
-    runnerState: row.runner_state,
-    fallbackEligible: row.fallback_eligible,
+    preferredRunner: normalizeJobRunner(row.preferred_runner),
+    actualRunner: row.actual_runner
+      ? normalizeJobRunner(row.actual_runner)
+      : undefined,
+    runnerState: normalizeJobRunnerState(row.runner_state, row.state),
+    fallbackEligible: false,
     fallbackReason: row.fallback_reason ?? undefined,
-    sandboxRunId: row.sandbox_run_id ?? undefined,
   };
+}
+
+function normalizeJobRunner(
+  value: string,
+): CollectorJobRecord["preferredRunner"] {
+  return value === "local_collector" ? "local_collector" : "local_collector";
+}
+
+function normalizeJobRunnerState(
+  value: string,
+  state: CollectorJobRecord["state"],
+): CollectorJobRecord["runnerState"] {
+  if (
+    value === "local_pending" ||
+    value === "local_claimed" ||
+    value === "local_running" ||
+    value === "completed" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+  if (state === "queued") return "local_pending";
+  if (state === "claimed") return "local_claimed";
+  if (state === "running") return "local_running";
+  if (state === "completed" || state === "partial") return "completed";
+  return "failed";
 }
 
 function toDraftRecord(row: EventDraftRow): AdminEventDraftRecord {

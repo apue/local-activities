@@ -39,7 +39,6 @@ export type CollectorJobRecord = {
   runnerState: CollectorJobRunnerState;
   fallbackEligible: boolean;
   fallbackReason?: CollectorJobFallbackReason;
-  sandboxRunId?: string;
 };
 
 export type CollectorJobStore = {
@@ -81,22 +80,6 @@ export type CollectorJobStore = {
     suggestedDisposition?: SuggestedDisposition;
     message?: string;
     reportedAt: string;
-  }): Promise<CollectorJobRecord | null>;
-  updateSandboxStarted(input: {
-    jobId: string;
-    sandboxRunId: string;
-    startedAt: string;
-    collectorId: string;
-    localRunId: string;
-    leaseExpiresAt: string;
-  }): Promise<CollectorJobRecord | null>;
-  updateSandboxFailure(input: {
-    jobId: string;
-    reason: CollectorJobFallbackReason;
-    message: string;
-    failedAt: string;
-    fallbackEligible: boolean;
-    sandboxRunId?: string;
   }): Promise<CollectorJobRecord | null>;
 };
 
@@ -141,15 +124,6 @@ const TERMINAL_STATES = new Set<CollectorJobState>([
   "cancelled",
   "expired",
 ]);
-const FALLBACK_ELIGIBLE_REASONS = new Set<CollectorJobFallbackReason>([
-  "captcha_required",
-  "login_required",
-  "fetch_blocked",
-  "fetch_timeout",
-  "region_network_failed",
-  "sandbox_runtime_timeout",
-]);
-
 export async function createQueuedCollectorJob(
   input: {
     seedUrl: string;
@@ -160,7 +134,7 @@ export async function createQueuedCollectorJob(
   store: CollectorJobStore,
   now = new Date(),
 ) {
-  const preferredRunner = input.preferredRunner ?? "vercel_sandbox";
+  const preferredRunner = input.preferredRunner ?? "local_collector";
   return store.createQueuedJob({
     ...input,
     preferredRunner,
@@ -198,38 +172,6 @@ export async function claimCollectorJob(
   };
 }
 
-export async function routeSandboxCollectorJobFailure(
-  jobId: string,
-  input: {
-    reason: CollectorJobFallbackReason;
-    message: string;
-    sandboxRunId?: string;
-  },
-  store: CollectorJobStore,
-  now = new Date(),
-): Promise<MutateCollectorJobResult> {
-  const job = await store.updateSandboxFailure({
-    jobId,
-    reason: input.reason,
-    message: input.message,
-    sandboxRunId: input.sandboxRunId,
-    failedAt: now.toISOString(),
-    fallbackEligible: FALLBACK_ELIGIBLE_REASONS.has(input.reason),
-  });
-
-  if (!job) {
-    return {
-      kind: "not_found",
-      error: "collector_job_not_found",
-    };
-  }
-
-  return {
-    kind: "updated",
-    job,
-  };
-}
-
 export async function heartbeatCollectorJob(
   jobId: string,
   input: {
@@ -245,8 +187,7 @@ export async function heartbeatCollectorJob(
   const existing = await store.findByJobId(jobId);
   const ownership = validateActiveOwnership(existing, input.collectorId, now);
   if (ownership) return ownership;
-  const runnerState =
-    existing?.fallbackEligible === true ? "fallback_running" : "local_running";
+  const runnerState = "local_running";
 
   const job = await store.updateHeartbeat({
     jobId,
@@ -260,47 +201,6 @@ export async function heartbeatCollectorJob(
       input.extendLeaseSeconds ?? DEFAULT_LEASE_SECONDS,
     ).toISOString(),
     runnerState,
-  });
-
-  if (!job) {
-    return {
-      kind: "not_found",
-      error: "collector_job_not_found",
-    };
-  }
-
-  return {
-    kind: "updated",
-    job,
-  };
-}
-
-export async function startSandboxCollectorJob(
-  jobId: string,
-  input: {
-    sandboxRunId: string;
-  },
-  store: CollectorJobStore,
-  now = new Date(),
-): Promise<MutateCollectorJobResult> {
-  const existing = await store.findByJobId(jobId);
-  if (!existing) {
-    return {
-      kind: "not_found",
-      error: "collector_job_not_found",
-    };
-  }
-
-  const nextAttemptNumber = existing.attemptNumber + 1;
-  const collectorId = `sandbox-${jobId}`;
-  const startedAt = now.toISOString();
-  const job = await store.updateSandboxStarted({
-    jobId,
-    sandboxRunId: input.sandboxRunId,
-    startedAt,
-    collectorId,
-    localRunId: `${collectorId}-${nextAttemptNumber}`,
-    leaseExpiresAt: addSeconds(now, DEFAULT_LEASE_SECONDS).toISOString(),
   });
 
   if (!job) {
