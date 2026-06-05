@@ -147,6 +147,8 @@ export async function runProductionSeedImport({
   assertProductionSeedApproval(args);
   const seedEnv = {
     ...mergedEnv,
+    COLLECTOR_BASE_URL: target.baseUrl,
+    APP_BASE_URL: target.baseUrl,
     USAGE_ENVIRONMENT: "production_seed_acceptance",
     PRODUCTION_SEED_USAGE_ENVIRONMENT: "production_seed_acceptance",
   };
