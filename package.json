@@ -35,6 +35,7 @@
     "smoke:collector-ping": "node scripts/collector-ping-smoke.mjs",
     "smoke:wechat2rss": "node scripts/wechat2rss-smoke.mjs",
     "smoke:agent-job": "node scripts/agent-job-smoke.mjs",
+    "smoke:public-catalog": "node scripts/public-catalog-smoke.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
