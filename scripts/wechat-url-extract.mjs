@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -10,6 +9,11 @@ import {
   formatLlmExtractionSummary,
   runLlmExtractionOnce,
 } from "./llm-extractor.mjs";
+import {
+  articleBundleToArticleSnapshot,
+  articleBundleToExtractionInput,
+  createCapturedArticleBundle,
+} from "../src/capture/article-bundle.mjs";
 
 const execFileAsync = promisify(execFile);
 const maxVisibleTextLength = 12_000;
@@ -35,6 +39,12 @@ export function parseWechatUrlExtractionArgs(argv) {
 }
 
 export function buildWechatArticleSnapshotFromText({ url, text, now = new Date() }) {
+  return articleBundleToArticleSnapshot(
+    buildWechatArticleBundleFromText({ url, text, now }),
+  );
+}
+
+export function buildWechatArticleBundleFromText({ url, text, now = new Date() }) {
   const visibleText = cleanText(text).slice(0, maxVisibleTextLength);
   const lines = visibleText
     .split("\n")
@@ -43,8 +53,9 @@ export function buildWechatArticleSnapshotFromText({ url, text, now = new Date()
   const title = lines[0] ?? "Untitled WeChat article";
   const authorName = inferAuthorName(lines, title);
   const publishedAt = inferPublishedAt(lines);
-  return {
-    canonicalUrl: url,
+  return createCapturedArticleBundle({
+    provider: "url_browser",
+    sourceUrl: url,
     finalUrl: url,
     title,
     authorName,
@@ -52,11 +63,9 @@ export function buildWechatArticleSnapshotFromText({ url, text, now = new Date()
     capturedAt: now.toISOString(),
     languageHints: inferLanguageHints(visibleText),
     captureMode: "text_complete",
-    visibleText,
-    textHash: hashText(visibleText),
-    evidenceAssetIds: [],
-    contentHash: hashText(`${url}\n${visibleText}`),
-  };
+    text: visibleText,
+    images: [],
+  });
 }
 
 export async function runWechatUrlExtractionOnce({
@@ -71,11 +80,14 @@ export async function runWechatUrlExtractionOnce({
 }) {
   if (!url) throw new Error("missing_url");
   const text = await readArticleText({ url, session });
-  const articleSnapshot = buildWechatArticleSnapshotFromText({ url, text, now });
+  const articleBundle = buildWechatArticleBundleFromText({ url, text, now });
+  const { articleSnapshot, evidenceAssets } =
+    articleBundleToExtractionInput(articleBundle);
   const runId = `wechat-url-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}`;
   const extraction = await extract({
     env,
     articleSnapshot,
+    evidenceAssets,
     fetchImpl,
     now,
     runId,
@@ -85,6 +97,7 @@ export async function runWechatUrlExtractionOnce({
     url,
     runId,
     articleTitle: articleSnapshot.title,
+    articleBundle,
     articleSnapshot,
     extraction,
     draftSummaries: summarizeDrafts(extraction.eventDrafts ?? []),
@@ -170,10 +183,6 @@ function cleanText(text) {
     .replace(/\r\n/g, "\n")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
-}
-
-function hashText(text) {
-  return createHash("sha256").update(text).digest("hex");
 }
 
 function usage() {
