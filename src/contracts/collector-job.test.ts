@@ -28,7 +28,7 @@ describe("collector job contracts", () => {
     ).toThrow();
   });
 
-  it("accepts claim responses with runner and fallback state", () => {
+  it("accepts local collector claim responses", () => {
     const result = claimJobResponseSchema.parse({
       job: {
         jobId: "job-1",
@@ -36,15 +36,28 @@ describe("collector job contracts", () => {
         requestedAt: "2026-05-28T08:00:00.000Z",
         leaseExpiresAt: "2026-05-28T08:10:00.000Z",
         attemptNumber: 2,
-        preferredRunner: "vercel_sandbox",
+        preferredRunner: "local_collector",
         actualRunner: "local_collector",
-        runnerState: "fallback_claimed",
-        fallbackEligible: true,
-        fallbackReason: "captcha_required",
+        runnerState: "local_claimed",
+        fallbackEligible: false,
       },
     });
 
-    expect(result.job?.runnerState).toBe("fallback_claimed");
+    expect(result.job?.runnerState).toBe("local_claimed");
+    expect(() =>
+      claimJobResponseSchema.parse({
+        job: {
+          jobId: "job-1",
+          seedUrl: "https://example.com/a",
+          requestedAt: "2026-05-28T08:00:00.000Z",
+          leaseExpiresAt: "2026-05-28T08:10:00.000Z",
+          attemptNumber: 1,
+          preferredRunner: "vercel_sandbox",
+          runnerState: "sandbox_pending",
+          fallbackEligible: false,
+        },
+      }),
+    ).toThrow();
   });
 
   it("accepts heartbeat progress without leaking raw page dumps", () => {

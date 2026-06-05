@@ -77,10 +77,7 @@ class MemoryAdminStore implements AdminStore {
       requestedAt: input.requestedAt,
       attemptNumber: 0,
       preferredRunner: input.preferredRunner,
-      runnerState:
-        input.preferredRunner === "local_collector"
-          ? "local_pending"
-          : "sandbox_pending",
+      runnerState: "local_pending",
       fallbackEligible: false,
     };
     this.jobs.push(job);
@@ -233,8 +230,8 @@ describe("admin service", () => {
       jobId: "job-1",
       state: "queued",
       seedUrl: "https://mp.weixin.qq.com/s/example",
-      preferredRunner: "vercel_sandbox",
-      runnerState: "sandbox_pending",
+      preferredRunner: "local_collector",
+      runnerState: "local_pending",
       fallbackEligible: false,
     });
   });

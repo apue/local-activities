@@ -268,7 +268,7 @@ export async function createAdminCollectorJob(
   return store.createCollectorJob({
     seedUrl: extractedSeedUrl,
     requestedAt: now.toISOString(),
-    preferredRunner: input.preferredRunner ?? "vercel_sandbox",
+    preferredRunner: input.preferredRunner ?? "local_collector",
   });
 }
 

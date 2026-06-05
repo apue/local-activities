@@ -32,9 +32,9 @@ type CollectorJobRow = {
   failure_ids: string[] | null;
   result_message: string | null;
   finished_at: string | null;
-  preferred_runner: CollectorJobRecord["preferredRunner"];
-  actual_runner: CollectorJobRecord["actualRunner"] | null;
-  runner_state: CollectorJobRecord["runnerState"];
+  preferred_runner: string;
+  actual_runner: string | null;
+  runner_state: string;
   fallback_eligible: boolean;
   fallback_reason: CollectorJobRecord["fallbackReason"] | null;
   sandbox_run_id: string | null;
@@ -67,10 +67,7 @@ class SupabaseCollectorJobStore implements CollectorJobStore {
           requested_at: input.requestedAt,
           state: "queued",
           preferred_runner: input.preferredRunner,
-          runner_state:
-            input.preferredRunner === "local_collector"
-              ? "local_pending"
-              : "sandbox_pending",
+          runner_state: "local_pending",
           fallback_eligible: false,
         })
         .select("*")
@@ -105,34 +102,12 @@ class SupabaseCollectorJobStore implements CollectorJobStore {
           lease_expires_at: null,
           last_heartbeat_at: null,
           last_heartbeat_stage: null,
-          actual_runner: "vercel_sandbox",
-          runner_state: "sandbox_failed_fallback_eligible",
-          updated_at: now,
-        })
-        .in("state", ["claimed", "running"])
-        .lte("lease_expires_at", now)
-        .eq("fallback_eligible", true)
-        .lt("attempt_number", maxAttempts),
-    );
-
-    await this.writeMany(
-      this.client
-        .from("collector_jobs")
-        .update({
-          state: "queued",
-          collector_id: null,
-          local_run_id: null,
-          claimed_at: null,
-          lease_expires_at: null,
-          last_heartbeat_at: null,
-          last_heartbeat_stage: null,
           actual_runner: null,
           runner_state: "local_pending",
           updated_at: now,
         })
         .in("state", ["claimed", "running"])
         .lte("lease_expires_at", now)
-        .eq("fallback_eligible", false)
         .lt("attempt_number", maxAttempts),
     );
   }
@@ -147,7 +122,7 @@ class SupabaseCollectorJobStore implements CollectorJobStore {
       .from("collector_jobs")
       .select("*")
       .eq("state", "queued")
-      .or("preferred_runner.eq.local_collector,fallback_eligible.eq.true")
+      .eq("preferred_runner", "local_collector")
       .order("requested_at", { ascending: true })
       .limit(1)
       .maybeSingle<CollectorJobRow>();
@@ -165,9 +140,7 @@ class SupabaseCollectorJobStore implements CollectorJobStore {
           lease_expires_at: input.leaseExpiresAt,
           attempt_number: data.attempt_number + 1,
           actual_runner: input.runner,
-          runner_state: data.fallback_eligible
-            ? "fallback_claimed"
-            : "local_claimed",
+          runner_state: "local_claimed",
           updated_at: input.claimedAt,
         })
         .eq("id", data.id)
@@ -267,87 +240,6 @@ class SupabaseCollectorJobStore implements CollectorJobStore {
     return row ? toRecord(row) : null;
   }
 
-  async updateSandboxStarted(input: {
-    jobId: string;
-    sandboxRunId: string;
-    startedAt: string;
-    collectorId: string;
-    localRunId: string;
-    leaseExpiresAt: string;
-  }) {
-    const { data, error } = await this.client
-      .from("collector_jobs")
-      .select("id,attempt_number")
-      .eq("job_id", input.jobId)
-      .eq("state", "queued")
-      .eq("preferred_runner", "vercel_sandbox")
-      .maybeSingle<{ id: number; attempt_number: number }>();
-
-    if (error) throw new Error("collector_job_select_failed");
-    if (!data) return null;
-
-    const row = await this.writeMaybeOne(
-      this.client
-        .from("collector_jobs")
-        .update({
-          state: "running",
-          actual_runner: "vercel_sandbox",
-          runner_state: "sandbox_running",
-          sandbox_run_id: input.sandboxRunId,
-          collector_id: input.collectorId,
-          local_run_id: input.localRunId,
-          claimed_at: input.startedAt,
-          lease_expires_at: input.leaseExpiresAt,
-          attempt_number: data.attempt_number + 1,
-          updated_at: input.startedAt,
-        })
-        .eq("id", data.id)
-        .eq("state", "queued")
-        .select("*")
-        .maybeSingle<CollectorJobRow>(),
-    );
-
-    return row ? toRecord(row) : null;
-  }
-
-  async updateSandboxFailure(input: {
-    jobId: string;
-    reason: CollectorJobRecord["fallbackReason"];
-    message: string;
-    failedAt: string;
-    fallbackEligible: boolean;
-    sandboxRunId?: string;
-  }) {
-    const row = await this.writeMaybeOne(
-      this.client
-        .from("collector_jobs")
-        .update({
-          state: input.fallbackEligible ? "queued" : "failed",
-          actual_runner: "vercel_sandbox",
-          runner_state: input.fallbackEligible
-            ? "sandbox_failed_fallback_eligible"
-            : "failed",
-          fallback_eligible: input.fallbackEligible,
-          fallback_reason: input.reason,
-          sandbox_run_id: input.sandboxRunId ?? null,
-          result_message: input.message,
-          collector_id: null,
-          local_run_id: null,
-          claimed_at: null,
-          lease_expires_at: null,
-          last_heartbeat_at: null,
-          last_heartbeat_stage: null,
-          finished_at: input.fallbackEligible ? null : input.failedAt,
-          updated_at: input.failedAt,
-        })
-        .eq("job_id", input.jobId)
-        .select("*")
-        .maybeSingle<CollectorJobRow>(),
-    );
-
-    return row ? toRecord(row) : null;
-  }
-
   private async writeOne<T>(
     request: PromiseLike<{ data: T | null; error: unknown }>,
   ) {
@@ -394,11 +286,36 @@ function toRecord(row: CollectorJobRow): CollectorJobRecord {
     failureIds: row.failure_ids ?? undefined,
     resultMessage: row.result_message ?? undefined,
     finishedAt: row.finished_at ?? undefined,
-    preferredRunner: row.preferred_runner,
-    actualRunner: row.actual_runner ?? undefined,
-    runnerState: row.runner_state,
-    fallbackEligible: row.fallback_eligible,
+    preferredRunner: normalizeRunner(row.preferred_runner),
+    actualRunner: row.actual_runner
+      ? normalizeRunner(row.actual_runner)
+      : undefined,
+    runnerState: normalizeRunnerState(row.runner_state, row.state),
+    fallbackEligible: false,
     fallbackReason: row.fallback_reason ?? undefined,
-    sandboxRunId: row.sandbox_run_id ?? undefined,
   };
+}
+
+function normalizeRunner(value: string): CollectorJobRecord["preferredRunner"] {
+  return value === "local_collector" ? "local_collector" : "local_collector";
+}
+
+function normalizeRunnerState(
+  value: string,
+  state: CollectorJobRecord["state"],
+): CollectorJobRecord["runnerState"] {
+  if (
+    value === "local_pending" ||
+    value === "local_claimed" ||
+    value === "local_running" ||
+    value === "completed" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+  if (state === "queued") return "local_pending";
+  if (state === "claimed") return "local_claimed";
+  if (state === "running") return "local_running";
+  if (state === "completed" || state === "partial") return "completed";
+  return "failed";
 }

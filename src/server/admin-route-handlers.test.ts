@@ -113,10 +113,7 @@ class RouteAdminStore implements AdminStore {
       requestedAt: input.requestedAt,
       attemptNumber: 0,
       preferredRunner: input.preferredRunner,
-      runnerState:
-        input.preferredRunner === "local_collector"
-          ? "local_pending"
-          : "sandbox_pending",
+      runnerState: "local_pending",
       fallbackEligible: false,
     };
   }
@@ -282,16 +279,11 @@ describe("admin route handlers", () => {
   });
 
   it("creates queued collector jobs for valid seed URLs", async () => {
-    const startedJobs: CollectorJobRecord[] = [];
     const response = await handleAdminCreateCollectorJob(
       request({ seedUrl: "https://mp.weixin.qq.com/s/example" }),
       new RouteAdminStore(),
       { ADMIN_ACCESS_TOKEN: "admin-secret" },
       new Date("2026-05-28T08:00:00.000Z"),
-      async (job) => {
-        startedJobs.push(job);
-        return { status: "started" as const, sandboxId: "sb_123" };
-      },
     );
 
     expect(response.status).toBe(200);
@@ -300,19 +292,10 @@ describe("admin route handlers", () => {
       job: {
         jobId: "job-1",
         state: "queued",
-        preferredRunner: "vercel_sandbox",
-        runnerState: "sandbox_pending",
+        preferredRunner: "local_collector",
+        runnerState: "local_pending",
         fallbackEligible: false,
       },
-      sandboxStart: {
-        status: "started",
-        sandboxId: "sb_123",
-      },
-    });
-    expect(startedJobs).toHaveLength(1);
-    expect(startedJobs[0]).toMatchObject({
-      jobId: "job-1",
-      preferredRunner: "vercel_sandbox",
     });
   });
 
@@ -351,8 +334,7 @@ describe("admin route handlers", () => {
   });
 });
 
-  it("does not start Sandbox for explicitly local collector jobs", async () => {
-    const startedJobs: CollectorJobRecord[] = [];
+  it("accepts explicitly local collector jobs without runner side effects", async () => {
     const response = await handleAdminCreateCollectorJob(
       request({
         seedUrl: "https://mp.weixin.qq.com/s/example",
@@ -361,10 +343,6 @@ describe("admin route handlers", () => {
       new RouteAdminStore(),
       { ADMIN_ACCESS_TOKEN: "admin-secret" },
       new Date("2026-05-28T08:00:00.000Z"),
-      async (job) => {
-        startedJobs.push(job);
-        return { status: "started" as const, sandboxId: "sb_123" };
-      },
     );
 
     expect(response.status).toBe(200);
@@ -375,12 +353,7 @@ describe("admin route handlers", () => {
         preferredRunner: "local_collector",
         runnerState: "local_pending",
       },
-      sandboxStart: {
-        status: "skipped",
-        reason: "local_collector_preferred",
-      },
     });
-    expect(startedJobs).toHaveLength(0);
   });
 
   it("lists drafts for admin review", async () => {
