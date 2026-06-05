@@ -742,6 +742,56 @@ describe("collector agent processor", () => {
     );
   });
 
+  it("blocks WeChat verification pages before model extraction", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      if (url === "https://api.openai.com/v1/responses") {
+        throw new Error("model_should_not_be_called");
+      }
+      calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorAgent({
+      env: agentEnv(),
+      seedUrl: "https://mp.weixin.qq.com/s/verification-blocked",
+      runId: "agent-verification-blocked",
+      fetchImpl,
+      browserObserver: async () =>
+        pageObservation({
+          finalUrl:
+            "https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?poc_token=redacted&target_url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fverification-blocked",
+          canonicalUrl:
+            "https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?poc_token=redacted&target_url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%2Fverification-blocked",
+          title: "微信公众平台",
+          visibleText: "当前环境异常，请完成验证后继续访问",
+        }),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://local-activities.example/api/collector/source",
+      "https://local-activities.example/api/collector/source-run",
+      "https://local-activities.example/api/collector/failure",
+    ]);
+    expect(result.uploadedIds).toEqual({
+      sourceId: "id-1",
+      sourceRunId: "id-2",
+      failureId: "id-3",
+    });
+    expect(calls[2].body.payload).toMatchObject({
+      articleUrl: "https://mp.weixin.qq.com/s/verification-blocked",
+      stage: "page_fetch",
+      reason: "captcha_required",
+      retryable: true,
+    });
+    expect(calls[2].body.payload.diagnostics).toEqual(
+      expect.arrayContaining([
+        { key: "wechat_verification_page", value: "appmsgcaptcha" },
+      ]),
+    );
+  });
+
   it("normalizes environment verification failures as captcha required", async () => {
     const calls = [];
     const fetchImpl = async (url, init = {}) => {
