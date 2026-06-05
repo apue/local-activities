@@ -14,9 +14,11 @@ type SandboxRunnerEnv = {
   NEXT_PUBLIC_APP_URL?: string;
   COLLECTOR_SCOPED_TOKEN_SECRET?: string;
   AGENT_PROVIDER?: string;
+  AGENT_API_STYLE?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_BASE_URL?: string;
+  OPENAI_API_STYLE?: string;
   COLLECTOR_BROWSER_RUNNER?: string;
   VERCEL_GIT_COMMIT_SHA?: string;
   VERCEL_GIT_REPO_OWNER?: string;
@@ -62,6 +64,7 @@ export function createVercelSandboxJobStarter(input: {
         job,
         appBaseUrl: config.value.appBaseUrl,
         agentProvider: config.value.agentProvider,
+        agentApiStyle: config.value.agentApiStyle,
         openaiApiKey: config.value.openaiApiKey,
         openaiModel: config.value.openaiModel,
         openaiBaseUrl: config.value.openaiBaseUrl,
@@ -122,6 +125,7 @@ function readSandboxRunnerConfig(env: SandboxRunnerEnv):
         appBaseUrl: string;
         scopedTokenSecret: string;
         agentProvider: "openai";
+        agentApiStyle?: "responses" | "chat_completions";
         openaiApiKey: string;
         openaiModel: string;
         openaiBaseUrl?: string;
@@ -159,6 +163,9 @@ function readSandboxRunnerConfig(env: SandboxRunnerEnv):
       appBaseUrl,
       scopedTokenSecret,
       agentProvider,
+      agentApiStyle: readAgentApiStyle(
+        env.AGENT_API_STYLE ?? env.OPENAI_API_STYLE,
+      ),
       openaiApiKey,
       openaiModel,
       openaiBaseUrl: env.OPENAI_BASE_URL?.trim() || undefined,
@@ -172,6 +179,13 @@ function readSandboxRunnerConfig(env: SandboxRunnerEnv):
 function readBrowserRunner(value: string | undefined) {
   const runner = value?.trim();
   return runner === "playwright" ? "playwright" : "agent_browser";
+}
+
+function readAgentApiStyle(value: string | undefined) {
+  const style = value?.trim();
+  if (style === "chat_completions") return "chat_completions";
+  if (style === "responses") return "responses";
+  return undefined;
 }
 
 function buildRepositoryUrl(env: SandboxRunnerEnv) {

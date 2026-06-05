@@ -134,6 +134,44 @@ describe("collector agent processor", () => {
     expect(result.uploadedIds.eventDraftId).toBe("id-6");
   });
 
+  it("accepts OPENAI_API_STYLE as the documented chat completions alias", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init = {}) => {
+      calls.push({
+        url,
+        headers: init.headers ?? {},
+        body: init.body ? JSON.parse(init.body) : {},
+      });
+      if (url === "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions") {
+        return jsonResponse(chatCompletionResponse(agentSuccessResponse()));
+      }
+      return jsonResponse({ ok: true, id: `id-${calls.length}` });
+    };
+
+    const result = await runCollectorAgent({
+      env: {
+        ...agentEnv(),
+        OPENAI_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        OPENAI_MODEL: "qwen3-vl-plus",
+        OPENAI_API_STYLE: "chat_completions",
+      },
+      seedUrl: "https://mp.weixin.qq.com/s/chat",
+      runId: "agent-chat-openai-style",
+      fetchImpl,
+      browserObserver: async () => pageObservation(),
+      now: new Date("2026-05-28T10:00:00.000Z"),
+    });
+
+    expect(calls[0]).toMatchObject({
+      url: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+      body: {
+        model: "qwen3-vl-plus",
+        response_format: { type: "json_object" },
+      },
+    });
+    expect(result.uploadedIds.eventDraftId).toBe("id-6");
+  });
+
   it("does not upload source-site image URLs as public poster URLs", async () => {
     const calls = [];
     const sourcePosterUrl = "https://mmbiz.qpic.cn/source-poster.png";
