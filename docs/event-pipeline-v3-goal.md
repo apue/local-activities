@@ -150,6 +150,15 @@ pnpm collector:wechat2rss:once --env-file .env.collector --extract
 pnpm seed:production-events --env-file .env.local --manifest tests/seed-corpus/production-seed-manifest.json
 ```
 
+Fixture upload and E2E fixture smoke are mutating fixture-data workflows, not
+default validation. They must require explicit write flags and must print their
+target and write mode:
+
+```bash
+pnpm fixture:upload -- --all --allow-hosted-write
+pnpm smoke:e2e-fixture --env-file .env.local --seed-url URL --allow-hosted-write --allow-public-fixture-data
+```
+
 Implementation may adjust exact script names only if the issue handoff records
 the equivalent commands and the scripts preserve the same write boundaries.
 

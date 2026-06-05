@@ -7,6 +7,10 @@ import {
   runCollectorFixture,
 } from "./collector-fixture-run.mjs";
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
+import {
+  assertHostedWriteAllowed,
+  writeTargetSummary,
+} from "../src/config/write-guard.mjs";
 
 export function buildAdminHeaders(adminToken) {
   return {
@@ -21,9 +25,24 @@ export async function runE2eFixtureSmoke({
   now = new Date(),
   seedUrl,
   runId,
+  allowHostedWrite = false,
+  allowPublicFixtureData = false,
 }) {
   const config = readSmokeConfig(env);
   if (!seedUrl) throw new Error("missing_seed_url");
+  if (!allowHostedWrite) {
+    throw new Error("e2e_fixture_smoke_requires_allow_hosted_write");
+  }
+  if (!allowPublicFixtureData) {
+    throw new Error("e2e_fixture_smoke_requires_allow_public_fixture_data");
+  }
+  const target = assertHostedWriteAllowed({
+    command: "e2e_fixture_smoke",
+    baseUrl: config.baseUrl,
+    allowHostedWrite,
+    allowPublicFixtureData,
+    requiresPublicFixtureData: true,
+  });
 
   const createdJob = await postJson({
     baseUrl: config.baseUrl,
@@ -79,6 +98,8 @@ export async function runE2eFixtureSmoke({
     draftId,
     eventId,
     publicUrl,
+    target,
+    writeMode: "publish_fixture_event",
   };
 }
 
@@ -91,7 +112,17 @@ export function formatSmokeSummary(result) {
       `draftId=${result.draftId}`,
       `eventId=${result.eventId}`,
       `publicUrl=${result.publicUrl}`,
-    ].join(" ");
+      result.target
+        ? writeTargetSummary({
+            command: "e2e_fixture_smoke",
+            target: result.target,
+            runId: result.runId,
+            writeMode: result.writeMode,
+          })
+        : undefined,
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
 
   return formatFixtureSummary(result);
@@ -140,6 +171,8 @@ function parseArgs(argv) {
     envFile: undefined,
     seedUrl: undefined,
     runId: undefined,
+    allowHostedWrite: false,
+    allowPublicFixtureData: false,
     help: false,
   };
 
@@ -156,6 +189,10 @@ function parseArgs(argv) {
     } else if (arg === "--run-id") {
       args.runId = argv[index + 1];
       index += 1;
+    } else if (arg === "--allow-hosted-write") {
+      args.allowHostedWrite = true;
+    } else if (arg === "--allow-public-fixture-data") {
+      args.allowPublicFixtureData = true;
     } else {
       throw new Error(`unknown_arg:${arg}`);
     }
@@ -180,6 +217,8 @@ Options:
   --env-file  Optional dotenv file merged over the current process env.
   --seed-url  Seed URL to queue through the admin API.
   --run-id    Optional deterministic local run id.
+  --allow-hosted-write        Required for hosted/preview/production targets.
+  --allow-public-fixture-data Required because this smoke publishes fixture data.
   --help      Show this help text.`);
 }
 
@@ -196,6 +235,8 @@ export async function runCli(argv = process.argv.slice(2), baseEnv = process.env
     env,
     seedUrl: args.seedUrl,
     runId: args.runId,
+    allowHostedWrite: args.allowHostedWrite,
+    allowPublicFixtureData: args.allowPublicFixtureData,
   });
 
   console.log(formatSmokeSummary(result));

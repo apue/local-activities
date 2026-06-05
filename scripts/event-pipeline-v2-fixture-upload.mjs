@@ -9,6 +9,10 @@ import {
   parseFixtureArgs,
   requiredFixtureCases,
 } from "./event-pipeline-v2-fixtures.mjs";
+import {
+  assertHostedWriteAllowed,
+  writeTargetSummary,
+} from "../src/config/write-guard.mjs";
 
 const payloadVersion = "2026-05-collector-v1";
 
@@ -26,6 +30,11 @@ export async function runFixtureUpload({
   }
 
   const config = readCollectorUploadConfig(env);
+  const target = assertHostedWriteAllowed({
+    command: "fixture_upload",
+    baseUrl: config.baseUrl,
+    allowHostedWrite,
+  });
   const uploadEnvironment = classifyFixtureUploadEnvironment(env, config.baseUrl);
   if (uploadEnvironment === "production" && !allowPublicFixtureData) {
     throw new Error("fixture_upload_refuses_production_public_catalog");
@@ -68,6 +77,10 @@ export async function runFixtureUpload({
     kind: "uploaded",
     caseCount: cases.length,
     environment: uploadEnvironment,
+    target,
+    writeMode: allowPublicFixtureData
+      ? "public_fixture_upload"
+      : "review_fixture_upload",
     publicCatalogEnabled: allowPublicFixtureData,
     totals,
     cases,
@@ -78,12 +91,21 @@ export function formatFixtureUploadSummary(result) {
   return [
     `Fixture upload kind=${result.kind}`,
     `cases=${result.caseCount}`,
+    result.target
+      ? writeTargetSummary({
+          command: "fixture_upload",
+          target: result.target,
+          writeMode: result.writeMode,
+        })
+      : undefined,
     `sourceRuns=${result.totals.sourceRuns}`,
     `snapshots=${result.totals.articleSnapshots}`,
     `evidence=${result.totals.evidenceAssets}`,
     `drafts=${result.totals.eventDrafts}`,
     `excluded=${result.totals.excludedArticles}`,
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function readCollectorUploadConfig(env) {
