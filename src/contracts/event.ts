@@ -89,6 +89,8 @@ export const canonicalEventSchema = z
     posterImageUrl: z.string().url().optional(),
     posterImageAlt: z.string().min(1).max(500).optional(),
     posterImageSourceUrl: z.string().url().optional(),
+    registrationQrImageUrl: z.string().url().optional(),
+    registrationQrImageAlt: z.string().min(1).max(500).optional(),
     summary: z.string().min(1).max(4_000).optional(),
     entryNotes: z.string().min(1).max(4_000).optional(),
     status: publicEventStatusSchema,
