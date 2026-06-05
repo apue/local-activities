@@ -13,6 +13,7 @@ import {
   formatLlmCostCny,
   formatTokenCount,
   formatUsageTimestamp,
+  getDraftEvidenceItems,
   getDraftBlockingReasons,
   getReviewStateLabel,
   getUsageRangeLabel,
@@ -52,6 +53,10 @@ type EventDraft = {
   scheduleText?: string;
   posterImageUrl?: string;
   posterImageAlt?: string;
+  posterImageSourceUrl?: string;
+  posterAssetId?: string;
+  qrAssetId?: string;
+  registrationQrAssetId?: string;
   registrationQrImageUrl?: string;
   registrationQrImageAlt?: string;
   summary?: string;
@@ -177,6 +182,9 @@ export function AdminPortal() {
     selectedDecision?.requiresOperatorOverride ||
       selectedDecision?.canPublishWithOverride,
   );
+  const evidenceItems = selectedDraft
+    ? getDraftEvidenceItems(selectedDraft)
+    : [];
 
   useEffect(() => {
     setOperatorOverrideReason(selectedDraft?.operatorOverrideReason ?? "");
@@ -461,39 +469,32 @@ export function AdminPortal() {
                 <p className={styles.summary}>
                   {selectedDraft.summary ?? "No extraction summary."}
                 </p>
-                {selectedDraft.posterImageUrl ||
-                selectedDraft.registrationQrImageUrl ? (
+                {evidenceItems.length ? (
                   <div className={styles.evidenceGrid}>
-                    {selectedDraft.posterImageUrl ? (
-                      <figure>
-                        <img
-                          src={selectedDraft.posterImageUrl}
-                          alt={
-                            selectedDraft.posterImageAlt ??
-                            `${selectedDraft.title ?? "Event"} poster`
-                          }
-                          width={320}
-                          height={240}
-                          loading="lazy"
-                        />
-                        <figcaption>Poster</figcaption>
+                    {evidenceItems.map((item) => (
+                      <figure key={`${item.kind}-${item.assetId ?? item.imageUrl}`}>
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.imageAlt ?? item.label}
+                            width={item.kind === "poster" ? 320 : 220}
+                            height={item.kind === "poster" ? 240 : 220}
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className={styles.evidencePlaceholder}>
+                            {item.assetId ?? "Evidence linked"}
+                          </div>
+                        )}
+                        <figcaption>
+                          <strong>{item.label}</strong>
+                          {item.assetId ? <span>{item.assetId}</span> : null}
+                          {item.sourceUrl ? (
+                            <a href={item.sourceUrl}>Source image</a>
+                          ) : null}
+                        </figcaption>
                       </figure>
-                    ) : null}
-                    {selectedDraft.registrationQrImageUrl ? (
-                      <figure>
-                        <img
-                          src={selectedDraft.registrationQrImageUrl}
-                          alt={
-                            selectedDraft.registrationQrImageAlt ??
-                            `${selectedDraft.title ?? "Event"} registration QR`
-                          }
-                          width={220}
-                          height={220}
-                          loading="lazy"
-                        />
-                        <figcaption>Registration QR</figcaption>
-                      </figure>
-                    ) : null}
+                    ))}
                   </div>
                 ) : null}
                 <a className={styles.sourceLink} href={selectedDraft.articleUrl}>
