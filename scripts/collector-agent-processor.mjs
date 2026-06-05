@@ -1769,8 +1769,10 @@ function readAgentConfig(env) {
   const agentProvider = env.AGENT_PROVIDER?.trim();
   const openaiApiKey = env.OPENAI_API_KEY?.trim();
   const openaiModel = env.OPENAI_MODEL?.trim();
+  const configuredApiStyle =
+    env.AGENT_API_STYLE?.trim() || env.OPENAI_API_STYLE?.trim();
   const agentApiStyle =
-    env.AGENT_API_STYLE?.trim() === "chat_completions"
+    configuredApiStyle === "chat_completions"
       ? "chat_completions"
       : "responses";
   if (!baseUrl || !collectorId || !collectorApiKey) {

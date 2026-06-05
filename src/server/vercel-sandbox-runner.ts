@@ -17,6 +17,7 @@ export type SandboxAgentRunnerPayload = {
   };
   provider: {
     name: "openai";
+    agentApiStyle?: "responses" | "chat_completions";
     openaiApiKey: string;
     openaiModel: string;
     openaiBaseUrl?: string;
@@ -74,6 +75,7 @@ export function buildSandboxAgentRunnerPayload(input: {
   job: CollectorJobRecord;
   appBaseUrl: string;
   agentProvider: "openai";
+  agentApiStyle?: "responses" | "chat_completions";
   openaiApiKey: string;
   openaiModel: string;
   openaiBaseUrl?: string;
@@ -103,6 +105,7 @@ export function buildSandboxAgentRunnerPayload(input: {
     },
     provider: {
       name: input.agentProvider,
+      agentApiStyle: input.agentApiStyle,
       openaiApiKey: input.openaiApiKey,
       openaiModel: input.openaiModel,
       openaiBaseUrl: input.openaiBaseUrl
@@ -166,6 +169,9 @@ await runCollectorAgent({
       COLLECTOR_RUN_ID: payload.ingest.runId,
       COLLECTOR_BROWSER_RUNNER: payload.browser.runner,
       AGENT_PROVIDER: payload.provider.name,
+      ...(payload.provider.agentApiStyle
+        ? { AGENT_API_STYLE: payload.provider.agentApiStyle }
+        : {}),
       OPENAI_API_KEY: payload.provider.openaiApiKey,
       OPENAI_MODEL: payload.provider.openaiModel,
       ...(payload.provider.openaiBaseUrl
