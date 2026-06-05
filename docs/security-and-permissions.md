@@ -55,30 +55,8 @@ Required:
 
 - collector API key
 - collector ID for job claim, heartbeat, and diagnostics
-- for Vercel Sandbox, a short-lived scoped collector token signed for one job ID
 - idempotent uploads by URL and content hash
 - structured failure reasons
-
-### Vercel Sandbox Runner
-
-Allowed:
-
-- run bounded hosted Agent attempts for assigned collector jobs
-- call the configured provider using server-side provider credentials
-- upload normalized collector payloads through Vercel collector ingest APIs
-
-Not allowed:
-
-- receive Supabase secrets, admin tokens, Vercel management tokens, or the
-  long-lived home collector token
-- write directly to Supabase
-- publish canonical events directly
-
-Required:
-
-- job-scoped context only
-- short-lived scoped ingest token with `X-Collector-Job-Id`
-- structured failure report for fallback-eligible reasons
 
 ### Backend Service
 

@@ -19,16 +19,16 @@ Rationale:
 
 Use Vercel for the web app and ingest API.
 
-Vercel Sandbox is the default hosted Agent runner for admin-created collection
-jobs. Vercel Cron may trigger lightweight scheduled checks or orchestration
-callbacks. Vercel Workflow remains the likely durable serverless execution
-option for bounded multi-step backend jobs such as Sandbox orchestration,
-source-run follow-up, review-state transitions, or retryable provider calls.
+Vercel Cron may trigger lightweight scheduled checks or orchestration callbacks.
+Vercel Workflow remains the likely durable serverless execution option for
+bounded multi-step backend jobs such as source-run follow-up, review-state
+transitions, or retryable provider calls that do not require WeChat login state.
 Vercel Queue remains a planning-level candidate.
 
 Do not run ordinary long-lived browser automation or unbounded collector jobs
-inside request/response Vercel functions. Use Sandbox for bounded hosted Agent
-attempts and the local collector for fallback/manual recovery.
+inside request/response Vercel functions. Event Pipeline V3 uses the Mac-local
+Wechat2RSS collector as the current production WeChat official-account source
+path.
 
 ## Database
 
@@ -52,13 +52,13 @@ The first concrete migration for these tables is `supabase/migrations/2026052809
 
 ## Collector Runtime
 
-Use Vercel Sandbox as the default hosted Agent runtime and a separate local
-Node.js runtime for fallback source collection.
+Use the Mac-local Wechat2RSS collector as the current production WeChat
+official-account collector runtime.
 
 Initial implementation target:
 
-- Provider adapter shared by Sandbox and local fallback.
-- Persistent local browser/profile only on the home collector machine.
+- Wechat2RSS source provider running on the operator's Mac.
+- Docker-hosted Wechat2RSS service with local login/risk handling.
 - Four-hour schedule for tracked-source polling.
 - Upload-only integration with Vercel ingest APIs.
 
@@ -66,7 +66,8 @@ The collector must implement normalized output contracts so future implementatio
 
 See [Collector Agent Ingestion Spec](collector-agent-ingestion.md) for the collector/agent upload contract, observed page capture modes, and implementation slices.
 
-See [Local Collector Console And Job Queue Spec](local-collector-console.md) for the home-machine console, Vercel job polling, lease, and heartbeat design.
+See [Event Pipeline Architecture](event-pipeline-architecture.md) for the
+current module boundaries.
 
 See [Deployment Bootstrap Spec](deployment-bootstrap.md) for the end-to-end Vercel, Supabase, and home-machine collector setup target.
 
@@ -183,7 +184,7 @@ The repository keeps a full safe variable template in [`.env.example`](../.env.e
 - OpenAI-compatible text inference credentials
 - optional TTS provider credentials
 - optional Exa/Serper/Firecrawl search and crawling provider credentials
-- optional Vercel Cron/Workflow/Sandbox/Queue configuration
+- optional Vercel Cron/Workflow/Queue configuration
 
 See [MVP Tech Stack And End-To-End Feature Notes](tech-stack.md) for feature-by-feature stack notes.
 

@@ -1,8 +1,14 @@
 # Local Collector Console And Job Queue Spec
 
+> Historical V2 design. Event Pipeline V3 uses the Mac-local Wechat2RSS
+> collector path and the module boundaries in
+> [Event Pipeline Architecture](event-pipeline-architecture.md). Do not treat
+> this document as the current collector execution contract.
+
 ## Purpose
 
-This document defines the MVP design for a home-machine collector console and a Vercel-backed collector job queue.
+This document defined the earlier MVP design for a home-machine collector
+console and a Vercel-backed collector job queue.
 
 The intended reader is a future coding agent implementing the local collector UI, local queue, Vercel job APIs, polling worker, or admin portal integration. The design keeps the home machine simple while preserving the project boundary that collector and agent outputs are untrusted.
 
@@ -10,7 +16,7 @@ For operational bootstrap on Vercel and the first home collector machine, see [D
 
 ## Core Design
 
-The MVP has three ways to start collection work:
+The historical V2 design had three ways to start collection work:
 
 - local console seed: the operator opens a local page on the home machine, pastes a URL, and starts a local collector run
 - admin portal seed: the operator pastes a URL in the Vercel admin portal, which creates a queued job whose preferred runner is `vercel_sandbox`
@@ -109,27 +115,30 @@ observation and run context to the configured provider, validates the structured
 provider response, retries invalid responses locally, and uploads only
 normalized collector payloads to Vercel.
 
-Fixture mode is not a real browser or LLM extractor, and it must not be used as
-a substitute for production collection. Agent mode is the production collector
-boundary for page understanding, OCR, vision, and LLM reasoning. The shared
-purpose is to prove that the collector machine can queue work, authenticate to
-Vercel, and upload normalized objects without direct Supabase access.
+Fixture mode was not a real browser or LLM extractor, and it was not intended as
+a substitute for production collection. The historical agent mode was the V2
+collector boundary for page understanding, OCR, vision, and LLM reasoning. The
+shared purpose was to prove that the collector machine could queue work,
+authenticate to Vercel, and upload normalized objects without direct Supabase
+access.
 
-## Vercel Collector Job Queue
+## Historical Vercel Collector Job Queue
 
-The Vercel app stores collector jobs created by the admin portal or backend workflows. New jobs default to `preferredRunner=vercel_sandbox`. The home collector polls Vercel but can claim only jobs whose preferred runner is `local_collector` or whose Sandbox attempt has made them fallback-eligible.
+The V2 design stored collector jobs created by the admin portal or backend
+workflows. That design allowed a hosted runner or a local collector runner. It
+is not the Event Pipeline V3 execution contract.
 
 ### Runner State
 
 Collector jobs preserve the execution runner separately from terminal job state:
 
-- `preferredRunner`: `vercel_sandbox` or `local_collector`
+- `preferredRunner`: historical hosted runner or `local_collector`
 - `actualRunner`: runner used by the current or latest attempt
-- `runnerState`: `sandbox_pending`, `sandbox_running`,
-  `sandbox_failed_fallback_eligible`, `local_pending`, `local_claimed`,
-  `local_running`, `fallback_claimed`, `fallback_running`, `completed`, or
-  `failed`
-- `fallbackEligible`: whether the local collector may claim a Sandbox-failed job
+- `runnerState`: historical hosted-runner states, `local_pending`,
+  `local_claimed`, `local_running`, `fallback_claimed`, `fallback_running`,
+  `completed`, or `failed`
+- `fallbackEligible`: whether the local collector may claim a hosted-runner
+  failure
 - `fallbackReason`: structured reason such as `captcha_required`,
   `login_required`, `fetch_blocked`, `fetch_timeout`,
   `region_network_failed`, or `sandbox_runtime_timeout`

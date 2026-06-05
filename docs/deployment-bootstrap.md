@@ -7,10 +7,9 @@ This document defines the MVP bootstrap target for running the product end to en
 ```text
 GitHub repository
 -> Vercel web app and API
--> Vercel Sandbox hosted Agent runner for default jobs
 -> Supabase Postgres
--> home-machine collector at 192.168.0.16 for fallback and operator-controlled reruns
--> OpenAI-compatible provider used by the sandbox or local collector runtime
+-> Mac-local Wechat2RSS service and collector runtime
+-> OpenAI-compatible provider used by the local extractor
 ```
 
 The intended reader is a future coding agent implementing deployment scripts, environment validation, local collector startup, or end-to-end smoke tests. Treat this as an execution spec. It defines the required operating shape, secret boundaries, commands that implementation should support, and acceptance criteria.
@@ -19,9 +18,12 @@ The intended reader is a future coding agent implementing deployment scripts, en
 
 - A fresh clone can be bootstrapped into a working Vercel app/API deployment.
 - Required Vercel environment variables can be added or checked with Vercel CLI.
-- New admin-created jobs default to the hosted `vercel_sandbox` runner.
-- A second machine, initially `192.168.0.16`, can clone the same repository, configure local collector secrets, and run the collector as fallback without direct Supabase access.
-- The local collector can poll Vercel, claim local-eligible or fallback jobs, call an OpenAI-compatible provider, upload normalized results, and surface reviewable state in the admin portal.
+- An operator Mac can clone the same repository, configure local collector
+  secrets, run Wechat2RSS in Docker, and run the collector without direct
+  Supabase access.
+- The local collector can check Wechat2RSS source health, fetch subscribed
+  official-account articles, call an OpenAI-compatible provider, upload
+  normalized results, and surface reviewable state in the admin portal.
 - The backend remains the authority for validation, deduplication, review state, and publication.
 
 ## Non-Goals
@@ -43,14 +45,13 @@ Vercel hosts:
 - public mobile-first event pages
 - admin portal
 - collector ingest endpoints
-- collector job claim, heartbeat, and report endpoints
-- internal sandbox failure-report endpoint
+- collector run/report endpoints
 - lightweight health endpoints
 - optional Vercel Cron or Workflow entry points for bounded orchestration
 
 Vercel does not host:
 
-- persistent browser profiles outside isolated Sandbox attempts
+- persistent WeChat browser/login profiles
 - unbounded Playwright sessions inside ordinary request/response functions
 
 ### Supabase
@@ -70,50 +71,43 @@ Supabase Postgres stores:
 
 Only server-side Vercel code should use privileged Supabase credentials. The collector uploads through Vercel APIs and never receives service-role credentials.
 
-### Home Collector Machine
+### Mac-local Collector Machine
 
-The first deployment target is a machine reachable by the operator as `192.168.0.16` on the private network.
+The first deployment target is the operator's Mac.
 
 The collector machine runs:
 
 - the same repository clone
-- a local collector service
+- Docker Desktop
+- a local Wechat2RSS service
+- a local collector command or service
 - a local operator console, preferably bound to `127.0.0.1` unless LAN access is explicitly needed
-- browser automation with a persistent profile
-- local queue storage
-- Vercel polling client
-- LLM or agent API client
+- local run storage when needed
+- LLM extraction API client
 
 The collector authenticates to Vercel using `COLLECTOR_API_KEY` and identifies itself with `COLLECTOR_ID`. It does not need inbound access from Vercel.
 
-### Vercel Sandbox Runner
+### Wechat2RSS Collector Runtime
 
-Vercel Sandbox is the default hosted Agent runner for admin-created collector
-jobs. A backend or Workflow step starts a sandbox attempt, marks the job
-`sandbox_running`, and sends only job-scoped context plus a short-lived
-collector ingest token to the sandbox runtime.
+Wechat2RSS is the current production source provider for WeChat official
+account subscriptions. It runs locally in Docker so the operator can complete
+login and resolve ordinary account prompts without exposing WeChat state to a
+hosted crawler.
 
-Sandbox attempts use the same Agent response contract and normalized collector
-uploads as the local collector. The sandbox must not receive Supabase secrets,
-admin tokens, Vercel management tokens, or the long-lived home-machine
-`COLLECTOR_API_KEY`. If Sandbox fails with `captcha_required`,
-`login_required`, `fetch_blocked`, `fetch_timeout`, `region_network_failed`, or
-`sandbox_runtime_timeout`, the backend records the structured reason and makes
-the job eligible for the local collector fallback.
+The collector reads from Wechat2RSS, normalizes articles into snapshots and
+evidence assets, calls the LLM extractor when configured, and uploads through
+collector APIs. It must not receive Supabase service-role credentials.
 
-### Sandbox Agent Provider
+### LLM Extractor Provider
 
-The repo-local agent runs inside Vercel Sandbox for the hosted path. It opens
-pages with a browser first, then calls the configured OpenAI-compatible provider
-for classification and structured extraction. The provider is not a custom
+The local collector calls the configured OpenAI-compatible provider for
+classification and structured extraction. The provider is not a custom
 `/extract` service.
 
 Rules:
 
 - The collector converts provider responses into the normalized collector contracts before upload.
 - Vercel APIs must not depend on provider-specific response shapes.
-- Provider API keys can live in Vercel only for the bounded sandbox runner and
-  must remain server-side.
 - The provider API must not receive `COLLECTOR_API_KEY`, Supabase secrets,
   Vercel tokens, or admin tokens.
 
@@ -191,9 +185,8 @@ SUPA_ANON_KEY
 SUPA_SERVICE_KEY
 ```
 
-Vercel stores only the Agent credentials required for bounded Sandbox attempts.
-Provider keys used exclusively by the local fallback collector stay on the
-collector machine.
+Provider keys used by the local collector stay on the collector machine unless a
+later approved backend issue requires server-side provider access.
 
 ### Collector Machine Variables
 
@@ -203,13 +196,16 @@ The collector machine needs:
 APP_BASE_URL=https://your-vercel-app.example
 COLLECTOR_BASE_URL=https://your-vercel-app.example
 COLLECTOR_API_KEY=same-long-random-secret-as-vercel
-COLLECTOR_ID=home-192-168-0-16
+COLLECTOR_ID=home-mac-1
 COLLECTOR_INTERVAL_HOURS=4
-LOCAL_COLLECTOR_PROCESSOR=agent
-COLLECTOR_CAPABILITIES=agent_api
+COLLECTOR_CAPABILITIES=wechat_browser,dom_text,image_capture,vision_extraction
 LOCAL_COLLECTOR_CONSOLE_TOKEN=optional-local-console-token
 
-AGENT_PROVIDER=openai
+WECHAT2RSS_BASE_URL=http://127.0.0.1:4000
+WECHAT2RSS_TOKEN=wechat2rss-token
+WECHAT2RSS_LOOKBACK_DAYS=7
+
+AGENT_PROVIDER=openai_compatible
 OPENAI_API_KEY=collector-side-openai-secret
 OPENAI_MODEL=provider-model-name
 OPENAI_BASE_URL=https://api.openai.com/v1
@@ -242,11 +238,7 @@ Add missing production variables interactively:
 ```bash
 vercel env add ADMIN_ACCESS_TOKEN production
 vercel env add COLLECTOR_API_KEY production
-vercel env add COLLECTOR_SCOPED_TOKEN_SECRET production
 vercel env add INTERNAL_API_SECRET production
-vercel env add AGENT_PROVIDER production
-vercel env add OPENAI_API_KEY production
-vercel env add OPENAI_MODEL production
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY production
 vercel env add SUPABASE_SECRET_KEY production
@@ -256,7 +248,6 @@ vercel env add NEXT_PUBLIC_APP_URL production
 vercel env add OBSERVABILITY_PROVIDER production
 vercel env add VERCEL_WEB_ANALYTICS_ENABLED production
 vercel env add VERCEL_SPEED_INSIGHTS_ENABLED production
-vercel env add VERCEL_SANDBOX_ENABLED production
 ```
 
 Add preview variables the same way:
@@ -264,11 +255,7 @@ Add preview variables the same way:
 ```bash
 vercel env add ADMIN_ACCESS_TOKEN preview
 vercel env add COLLECTOR_API_KEY preview
-vercel env add COLLECTOR_SCOPED_TOKEN_SECRET preview
 vercel env add INTERNAL_API_SECRET preview
-vercel env add AGENT_PROVIDER preview
-vercel env add OPENAI_API_KEY preview
-vercel env add OPENAI_MODEL preview
 vercel env add NEXT_PUBLIC_SUPABASE_URL preview
 vercel env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY preview
 vercel env add SUPABASE_SECRET_KEY preview
@@ -278,7 +265,6 @@ vercel env add NEXT_PUBLIC_APP_URL preview
 vercel env add OBSERVABILITY_PROVIDER preview
 vercel env add VERCEL_WEB_ANALYTICS_ENABLED preview
 vercel env add VERCEL_SPEED_INSIGHTS_ENABLED preview
-vercel env add VERCEL_SANDBOX_ENABLED preview
 ```
 
 After variables are set, local development can pull a local file:
@@ -338,13 +324,11 @@ pnpm run collector
 pnpm run collector:console
 ```
 
-The current implementation starts one long-running local service that includes
-the local operator console, JSON-backed local queue, Vercel job polling, and a
-one-at-a-time worker. `LOCAL_COLLECTOR_PROCESSOR=fixture` keeps deterministic
-smoke behavior, while `LOCAL_COLLECTOR_PROCESSOR=agent` enables the real
-collector path. The collector opens the seed URL with the repo-local browser
-agent, then sends page observation and run context to the configured provider
-for structured extraction.
+The current V3 target starts the local Wechat2RSS service and runs explicit
+collector commands. `pnpm smoke:wechat2rss --env-file .env.collector` checks
+source health without uploading. `pnpm collector:wechat2rss:once --env-file
+.env.collector --extract` runs the production collector path and uploads through
+the configured collector API.
 
 The local console should default to localhost. If exposed on the LAN for convenience, it should require `LOCAL_COLLECTOR_CONSOLE_TOKEN`.
 
@@ -356,51 +340,42 @@ pnpm collector:console --env-file .env
 pnpm collector:console --help
 ```
 
-Polling is enabled by default when the collector runtime starts. Use
-`COLLECTOR_POLLING_ENABLED=false` for local console-only debugging. Poll cadence
-is controlled by `COLLECTOR_POLL_INTERVAL_SECONDS`,
-`COLLECTOR_ERROR_BACKOFF_SECONDS`, and `COLLECTOR_CAPABILITIES`.
+If a later local console or scheduler is used, poll cadence is controlled by
+`COLLECTOR_POLL_INTERVAL_SECONDS`, `COLLECTOR_ERROR_BACKOFF_SECONDS`, and
+`COLLECTOR_CAPABILITIES`.
 
-Local fallback Agent mode requires collector-side `AGENT_PROVIDER`,
-`OPENAI_API_KEY`, and `OPENAI_MODEL`.
-If they are missing, the local run fails as `agent_config_missing` without
-printing provider secrets. The collector validates the Agent response schema
-before upload, retries invalid responses up to `AGENT_MAX_ATTEMPTS`, and uploads
-a structured `agent_response_invalid_schema` failure when retries are exhausted.
-Local fallback Agent and provider keys stay on the collector machine. Hosted
-Sandbox Agent credentials stay in server-side Vercel environment variables.
-Neither path uploads provider secrets as collector payload data.
+Live extraction requires collector-side `AGENT_PROVIDER`, `OPENAI_API_KEY`, and
+`OPENAI_MODEL`. If they are missing, the local run fails as
+`agent_config_missing` without printing provider secrets. The collector validates
+provider response schemas before upload, retries invalid responses up to
+`AGENT_MAX_ATTEMPTS`, and uploads a structured
+`agent_response_invalid_schema` failure when retries are exhausted. Provider keys
+stay on the collector machine unless a later approved backend issue changes that
+boundary. Provider secrets must never be uploaded as collector payload data.
 
 ## Runtime Flow
 
-### Admin-Triggered Job
+### Wechat2RSS Scheduled Or Manual Run
 
-1. Admin opens the Vercel admin portal.
-2. Admin pastes a source or article URL.
-3. Backend validates the URL and creates a queued collector job with
-   `preferredRunner=vercel_sandbox`.
-4. Backend or Workflow starts a Vercel Sandbox attempt and marks the job
-   `sandbox_running`.
-5. Sandbox opens the URL with the repo-local browser agent, calls the configured
-   provider with page observation, validates the response through the shared
-   collector contract, and uploads normalized payloads to Vercel using a
-   short-lived scoped ingest token.
-6. If Sandbox reports a fallback-eligible failure, the job returns to `queued`
-   with `fallbackEligible=true` for the local collector.
-7. For fallback jobs, the local collector polls Vercel, claims the job,
-   persists it into the local queue, sends heartbeats, and uploads normalized
-   results through the same collector API boundary.
-8. Vercel validates uploads, stores state in Supabase, computes review state,
-   and links results to the job.
-9. Admin reviews the draft, failure, or missing-information state.
+1. Operator starts Docker Desktop and the local Wechat2RSS service.
+2. Operator verifies Wechat2RSS login/source health with `smoke:wechat2rss`.
+3. Operator or cron triggers the Wechat2RSS collector once.
+4. The collector fetches subscribed official-account articles, builds snapshots,
+   prepares evidence, calls the LLM extractor when configured, and uploads
+   normalized payloads through the collector API.
+5. Vercel validates uploads, stores state in Supabase, computes dedupe and
+   publication state, and exposes reviewable state in admin.
+6. Admin reviews exceptions, missing information, duplicates, and blockers.
 
-### Local Console Job
+### Curated Production Seed Run
 
-1. Operator opens the collector console on the home machine.
-2. Operator pastes a URL.
-3. Local service creates a local queued run.
-4. Local worker runs the same capture, extraction, and upload pipeline used for Vercel-claimed jobs.
-5. Vercel stores and routes the result through the same review queues.
+1. Operator approves a production seed import in the current conversation.
+2. The seed command reads `tests/seed-corpus/production-seed-manifest.json`.
+3. The command prints target environment and planned writes, then runs the
+   approved import through the same backend ingest, dedupe, storage, publication,
+   and usage paths.
+4. Operator validates the public catalog, admin draft queue, evidence display,
+   source URLs, dedupe behavior, and usage dashboard.
 
 ## Expected Health Checks
 
@@ -409,10 +384,9 @@ Implementation should provide health checks that can be used manually and by smo
 - app/API health endpoint returns build and environment summary without secrets
 - database health endpoint confirms server-side Supabase/Postgres connectivity
 - collector authenticated ping confirms `COLLECTOR_API_KEY` and `COLLECTOR_ID`
-- collector job claim endpoint returns a claimed local/fallback job or a no-job response
-- internal sandbox failure endpoint records runner state and fallback reason
-- local collector health endpoint reports queue depth, active job, last poll, and last upload result
-- admin portal shows job state, heartbeat age, result links, and failure reason
+- Wechat2RSS smoke confirms local source service and login health when
+  `.env.collector` is configured
+- admin portal shows source run state, result links, and failure reason
 
 ## End-To-End Smoke Test
 
@@ -421,15 +395,19 @@ A complete MVP deployment is considered runnable when this scenario passes:
 1. Production Vercel deployment is live.
 2. Supabase migrations have been applied.
 3. Vercel production environment has required app, admin, collector, and Supabase variables.
-4. The collector machine at `192.168.0.16` has the repository cloned and dependencies installed.
-5. Collector `.env` has `APP_BASE_URL`, `COLLECTOR_API_KEY`, `COLLECTOR_ID`, and LLM or agent API settings.
-6. Admin creates a collector job from a known test URL.
-7. The default Sandbox path uploads at least one source run and either an event draft or a structured failure.
-8. For a forced fallback failure, the local collector claims the job within the configured polling window.
-9. Collector or Sandbox runner state, attempt number, heartbeat/failure reason, and result IDs are visible in admin job state.
-10. Admin portal displays the result as `ready_for_review`, `needs_review`, `needs_info`, `failed`, or `not_activity`.
-11. If a draft is publishable, admin can publish it and the public event page displays it.
-12. Expired events are not shown in the default public upcoming list.
+4. The operator Mac has the repository cloned, dependencies installed, Docker
+   Desktop running, and Wechat2RSS configured.
+5. Collector `.env.collector` has `APP_BASE_URL`, `COLLECTOR_BASE_URL`,
+   `COLLECTOR_API_KEY`, `COLLECTOR_ID`, Wechat2RSS settings, and LLM provider
+   settings when extraction is enabled.
+6. `pnpm smoke:wechat2rss --env-file .env.collector` passes.
+7. A guarded collector or production seed run uploads at least one source run and
+   either event candidates or structured excluded/failure records.
+8. Admin portal displays review, publishable, blocked, excluded, or failed state
+   with clear reasons.
+9. Public pages show only canonical public events and hide non-public/news cases.
+10. Expired events are not shown in the default public upcoming list unless the
+    product intentionally exposes historical browsing.
 
 ## Failure And Recovery Requirements
 
@@ -438,8 +416,8 @@ Implementation should make these failures visible and recoverable:
 - Missing Vercel env var: fail deployment checks or health checks with variable name, never with secret value.
 - Invalid collector token: return `401` and record no job mutation.
 - Missing `X-Collector-Id`: return `400` or `401` before job mutation.
-- Collector offline: queued jobs remain visible with no heartbeat.
-- Lease expired: job becomes claimable again according to the job queue spec.
+- Collector offline: source runs do not advance and source health remains
+  visible to admin.
 - Agent config missing: local run fails with `agent_config_missing` and uploads or displays a structured failure when possible.
 - Captcha/login/fetch block: collector reports `captcha_required`, `login_required`, or `fetch_blocked`.
 - Supabase write failure: backend returns a structured error and logs server-side details through Vercel logs.
@@ -549,16 +527,17 @@ matching fixture diagnostics, fixture source URLs, or deterministic fixture
 titles; until then, run fixture smoke tests only against disposable data or
 manually delete generated fixture drafts and canonical events before launch.
 
-After real Sandbox and Agent credentials are configured, run the real Agent job
-smoke against a known source URL:
+After Wechat2RSS, collector, and extractor credentials are configured, run the
+read-only Wechat2RSS smoke and then the approved live collector or seed command:
 
 ```bash
-pnpm smoke:agent-job --env-file .env.local --seed-url "https://mp.weixin.qq.com/s/example"
+pnpm smoke:wechat2rss --env-file .env.collector
+pnpm collector:wechat2rss:once --env-file .env.collector --extract
 ```
 
-This creates a `vercel_sandbox` job, polls admin job state, verifies reported
-IDs in Supabase, and stops before publish so an operator can review the draft in
-the admin portal.
+The collector command uploads through the configured collector API. Treat it as
+production-mutating when `COLLECTOR_BASE_URL` points at a deployed app backed by
+production Supabase.
 
 ### Slice 6: Operational Handoff
 
@@ -571,10 +550,11 @@ This spec is complete when:
 - it defines Vercel-side and collector-machine responsibilities separately
 - it names the environment variables required for each runtime target
 - it documents how Vercel CLI should be used to add and inspect variables
-- it explains how a clone on `192.168.0.16` should be configured and started after implementation lands
+- it explains how a clone on the operator Mac should be configured and started
+  after implementation lands
 - it defines an end-to-end smoke test from admin seed URL to public event display
 - it keeps collector outputs untrusted and routes all publication decisions through the backend/admin boundary
-- it links to the collector ingestion and local collector queue specs
+- it links to the V3 architecture and testing specs
 
 ## Related Documents
 

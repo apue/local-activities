@@ -66,7 +66,8 @@ The command is read-only. It checks:
 
 Expected live verification flow:
 
-1. Run one real extraction smoke or collector job against a real source URL.
+1. Run one live Wechat2RSS collector or approved production seed import against
+   real source material.
 2. Review drafts in `/admin`; publish only real public events.
 3. Run `pnpm smoke:public-catalog --env-file .env.local`.
 4. Open the public homepage and one detail page on mobile width. Confirm the
@@ -98,20 +99,30 @@ from official source posts. They may include synthetic source URLs, placeholder
 asset paths, and manual expected decisions. Real production catalog entries must
 come from live extraction of real source URLs.
 
-### Real Agent Job Smoke
+### Wechat2RSS Source Smoke
 
-Use this after Vercel production has real Sandbox and OpenAI provider settings:
+Use this after the local Wechat2RSS Docker service is running and `.env.collector`
+has Wechat2RSS settings:
 
 ```bash
-pnpm smoke:agent-job --env-file .env.local --seed-url "https://mp.weixin.qq.com/s/example"
+pnpm smoke:wechat2rss --env-file .env.collector
 ```
 
-The command creates a real admin collector job with
-`preferredRunner=vercel_sandbox`, polls admin job state by `jobId`, and verifies
-reported IDs in Supabase. The Sandbox runner opens the seed URL in a browser,
-passes the page observation to the configured provider, uploads normalized
-collector results, auto-publishes when minimum public fields are present, and
-verifies the public list/detail pages.
+The command is read-only against the local Wechat2RSS service. It should verify
+service reachability, login/source health, and response shape without uploading
+drafts or public events.
+
+### Live Collector Upload Smoke
+
+Use this only when production writes are acceptable and explicitly approved:
+
+```bash
+pnpm collector:wechat2rss:once --env-file .env.collector --extract
+```
+
+The command uploads through the configured collector API. Treat it as
+production-mutating when `COLLECTOR_BASE_URL` points at a deployed app backed by
+production Supabase.
 
 The command treats these outcomes as explainable smoke results:
 
@@ -124,30 +135,33 @@ The command treats these outcomes as explainable smoke results:
 
 The command fails when:
 
-- job creation fails or returns non-JSON
-- the job is not visible in admin polling
-- the job remains non-terminal beyond the polling window
-- the job reports IDs that are missing from Supabase
-- the job fails without structured failure details
+- Wechat2RSS source health is unavailable without a structured reason
+- collector upload fails or returns non-JSON
+- uploaded result IDs are not visible through admin/read APIs
+- a failure is reported without structured failure details
 
-Browser runner benchmark:
+### Production Seed Acceptance
+
+Use this as the final product acceptance path after module, admin, dedupe,
+storage, usage, and cleanup work is complete:
+
+```bash
+pnpm seed:production-events --env-file .env.local --manifest tests/seed-corpus/production-seed-manifest.json
+```
+
+This is production-mutating and requires explicit operator approval in the
+current conversation. It should produce a batch or run id and an import report.
+The operator validates public pages, admin drafts, source URLs, evidence,
+dedupe, non-public exclusions, and usage totals.
+
+### Historical Browser Runner Benchmark
+
+This benchmark is historical for the V2 sandbox/agent path and is not part of
+Event Pipeline V3 acceptance:
 
 ```bash
 node scripts/browser-runner-benchmark.mjs \
   --seed-url https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg
-```
-
-The benchmark uses the same page-observation code as the Sandbox agent and
-prints comparable timing diagnostics for `playwright` and `agent_browser`.
-Local timing is useful for regressions, but the production runner should be
-chosen from Sandbox job diagnostics because Sandbox setup time counts against
-the monthly quota.
-
-Optional polling controls:
-
-```bash
-AGENT_JOB_SMOKE_MAX_POLLS=40
-AGENT_JOB_SMOKE_POLL_INTERVAL_MS=15000
 ```
 
 Required Vercel provider settings for live extraction:
@@ -165,7 +179,6 @@ These cases are still useful but are not automated in the current smoke layer:
 
 - Browser-level admin portal interaction: fill token, click Load state, verify
   rendered success/error message.
-- Local collector fallback after a forced fallback-eligible Sandbox failure.
 - Health endpoint expected-success smoke after all production env vars are
   configured.
 - Visual/mobile smoke for the public list/detail pages and admin dashboard.

@@ -9,20 +9,21 @@ Purpose:
 - Host the Next.js web app.
 - Serve public event pages and admin pages.
 - Expose collector ingest API routes.
-- Run bounded hosted Agent attempts through Vercel Sandbox.
 - Store runtime public event poster images in Vercel Blob for the MVP.
 
 Notes:
 
 - Vercel is appropriate for the MVP web surface and lightweight API handling.
 - Vercel Cron can trigger lightweight scheduled callbacks.
-- Vercel Sandbox is the default hosted Agent runner for normal admin-created collection jobs.
-- Vercel Workflow is the likely durable serverless execution option for bounded orchestration work around Sandbox attempts.
+- Vercel Workflow is the likely durable serverless execution option for bounded
+  backend orchestration work that does not require WeChat browser/login state.
 - Vercel Queue remains a candidate service for future queueing needs.
 - Vercel Blob is a temporary object storage adapter and can be replaced with S3
   or another object store behind the same application boundary.
 - Long-running browser automation should not run inside ordinary Vercel request/response functions.
-- Local collection remains the fallback path for captcha, login, fetch blocks, network/region issues, and operator-controlled reruns.
+- Mac-local collection is the current production path for WeChat official
+  account collection because the operator can manage WeChat login and account
+  risk locally.
 
 ## Supabase
 
@@ -54,6 +55,26 @@ Notes:
 - Do not add Sentry, Datadog, New Relic, or other third-party observability dependencies for MVP.
 - Add third-party drains only if a later issue needs longer retention, external correlation, or compliance controls.
 
+## Wechat2RSS
+
+Purpose:
+
+- Provide the current production source adapter for subscribed WeChat official
+  accounts.
+- Run on the operator's Mac in Docker so login and risk handling remain local.
+- Expose official-account article lists and article content for low-frequency
+  collector runs.
+
+Notes:
+
+- Wechat2RSS is a source provider, not the backend source of truth.
+- The collector normalizes Wechat2RSS output into article snapshots and evidence
+  assets, then uploads through backend APIs.
+- The backend validates all collector output and owns dedupe, publication, and
+  admin state.
+- Do not bypass WeChat platform protections. Report login, captcha, fetch, or
+  account-health failures as product-visible source state.
+
 ## Playwright
 
 Purpose:
@@ -65,6 +86,8 @@ Purpose:
 Notes:
 
 - Playwright is an implementation of the collector abstraction, not a backend dependency.
+- Playwright is not the current production WeChat official-account collector
+  path for Event Pipeline V3.
 - The collector should report failures instead of bypassing captchas, login requirements, or platform protections.
 
 ## LLM Provider
