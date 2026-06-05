@@ -131,6 +131,44 @@ describe("single WeChat URL extractor", () => {
     expect(formatWechatUrlExtractionSummary(result)).toContain("drafts=1");
   });
 
+  it("passes URL browser HTML image evidence into the extractor", async () => {
+    const calls = [];
+    const result = await runWechatUrlExtractionOnce({
+      env: { COLLECTOR_ID: "collector-1" },
+      url: "https://mp.weixin.qq.com/s/image-page",
+      now: new Date("2026-06-03T04:00:00.000Z"),
+      readArticlePage: async () => ({
+        text: "Poster event\nEmbassy Culture\n2026年6月1日 21:44 北京\n扫码报名",
+        html: `
+          <img data-src="https://mmbiz.qpic.cn/poster.jpg" alt="活动海报" width="900" height="1200" />
+          <img data-src="https://mmbiz.qpic.cn/register-qr.jpg" alt="报名二维码" />
+        `,
+      }),
+      extract: async (input) => {
+        calls.push(input);
+        return {
+          kind: "drafts",
+          runId: input.runId,
+          failures: [],
+          eventDrafts: [],
+        };
+      },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].articleSnapshot.captureMode).toBe(
+      "image_with_qr_registration",
+    );
+    expect(calls[0].evidenceAssets.map((asset) => asset.role)).toEqual([
+      "poster",
+      "qr",
+    ]);
+    expect(result.articleBundle.images.map((image) => image.role)).toEqual([
+      "poster",
+      "qr",
+    ]);
+  });
+
   it("passes upload through only when explicitly requested", async () => {
     const result = await runWechatUrlExtractionOnce({
       env: {},

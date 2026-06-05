@@ -47,7 +47,17 @@ describe("Wechat2RSS article snapshot builder", () => {
       captureMode: "image_with_qr_registration",
       sourceName: "Embassy Culture",
     });
+    expect(artifact.articleBundle).toMatchObject({
+      version: "captured-article-bundle-v1",
+      provider: "wechat2rss",
+      sourceUrl: "https://mp.weixin.qq.com/s/activity",
+      sourceName: "Embassy Culture",
+      captureMode: "image_with_qr_registration",
+    });
     expect(artifact.articleSnapshot.payload.evidenceAssetIds).toHaveLength(2);
+    expect(artifact.articleSnapshot.payload.evidenceAssetIds).toEqual(
+      artifact.evidenceAssets.map((asset) => asset.payload.assetId),
+    );
     expect(artifact.evidenceAssets.map((asset) => asset.payload.role)).toEqual([
       "poster",
       "qr",
