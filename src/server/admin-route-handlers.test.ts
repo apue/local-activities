@@ -76,9 +76,31 @@ class RouteAdminStore implements AdminStore {
         model: "gpt-5-mini",
         operation: "event_extraction",
         workload: "event_extraction",
+        environment: "production_collector",
         requestCount: 1,
         totalTokens: 1150,
         costMicroCny: 2100,
+      },
+    ],
+    byEnvironment: [
+      {
+        environment: "production_collector",
+        requestCount: 1,
+        successCount: 1,
+        errorCount: 0,
+        totalTokens: 1150,
+        costMicroCny: 2100,
+        latestRecordedAt: "2026-06-04T02:00:00.000Z",
+      },
+    ],
+    byRun: [
+      {
+        runId: "run-1",
+        environment: "production_collector",
+        requestCount: 1,
+        totalTokens: 1150,
+        costMicroCny: 2100,
+        latestRecordedAt: "2026-06-04T02:00:00.000Z",
       },
     ],
     recent: [
@@ -95,7 +117,7 @@ class RouteAdminStore implements AdminStore {
         cachedInputTokens: 0,
         reasoningOutputTokens: 0,
         costMicroCny: 2100,
-        metadata: {},
+        metadata: { environment: "production_collector" },
       },
     ],
   };
@@ -415,6 +437,7 @@ describe("admin route handlers", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       usage: {
@@ -435,6 +458,22 @@ describe("admin route handlers", () => {
             model: "gpt-5-mini",
             operation: "event_extraction",
             workload: "event_extraction",
+            environment: "production_collector",
+          },
+        ],
+        byEnvironment: [
+          {
+            environment: "production_collector",
+            requestCount: 1,
+            totalTokens: 1150,
+          },
+        ],
+        byRun: [
+          {
+            runId: "run-1",
+            environment: "production_collector",
+            requestCount: 1,
+            totalTokens: 1150,
           },
         ],
       },

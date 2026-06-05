@@ -55,6 +55,8 @@ describe("admin readonly smoke", () => {
             range: { key: range },
             totals: { requestCount: 0 },
             byModel: [],
+            byEnvironment: [],
+            byRun: [],
             recent: [],
           },
         });

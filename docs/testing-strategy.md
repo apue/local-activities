@@ -128,6 +128,10 @@ Live eval may upload LLM usage because it spends real provider credit, but usage
 records must use an `eval:*` environment label so they remain separate from
 production collector usage.
 
+Admin usage summaries must group real provider usage by provider, model,
+environment label, and run id. Mocked replay tests must not upload usage rows
+because they do not spend provider credit.
+
 ## Matching / Revision
 
 Test focus:
@@ -159,6 +163,7 @@ Test focus:
 - incomplete cases remain reviewable in admin
 - poster and QR evidence render when relevant
 - live token usage is visible with a production acceptance environment label
+  and the production seed run id
 
 Expected checks:
 

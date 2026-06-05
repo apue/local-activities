@@ -198,10 +198,17 @@ export async function handleAdminListLlmUsage(
       store,
       now,
     );
-    return Response.json({
-      ok: true,
-      usage,
-    });
+    return Response.json(
+      {
+        ok: true,
+        usage,
+      },
+      {
+        headers: {
+          "cache-control": "no-store",
+        },
+      },
+    );
   } catch (error) {
     return serviceErrorResponse(error);
   }
