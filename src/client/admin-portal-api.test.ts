@@ -91,6 +91,19 @@ describe("admin portal API client", () => {
       adminApiRequest("/api/admin/collector-jobs", { fetchImpl }),
     ).rejects.toThrow("request_failed_503");
   });
+
+  it("surfaces backend error messages before stable error codes", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      jsonResponse(400, {
+        ok: false,
+        error: "draft_not_publishable",
+        message: "Operator override reason required",
+      });
+
+    await expect(
+      adminApiRequest("/api/admin/event-drafts/draft-1/publish", { fetchImpl }),
+    ).rejects.toThrow("Operator override reason required");
+  });
 });
 
 function jsonResponse(status: number, body: unknown) {

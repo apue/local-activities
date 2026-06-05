@@ -1,32 +1,53 @@
 export type AdminPortalDraftLike = {
   title?: string;
-  organizer?: string;
   startsAt?: string;
   venueName?: string;
   venueAddress?: string;
-  reservationStatus?: string;
   reviewState?: string;
+  publishDecision?: AdminPortalPublishDecision;
 };
 
-export type DraftBlockingReason =
-  | "missing_title"
-  | "missing_start_time"
-  | "missing_venue";
+export type AdminPortalPublishBlocker = {
+  code: string;
+  message: string;
+};
+
+export type AdminPortalPublishDecision = {
+  canPublish: boolean;
+  canPublishWithOverride: boolean;
+  requiresOperatorOverride: boolean;
+  hardBlockers: AdminPortalPublishBlocker[];
+  softBlockers: AdminPortalPublishBlocker[];
+  disabledReason?: string;
+};
+
+export type DraftBlockingReason = string;
 
 export function getDraftBlockingReasons(
   draft: AdminPortalDraftLike,
 ): DraftBlockingReason[] {
-  const reasons: DraftBlockingReason[] = [];
-
-  if (!draft.title) reasons.push("missing_title");
-  if (!draft.startsAt) reasons.push("missing_start_time");
-  if (!draft.venueName && !draft.venueAddress) reasons.push("missing_venue");
-
-  return reasons;
+  const decision = draft.publishDecision;
+  if (!decision) return ["publish_decision_missing"];
+  return [...decision.hardBlockers, ...decision.softBlockers].map(
+    (blocker) => blocker.code,
+  );
 }
 
-export function isDraftPublishableForDisplay(draft: AdminPortalDraftLike) {
-  return getDraftBlockingReasons(draft).length === 0;
+export function isDraftPublishableForDisplay(
+  draft: AdminPortalDraftLike,
+  operatorOverrideReason = "",
+) {
+  const decision = draft.publishDecision;
+  if (!decision) return false;
+  if (decision.canPublish) return true;
+  return (
+    decision.canPublishWithOverride &&
+    Boolean(operatorOverrideReason.trim())
+  );
+}
+
+export function canRunDraftReviewAction(draft: AdminPortalDraftLike) {
+  return !["approved", "rejected"].includes(draft.reviewState ?? "");
 }
 
 export function getReviewStateLabel(reviewState: string | undefined) {

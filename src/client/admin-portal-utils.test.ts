@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canRunDraftReviewAction,
   getDraftBlockingReasons,
   formatLlmCostCny,
   formatTokenCount,
@@ -17,36 +18,88 @@ const draft = {
   venueName: "Italian Cultural Institute",
   reservationStatus: "required",
   reviewState: "ready_for_review",
+  publishDecision: {
+    canPublish: true,
+    canPublishWithOverride: false,
+    requiresOperatorOverride: false,
+    hardBlockers: [],
+    softBlockers: [],
+  },
 };
 
 describe("admin portal utils", () => {
-  it("marks drafts with minimum public fields as publishable", () => {
+  it("uses backend publish decisions instead of local field checks", () => {
     expect(isDraftPublishableForDisplay(draft)).toBe(true);
     expect(getDraftBlockingReasons(draft)).toEqual([]);
-  });
-
-  it("accepts venue address as the minimum venue field", () => {
     expect(
       isDraftPublishableForDisplay({
-        ...draft,
-        organizer: undefined,
-        venueName: undefined,
-        venueAddress: "北京市朝阳区朝阳公园",
-        reservationStatus: undefined,
-      }),
-    ).toBe(true);
-  });
-
-  it("explains missing publish fields", () => {
-    expect(
-      getDraftBlockingReasons({
         ...draft,
         title: undefined,
         startsAt: undefined,
         venueName: undefined,
-        venueAddress: undefined,
       }),
-    ).toEqual(["missing_title", "missing_start_time", "missing_venue"]);
+    ).toBe(true);
+  });
+
+  it("returns backend blocker codes and disables hard-blocked publish", () => {
+    const blockedDraft = {
+      ...draft,
+      publishDecision: {
+        canPublish: false,
+        canPublishWithOverride: false,
+        requiresOperatorOverride: false,
+        hardBlockers: [
+          {
+            code: "not_public_activity",
+            message: "Not public activity",
+          },
+        ],
+        softBlockers: [],
+        disabledReason: "Not public activity",
+      },
+    };
+
+    expect(isDraftPublishableForDisplay(blockedDraft)).toBe(false);
+    expect(getDraftBlockingReasons(blockedDraft)).toEqual([
+      "not_public_activity",
+    ]);
+  });
+
+  it("allows soft-blocked publish only with operator override text", () => {
+    const softBlockedDraft = {
+      ...draft,
+      publishDecision: {
+        canPublish: false,
+        canPublishWithOverride: true,
+        requiresOperatorOverride: true,
+        hardBlockers: [],
+        softBlockers: [
+          {
+            code: "missing_end_time",
+            message: "Missing end time",
+          },
+        ],
+        disabledReason: "Operator override reason required",
+      },
+    };
+
+    expect(isDraftPublishableForDisplay(softBlockedDraft)).toBe(false);
+    expect(
+      isDraftPublishableForDisplay(softBlockedDraft, "Poster confirms schedule."),
+    ).toBe(true);
+    expect(getDraftBlockingReasons(softBlockedDraft)).toEqual([
+      "missing_end_time",
+    ]);
+  });
+
+  it("keeps review actions off for closed draft states", () => {
+    expect(canRunDraftReviewAction(draft)).toBe(true);
+    expect(canRunDraftReviewAction({ ...draft, reviewState: "approved" })).toBe(
+      false,
+    );
+    expect(canRunDraftReviewAction({ ...draft, reviewState: "rejected" })).toBe(
+      false,
+    );
   });
 
   it("formats known review states for compact UI labels", () => {

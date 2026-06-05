@@ -381,7 +381,16 @@ describe("admin route handlers", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
-      drafts: [expect.objectContaining({ id: "draft-1" })],
+      drafts: [
+        expect.objectContaining({
+          id: "draft-1",
+          publishDecision: expect.objectContaining({
+            canPublish: true,
+            hardBlockers: [],
+            softBlockers: [],
+          }),
+        }),
+      ],
     });
   });
 
@@ -552,6 +561,20 @@ describe("admin route handlers", () => {
       new Date("2026-05-28T08:00:00.000Z"),
     );
     expect(blocked.status).toBe(400);
+    await expect(blocked.json()).resolves.toEqual({
+      ok: false,
+      error: "draft_not_publishable",
+      message: "Operator override reason required",
+      publishDecision: expect.objectContaining({
+        canPublish: false,
+        canPublishWithOverride: true,
+        requiresOperatorOverride: true,
+        softBlockers: [
+          expect.objectContaining({ code: "low_confidence" }),
+          expect.objectContaining({ code: "missing_end_time" }),
+        ],
+      }),
+    });
 
     const response = await handleAdminDraftAction(
       new Request("https://example.com/api/admin/event-drafts/draft-1/publish", {
@@ -569,5 +592,50 @@ describe("admin route handlers", () => {
     );
 
     expect(response.status).toBe(200);
+  });
+
+  it("updates review state for needs-info and reject draft actions", async () => {
+    const store = new RouteAdminStore();
+
+    const needsInfo = await handleAdminDraftAction(
+      request(),
+      "draft-1",
+      "needs-info",
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+    expect(needsInfo.status).toBe(200);
+    await expect(needsInfo.json()).resolves.toMatchObject({
+      ok: true,
+      draft: {
+        id: "draft-1",
+        reviewState: "needs_info",
+        publishDecision: expect.objectContaining({ canPublish: true }),
+      },
+    });
+
+    const rejected = await handleAdminDraftAction(
+      request(),
+      "draft-1",
+      "reject",
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+    expect(rejected.status).toBe(200);
+    await expect(rejected.json()).resolves.toMatchObject({
+      ok: true,
+      draft: {
+        id: "draft-1",
+        reviewState: "rejected",
+        publishDecision: expect.objectContaining({
+          canPublish: false,
+          hardBlockers: [
+            expect.objectContaining({ code: "closed_review_state" }),
+          ],
+        }),
+      },
+    });
   });
 });

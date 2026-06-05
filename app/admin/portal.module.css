@@ -25,6 +25,11 @@
   gap: 12px;
 }
 
+.brand strong,
+.brand div span {
+  display: block;
+}
+
 .brand span,
 .field span,
 .status,
@@ -92,6 +97,11 @@
 
 .primaryButton:disabled {
   opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.actions button:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -255,6 +265,11 @@
   color: #8f2f25;
 }
 
+.blockers .softBlocker {
+  background: #f4ecd8;
+  color: #755718;
+}
+
 .detail h3 {
   margin: 14px 0 10px;
   font-size: 1.3rem;
@@ -336,6 +351,35 @@
   flex-wrap: wrap;
   gap: 7px;
   margin: 14px 0;
+}
+
+.blockers small {
+  flex-basis: 100%;
+  color: #667062;
+  font-weight: 700;
+}
+
+.overrideField {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 14px;
+}
+
+.overrideField span {
+  color: #667062;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.overrideField textarea {
+  width: 100%;
+  border: 1px solid #c8cec2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #20231f;
+  font: inherit;
+  padding: 10px 11px;
+  resize: vertical;
 }
 
 .actions {
