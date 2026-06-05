@@ -17,6 +17,7 @@ import {
   type CollectorIngestStore,
   type NormalizedLlmUsageEnvelope,
 } from "./collector-ingest-service";
+import { resolveEvidenceAssetImageUrls } from "./evidence-asset-image-urls";
 import { getSupabaseAdminClient } from "./supabase-admin";
 
 export function getSupabaseCollectorIngestStore(
@@ -149,6 +150,13 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
   ) {
     const payload = envelope.payload;
     const sourceRunId = await this.findSourceRunId(envelope);
+    const imageUrls = await resolveEvidenceAssetImageUrls(this.client, {
+      posterAssetId: payload.posterAssetId,
+      registrationQrAssetId: payload.registrationQrAssetId,
+      posterImageUrl: payload.posterImageUrl,
+      posterImageAlt: payload.posterImageAlt,
+      posterImageSourceUrl: payload.posterImageSourceUrl,
+    });
     const draftRow = {
       draft_id: createStableCollectorObjectId("draft", [
         payload.articleUrl,
@@ -185,9 +193,11 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
       poster_asset_id: payload.posterAssetId ?? null,
       qr_asset_id: payload.qrAssetId ?? null,
       registration_qr_asset_id: payload.registrationQrAssetId ?? null,
-      poster_image_url: payload.posterImageUrl ?? null,
-      poster_image_alt: payload.posterImageAlt ?? null,
-      poster_image_source_url: payload.posterImageSourceUrl ?? null,
+      poster_image_url: imageUrls.posterImageUrl ?? null,
+      poster_image_alt: imageUrls.posterImageAlt ?? null,
+      poster_image_source_url: imageUrls.posterImageSourceUrl ?? null,
+      registration_qr_image_url: imageUrls.registrationQrImageUrl ?? null,
+      registration_qr_image_alt: imageUrls.registrationQrImageAlt ?? null,
       summary: payload.summary ?? null,
       entry_notes: payload.entryNotes ?? null,
       signals: payload.signals,
@@ -217,6 +227,13 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
     publishedAt: string;
   }) {
     const payload = input.payload;
+    const imageUrls = await resolveEvidenceAssetImageUrls(this.client, {
+      posterAssetId: payload.posterAssetId,
+      registrationQrAssetId: payload.registrationQrAssetId,
+      posterImageUrl: payload.posterImageUrl,
+      posterImageAlt: payload.posterImageAlt,
+      posterImageSourceUrl: payload.posterImageSourceUrl,
+    });
     const eventId = createStableCollectorObjectId("event", [
       payload.articleUrl,
       payload.extractionAttemptId,
@@ -245,9 +262,11 @@ class SupabaseCollectorIngestStore implements CollectorIngestStore {
       qr_asset_id: payload.qrAssetId ?? null,
       registration_qr_asset_id: payload.registrationQrAssetId ?? null,
       source_url: payload.articleUrl,
-      poster_image_url: payload.posterImageUrl ?? null,
-      poster_image_alt: payload.posterImageAlt ?? null,
-      poster_image_source_url: payload.posterImageSourceUrl ?? null,
+      poster_image_url: imageUrls.posterImageUrl ?? null,
+      poster_image_alt: imageUrls.posterImageAlt ?? null,
+      poster_image_source_url: imageUrls.posterImageSourceUrl ?? null,
+      registration_qr_image_url: imageUrls.registrationQrImageUrl ?? null,
+      registration_qr_image_alt: imageUrls.registrationQrImageAlt ?? null,
       summary: payload.summary ?? null,
       entry_notes: payload.entryNotes ?? null,
       hard_blockers: payload.hardBlockers ?? [],
@@ -422,6 +441,8 @@ function withoutOptionalPosterColumns(payload: Record<string, unknown>) {
     poster_image_url: _posterImageUrl,
     poster_image_alt: _posterImageAlt,
     poster_image_source_url: _posterImageSourceUrl,
+    registration_qr_image_url: _registrationQrImageUrl,
+    registration_qr_image_alt: _registrationQrImageAlt,
     ...rest
   } = payload;
   return rest;
@@ -435,6 +456,8 @@ function isMissingOptionalPosterColumnError(error: unknown) {
   return (
     message.includes("poster_image_url") ||
     message.includes("poster_image_alt") ||
-    message.includes("poster_image_source_url")
+    message.includes("poster_image_source_url") ||
+    message.includes("registration_qr_image_url") ||
+    message.includes("registration_qr_image_alt")
   );
 }

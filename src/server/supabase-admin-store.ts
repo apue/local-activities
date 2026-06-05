@@ -13,6 +13,7 @@ import type {
   PublishedAdminEvent,
 } from "./admin-service";
 import type { CollectorJobRecord } from "./collector-job-service";
+import { resolveEvidenceAssetImageUrls } from "./evidence-asset-image-urls";
 import { getSupabaseAdminClient } from "./supabase-admin";
 
 type CollectorJobRow = {
@@ -64,6 +65,8 @@ type EventDraftRow = {
   poster_image_url?: string | null;
   poster_image_alt?: string | null;
   poster_image_source_url?: string | null;
+  registration_qr_image_url?: string | null;
+  registration_qr_image_alt?: string | null;
   summary: string | null;
   entry_notes: string | null;
   triage_decision: AdminEventDraftRecord["triageDecision"] | null;
@@ -321,6 +324,15 @@ class SupabaseAdminStore implements AdminStore {
     draft: AdminEventDraftRecord;
     publishedAt: string;
   }): Promise<PublishedAdminEvent> {
+    const imageUrls = await resolveEvidenceAssetImageUrls(this.client, {
+      posterAssetId: input.draft.posterAssetId,
+      registrationQrAssetId: input.draft.registrationQrAssetId,
+      posterImageUrl: input.draft.posterImageUrl,
+      posterImageAlt: input.draft.posterImageAlt,
+      posterImageSourceUrl: input.draft.posterImageSourceUrl,
+      registrationQrImageUrl: input.draft.registrationQrImageUrl,
+      registrationQrImageAlt: input.draft.registrationQrImageAlt,
+    });
     const eventId = `event-${randomUUID()}`;
     const eventRow = {
       event_id: eventId,
@@ -350,9 +362,11 @@ class SupabaseAdminStore implements AdminStore {
       soft_blockers: input.draft.softBlockers ?? [],
       operator_override_reason: input.draft.operatorOverrideReason ?? null,
       resolution_decision: input.draft.resolutionDecision ?? null,
-      poster_image_url: input.draft.posterImageUrl ?? null,
-      poster_image_alt: input.draft.posterImageAlt ?? null,
-      poster_image_source_url: input.draft.posterImageSourceUrl ?? null,
+      poster_image_url: imageUrls.posterImageUrl ?? null,
+      poster_image_alt: imageUrls.posterImageAlt ?? null,
+      poster_image_source_url: imageUrls.posterImageSourceUrl ?? null,
+      registration_qr_image_url: imageUrls.registrationQrImageUrl ?? null,
+      registration_qr_image_alt: imageUrls.registrationQrImageAlt ?? null,
       summary: input.draft.summary ?? null,
       entry_notes: input.draft.entryNotes ?? null,
       status: "published",
@@ -530,6 +544,8 @@ function withoutOptionalPosterColumns(payload: Record<string, unknown>) {
     poster_image_url: _posterImageUrl,
     poster_image_alt: _posterImageAlt,
     poster_image_source_url: _posterImageSourceUrl,
+    registration_qr_image_url: _registrationQrImageUrl,
+    registration_qr_image_alt: _registrationQrImageAlt,
     ...rest
   } = payload;
   return rest;
@@ -543,7 +559,9 @@ function isMissingOptionalPosterColumnError(error: unknown) {
   return (
     message.includes("poster_image_url") ||
     message.includes("poster_image_alt") ||
-    message.includes("poster_image_source_url")
+    message.includes("poster_image_source_url") ||
+    message.includes("registration_qr_image_url") ||
+    message.includes("registration_qr_image_alt")
   );
 }
 
@@ -639,6 +657,8 @@ function toDraftRecord(row: EventDraftRow): AdminEventDraftRecord {
     posterImageUrl: row.poster_image_url ?? undefined,
     posterImageAlt: row.poster_image_alt ?? undefined,
     posterImageSourceUrl: row.poster_image_source_url ?? undefined,
+    registrationQrImageUrl: row.registration_qr_image_url ?? undefined,
+    registrationQrImageAlt: row.registration_qr_image_alt ?? undefined,
     summary: row.summary ?? undefined,
     entryNotes: row.entry_notes ?? undefined,
     triageDecision: row.triage_decision ?? undefined,

@@ -35,6 +35,8 @@ export type AdminEventDraftRecord = {
   posterImageUrl?: string;
   posterImageAlt?: string;
   posterImageSourceUrl?: string;
+  registrationQrImageUrl?: string;
+  registrationQrImageAlt?: string;
   summary?: string;
   entryNotes?: string;
   triageDecision?:

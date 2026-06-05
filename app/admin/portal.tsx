@@ -47,6 +47,10 @@ type EventDraft = {
   reservationStatus?: string;
   registrationUrl?: string;
   scheduleText?: string;
+  posterImageUrl?: string;
+  posterImageAlt?: string;
+  registrationQrImageUrl?: string;
+  registrationQrImageAlt?: string;
   summary?: string;
   entryNotes?: string;
   confidence: number;
@@ -386,6 +390,41 @@ export function AdminPortal() {
                 <p className={styles.summary}>
                   {selectedDraft.summary ?? "No extraction summary."}
                 </p>
+                {selectedDraft.posterImageUrl ||
+                selectedDraft.registrationQrImageUrl ? (
+                  <div className={styles.evidenceGrid}>
+                    {selectedDraft.posterImageUrl ? (
+                      <figure>
+                        <img
+                          src={selectedDraft.posterImageUrl}
+                          alt={
+                            selectedDraft.posterImageAlt ??
+                            `${selectedDraft.title ?? "Event"} poster`
+                          }
+                          width={320}
+                          height={240}
+                          loading="lazy"
+                        />
+                        <figcaption>Poster</figcaption>
+                      </figure>
+                    ) : null}
+                    {selectedDraft.registrationQrImageUrl ? (
+                      <figure>
+                        <img
+                          src={selectedDraft.registrationQrImageUrl}
+                          alt={
+                            selectedDraft.registrationQrImageAlt ??
+                            `${selectedDraft.title ?? "Event"} registration QR`
+                          }
+                          width={220}
+                          height={220}
+                          loading="lazy"
+                        />
+                        <figcaption>Registration QR</figcaption>
+                      </figure>
+                    ) : null}
+                  </div>
+                ) : null}
                 <a className={styles.sourceLink} href={selectedDraft.articleUrl}>
                   Open source URL
                 </a>

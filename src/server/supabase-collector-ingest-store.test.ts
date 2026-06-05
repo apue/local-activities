@@ -169,6 +169,104 @@ describe("supabase collector ingest store", () => {
       });
   });
 
+  it("resolves public poster and registration QR evidence URLs for drafts and published events", async () => {
+    const upserts: Array<{ table: string; payload: Record<string, unknown> }> =
+      [];
+    const store = getSupabaseCollectorIngestStore(
+      supabaseClientForEventDraftPublish(upserts, [
+        {
+          asset_id: "asset-poster-1",
+          role: "poster",
+          storage_path: "https://blob.example.com/posters/activity.png",
+          source_url: "https://mmbiz.qpic.cn/source-poster.png",
+          text_content: "Activity poster",
+        },
+        {
+          asset_id: "asset-qr-1",
+          role: "registration",
+          storage_path: "https://blob.example.com/qr/register.png",
+          source_url: "https://mmbiz.qpic.cn/source-qr.png",
+          text_content: "Registration QR",
+        },
+      ]),
+    );
+    const payload = {
+      ...eventPipelineV2DraftPayload(),
+      posterImageUrl: undefined,
+      posterImageAlt: undefined,
+      posterImageSourceUrl: undefined,
+    };
+
+    await expect(
+      store.upsertEventDraft(
+        {
+          collectorId: "collector-1",
+          runId: "run-1",
+          observedAt: "2026-06-03T08:00:00.000Z",
+          payloadVersion: "2026-05-collector-v1",
+          payload,
+        },
+        { reviewState: "needs_review" },
+      ),
+    ).resolves.toEqual({ id: "1" });
+    await expect(
+      store.publishEventDraft!({
+        payload,
+        publishedAt: "2026-06-03T09:00:00.000Z",
+      }),
+    ).resolves.toEqual({ id: "event-1" });
+
+    expect(upserts.find((entry) => entry.table === "event_drafts")?.payload)
+      .toMatchObject({
+        poster_image_url: "https://blob.example.com/posters/activity.png",
+        poster_image_alt: "Activity poster",
+        poster_image_source_url: "https://mmbiz.qpic.cn/source-poster.png",
+        registration_qr_image_url: "https://blob.example.com/qr/register.png",
+        registration_qr_image_alt: "Registration QR",
+      });
+    expect(upserts.find((entry) => entry.table === "canonical_events")?.payload)
+      .toMatchObject({
+        poster_image_url: "https://blob.example.com/posters/activity.png",
+        registration_qr_image_url: "https://blob.example.com/qr/register.png",
+      });
+  });
+
+  it("does not resolve placeholder fixture asset paths as public image URLs", async () => {
+    const upserts: Array<{ table: string; payload: Record<string, unknown> }> =
+      [];
+    const store = getSupabaseCollectorIngestStore(
+      supabaseClientForEventDraftPublish(upserts, [
+        {
+          asset_id: "asset-poster-1",
+          role: "poster",
+          storage_path: "fixture-assets/beiping/asset-poster-1.png",
+          source_url: "https://mmbiz.qpic.cn/source-poster.png",
+          text_content: "Fixture poster",
+        },
+      ]),
+    );
+
+    await store.upsertEventDraft(
+      {
+        collectorId: "collector-1",
+        runId: "run-1",
+        observedAt: "2026-06-03T08:00:00.000Z",
+        payloadVersion: "2026-05-collector-v1",
+        payload: {
+          ...eventPipelineV2DraftPayload(),
+          registrationQrAssetId: undefined,
+          posterImageUrl: undefined,
+        },
+      },
+      { reviewState: "needs_review" },
+    );
+
+    expect(upserts.find((entry) => entry.table === "event_drafts")?.payload)
+      .toMatchObject({
+        poster_image_url: null,
+      });
+  });
+
   it("persists excluded articles separately from ordinary drafts", async () => {
     const upserts: Array<{ table: string; payload: Record<string, unknown> }> =
       [];
@@ -318,9 +416,13 @@ function eventPipelineV2DraftPayload(): EventDraftUpload {
 
 function supabaseClientForEventDraftPublish(
   upserts: Array<{ table: string; payload: Record<string, unknown> }>,
+  evidenceRows: unknown[] = [],
 ) {
   return {
     from(table: string) {
+      if (table === "evidence_assets") {
+        return evidenceAssetQuery(evidenceRows);
+      }
       const query = {
         select() {
           return query;
@@ -346,6 +448,18 @@ function supabaseClientForEventDraftPublish(
       return query;
     },
   } as never;
+}
+
+function evidenceAssetQuery(rows: unknown[]) {
+  const query = {
+    select() {
+      return query;
+    },
+    in() {
+      return Promise.resolve({ data: rows, error: null });
+    },
+  };
+  return query;
 }
 
 function supabaseClientMissingPosterColumns(

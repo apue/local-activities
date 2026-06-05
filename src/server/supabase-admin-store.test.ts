@@ -334,6 +334,63 @@ describe("supabase admin store", () => {
       resolution_decision: "new_event",
     });
   });
+
+  it("resolves public poster and registration QR evidence while publishing", async () => {
+    const inserts: Array<{ table: string; payload: Record<string, unknown> }> =
+      [];
+    const store = getSupabaseAdminStore(
+      supabaseClientForPublishWithEvidence(inserts, [
+        {
+          asset_id: "asset-poster-1",
+          role: "poster",
+          storage_path: "https://blob.example.com/posters/thai.png",
+          source_url: "https://mmbiz.qpic.cn/poster.png",
+          text_content: "Thai Festival poster",
+        },
+        {
+          asset_id: "asset-qr-1",
+          role: "registration",
+          storage_path: "https://blob.example.com/qr/thai.png",
+          source_url: "https://mmbiz.qpic.cn/qr.png",
+          text_content: "Thai Festival registration QR",
+        },
+      ]),
+    );
+
+    await expect(
+      store.publishEventDraft({
+        draft: {
+          id: "draft-1",
+          articleUrl: "https://mp.weixin.qq.com/s/example",
+          title: "Thai Festival Beijing 2026",
+          startsAt: "2026-05-30T10:30:00+08:00",
+          timezone: "Asia/Shanghai",
+          city: "Beijing",
+          venueName: "北京朝阳公园",
+          reservationStatus: "required",
+          posterAssetId: "asset-poster-1",
+          registrationQrAssetId: "asset-qr-1",
+          hardBlockers: [],
+          softBlockers: [],
+          resolutionDecision: "new_event",
+          confidence: 0.9,
+          reviewState: "ready_for_review",
+          evidenceAssetIds: ["asset-poster-1", "asset-qr-1"],
+          fieldEvidence: {},
+        },
+        publishedAt: "2026-05-29T08:00:00.000Z",
+      }),
+    ).resolves.toMatchObject({ id: "event-1" });
+
+    expect(inserts.find((entry) => entry.table === "canonical_events")?.payload)
+      .toMatchObject({
+        poster_image_url: "https://blob.example.com/posters/thai.png",
+        poster_image_alt: "Thai Festival poster",
+        poster_image_source_url: "https://mmbiz.qpic.cn/poster.png",
+        registration_qr_image_url: "https://blob.example.com/qr/thai.png",
+        registration_qr_image_alt: "Thai Festival registration QR",
+      });
+  });
 });
 
 function supabaseClientReturningEventDrafts(rows: unknown[]) {
@@ -462,6 +519,17 @@ function supabaseClientMissingPosterColumnsForPublish(
 ) {
   return {
     from(table: string) {
+      if (table === "evidence_assets") {
+        return {
+          select() {
+            return {
+              in() {
+                return Promise.resolve({ data: [], error: null });
+              },
+            };
+          },
+        };
+      }
       const query = {
         insert(payload: Record<string, unknown>) {
           inserts.push({ table, payload });
@@ -483,6 +551,55 @@ function supabaseClientMissingPosterColumnsForPublish(
               },
             });
           }
+          return Promise.resolve({
+            data: {
+              id: 1,
+              event_id: "event-1",
+              title: "Thai Festival Beijing 2026",
+              status: "published",
+              published_at: "2026-05-29T08:00:00.000Z",
+            },
+            error: null,
+          });
+        },
+        update() {
+          return query;
+        },
+        eq() {
+          return Promise.resolve({ error: null });
+        },
+      };
+      return query;
+    },
+  } as never;
+}
+
+function supabaseClientForPublishWithEvidence(
+  inserts: Array<{ table: string; payload: Record<string, unknown> }>,
+  evidenceRows: unknown[],
+) {
+  return {
+    from(table: string) {
+      if (table === "evidence_assets") {
+        return {
+          select() {
+            return {
+              in() {
+                return Promise.resolve({ data: evidenceRows, error: null });
+              },
+            };
+          },
+        };
+      }
+      const query = {
+        insert(payload: Record<string, unknown>) {
+          inserts.push({ table, payload });
+          return query;
+        },
+        select() {
+          return query;
+        },
+        single() {
           return Promise.resolve({
             data: {
               id: 1,
