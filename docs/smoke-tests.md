@@ -61,6 +61,12 @@ The command covers:
 Fixture smoke writes data. Use disposable environments or manually clean up
 generated fixture drafts/events before launch.
 
+Do not use fixture smoke or fixture upload as a substitute for production
+content ingestion. Fixture rows are test artifacts even when they are derived
+from official source posts. They may include synthetic source URLs, placeholder
+asset paths, and manual expected decisions. Real production catalog entries must
+come from live extraction of real source URLs.
+
 ### Real Agent Job Smoke
 
 Use this after Vercel production has real Sandbox and OpenAI provider settings:

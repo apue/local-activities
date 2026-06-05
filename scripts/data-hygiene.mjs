@@ -9,7 +9,7 @@ import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 const defaultLimit = 1_000;
 
 const likelyTestPattern =
-  /\/s\/(example|local|job|text|activity|agent-smoke|e2e-fixture)|example\.com|activities\.example/i;
+  /\/s\/(example|local|job|text|activity|agent-smoke|e2e-fixture|[^/?#]*fixture)|example\.com|activities\.example|fixture case|fixture-assets\/|fixture-/i;
 const likelyNegativeDraftPattern =
   /部长|访问|会见|声明|认可|无口蹄疫|食品展|回顾|新闻|president|minister|official visit|statement|trade/i;
 
@@ -24,13 +24,13 @@ export async function fetchDataAuditRows({ client, limit = defaultLimit }) {
     selectRows(
       client,
       "event_drafts",
-      "id,draft_id,article_url,title,review_state,processing_state,triage_decision,triage_action,public_eligibility,confidence,created_at,poster_asset_id,qr_asset_id,registration_qr_asset_id",
+      "id,draft_id,article_url,title,summary,review_state,processing_state,triage_decision,triage_action,public_eligibility,confidence,created_at,poster_asset_id,qr_asset_id,registration_qr_asset_id",
       limit,
     ),
     selectRows(
       client,
       "excluded_articles",
-      "id,article_url,triage_decision,confidence,processing_state,created_at",
+      "id,article_url,triage_decision,exclusion_reason,confidence,processing_state,created_at",
       limit,
     ),
     selectRows(
@@ -48,7 +48,7 @@ export async function fetchDataAuditRows({ client, limit = defaultLimit }) {
     selectRows(
       client,
       "canonical_events",
-      "id,event_id,title,source_url,created_at",
+      "id,event_id,title,summary,source_url,created_at",
       limit,
     ),
   ]);
@@ -85,14 +85,49 @@ export function summarizeDataAudit(rows) {
   );
   const likelyTestRows = [
     ...eventDrafts
-      .filter((draft) => likelyTestPattern.test(draft.article_url ?? ""))
+      .filter((draft) =>
+        isLikelyTestRow(draft.article_url, draft.title, draft.summary),
+      )
       .map((draft) => ({ table: "event_drafts", id: draft.id, url: draft.article_url })),
+    ...excludedArticles
+      .filter((article) =>
+        isLikelyTestRow(
+          article.article_url,
+          article.triage_decision,
+          article.exclusion_reason,
+        ),
+      )
+      .map((article) => ({
+        table: "excluded_articles",
+        id: article.id,
+        url: article.article_url,
+      })),
     ...articleSnapshots
-      .filter((snapshot) => likelyTestPattern.test(snapshot.canonical_url ?? ""))
+      .filter((snapshot) =>
+        isLikelyTestRow(snapshot.canonical_url, snapshot.title, snapshot.capture_mode),
+      )
       .map((snapshot) => ({
         table: "article_snapshots",
         id: snapshot.id,
         url: snapshot.canonical_url,
+      })),
+    ...evidenceAssets
+      .filter((asset) =>
+        isLikelyTestRow(asset.article_url, asset.source_url, asset.storage_path),
+      )
+      .map((asset) => ({
+        table: "evidence_assets",
+        id: asset.id,
+        url: asset.article_url,
+      })),
+    ...canonicalEvents
+      .filter((event) =>
+        isLikelyTestRow(event.source_url, event.title, event.summary, event.event_id),
+      )
+      .map((event) => ({
+        table: "canonical_events",
+        id: event.id,
+        url: event.source_url,
       })),
   ];
   const brokenEvidenceUrls = evidenceAssets.filter((asset) =>
@@ -480,6 +515,10 @@ function chooseDraftToKeep(drafts) {
 
 function normalizeTitle(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isLikelyTestRow(...values) {
+  return values.some((value) => likelyTestPattern.test(String(value ?? "")));
 }
 
 function formatCounts(counts) {
