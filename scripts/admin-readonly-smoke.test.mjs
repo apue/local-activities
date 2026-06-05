@@ -42,6 +42,25 @@ describe("admin readonly smoke", () => {
       }
 
       if (
+        request.path.startsWith("/api/admin/llm-usage?range=") &&
+        request.headers.cookie === "admin_session=admin-secret"
+      ) {
+        const range = new URL(
+          request.path,
+          "https://local-activities.example",
+        ).searchParams.get("range");
+        return jsonResult(200, {
+          ok: true,
+          usage: {
+            range: { key: range },
+            totals: { requestCount: 0 },
+            byModel: [],
+            recent: [],
+          },
+        });
+      }
+
+      if (
         request.path === "/api/admin/collector-jobs" &&
         request.headers.authorization === "Bearer smoke-invalid-admin-token"
       ) {
@@ -66,10 +85,16 @@ describe("admin readonly smoke", () => {
       "/admin",
       "/api/admin/collector-jobs",
       "/api/admin/event-drafts",
+      "/api/admin/llm-usage?range=today",
+      "/api/admin/llm-usage?range=7d",
+      "/api/admin/llm-usage?range=all",
       "/api/admin/collector-jobs",
     ]);
     expect(calls.map((call) => call.method)).toEqual([
       "POST",
+      "GET",
+      "GET",
+      "GET",
       "GET",
       "GET",
       "GET",
@@ -87,6 +112,9 @@ describe("admin readonly smoke", () => {
         "admin_page",
         "admin_jobs_json",
         "admin_drafts_json",
+        "admin_usage_today_json",
+        "admin_usage_7d_json",
+        "admin_usage_all_json",
         "admin_invalid_token_json",
       ],
       proxyUrl: "http://127.0.0.1:7897",
@@ -132,6 +160,24 @@ describe("admin readonly smoke", () => {
       {
         name: "admin_drafts_json",
         path: "/api/admin/event-drafts",
+        authorization: undefined,
+        cookie: "admin_session=admin-secret",
+      },
+      {
+        name: "admin_usage_today_json",
+        path: "/api/admin/llm-usage?range=today",
+        authorization: undefined,
+        cookie: "admin_session=admin-secret",
+      },
+      {
+        name: "admin_usage_7d_json",
+        path: "/api/admin/llm-usage?range=7d",
+        authorization: undefined,
+        cookie: "admin_session=admin-secret",
+      },
+      {
+        name: "admin_usage_all_json",
+        path: "/api/admin/llm-usage?range=all",
         authorization: undefined,
         cookie: "admin_session=admin-secret",
       },

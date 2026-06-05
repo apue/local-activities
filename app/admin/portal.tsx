@@ -12,8 +12,10 @@ import {
   formatDateTime,
   formatLlmCostCny,
   formatTokenCount,
+  formatUsageTimestamp,
   getDraftBlockingReasons,
   getReviewStateLabel,
+  getUsageRangeLabel,
   isDraftPublishableForDisplay,
 } from "../../src/client/admin-portal-utils";
 import { extractFirstHttpUrl } from "../../src/shared/seed-url";
@@ -94,6 +96,12 @@ type LlmUsageRecord = {
 };
 
 type LlmUsageSummary = {
+  range: {
+    key: UsageRange;
+    label: string;
+    startsAt?: string;
+  };
+  latestRecordedAt?: string;
   totals: {
     requestCount: number;
     successCount: number;
@@ -107,6 +115,7 @@ type LlmUsageSummary = {
     provider: string;
     model: string;
     operation: string;
+    workload: string;
     requestCount: number;
     totalTokens: number;
     costMicroCny: number;
@@ -114,7 +123,13 @@ type LlmUsageSummary = {
   recent: LlmUsageRecord[];
 };
 
+type UsageRange = "today" | "7d" | "all";
+
 const emptyUsageSummary: LlmUsageSummary = {
+  range: {
+    key: "today",
+    label: "Today",
+  },
   totals: {
     requestCount: 0,
     successCount: 0,
@@ -136,6 +151,7 @@ export function AdminPortal() {
   const [usage, setUsage] = useState<LlmUsageSummary>(emptyUsageSummary);
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [reviewFilter, setReviewFilter] = useState("");
+  const [usageRange, setUsageRange] = useState<UsageRange>("today");
   const [operatorOverrideReason, setOperatorOverrideReason] = useState("");
   const [draftAction, setDraftAction] = useState<
     "needs-info" | "reject" | "publish" | null
@@ -166,8 +182,9 @@ export function AdminPortal() {
     setOperatorOverrideReason(selectedDraft?.operatorOverrideReason ?? "");
   }, [selectedDraft?.id, selectedDraft?.operatorOverrideReason]);
 
-  async function refresh() {
+  async function refresh(options: { usageRange?: UsageRange } = {}) {
     const enteredToken = token.trim();
+    const requestedUsageRange = options.usageRange ?? usageRange;
     setStatus("loading");
     setMessage("Loading admin state...");
     try {
@@ -175,7 +192,10 @@ export function AdminPortal() {
         await loginAdmin({ token: enteredToken });
         setToken("");
       }
-      const adminState = await loadAdminState({ reviewFilter });
+      const adminState = await loadAdminState({
+        reviewFilter,
+        usageRange: requestedUsageRange,
+      });
       const loadedJobs = adminState.jobs as CollectorJob[];
       const loadedDrafts = adminState.drafts as EventDraft[];
       const loadedUsage = adminState.usage as LlmUsageSummary;
@@ -333,7 +353,7 @@ export function AdminPortal() {
             </div>
             <div>
               <span>{usage.totals.requestCount}</span>
-              <small>LLM calls</small>
+              <small>LLM calls · {getUsageRangeLabel(usage.range.key)}</small>
             </div>
           </div>
         </header>
@@ -557,13 +577,28 @@ export function AdminPortal() {
           <div className={styles.panelHeader}>
             <div>
               <p className={styles.eyebrow}>LLM ledger</p>
-              <h2>Usage</h2>
+              <h2>Usage · {getUsageRangeLabel(usage.range.key)}</h2>
+            </div>
+            <div className={styles.segmentedControl} aria-label="Usage range">
+              {(["today", "7d", "all"] as const).map((range) => (
+                <button
+                  key={range}
+                  className={usageRange === range ? styles.activeSegment : ""}
+                  type="button"
+                  onClick={() => {
+                    setUsageRange(range);
+                    void refresh({ usageRange: range });
+                  }}
+                >
+                  {getUsageRangeLabel(range)}
+                </button>
+              ))}
             </div>
           </div>
 
           <div className={styles.usageSummary}>
             <div>
-              <small>Tokens</small>
+              <small>Tokens · {getUsageRangeLabel(usage.range.key)}</small>
               <span>{formatTokenCount(usage.totals.totalTokens)}</span>
             </div>
             <div>
@@ -573,6 +608,10 @@ export function AdminPortal() {
             <div>
               <small>Failures</small>
               <span>{usage.totals.errorCount}</span>
+            </div>
+            <div>
+              <small>Latest record</small>
+              <span>{formatUsageTimestamp(usage.latestRecordedAt)}</span>
             </div>
           </div>
 
@@ -585,7 +624,8 @@ export function AdminPortal() {
                 <strong>{model.model}</strong>
                 <span>{model.operation.replaceAll("_", " ")}</span>
                 <small>
-                  {model.provider} · {model.requestCount} calls ·{" "}
+                  {model.provider} · {model.workload.replaceAll("_", " ")} ·{" "}
+                  {model.requestCount} calls ·{" "}
                   {formatTokenCount(model.totalTokens)} tokens ·{" "}
                   {formatLlmCostCny(model.costMicroCny)}
                 </small>

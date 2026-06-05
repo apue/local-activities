@@ -5,6 +5,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
+import {
+  buildLlmUsageEnvelope as buildSharedLlmUsageEnvelope,
+  readUsageEnvironment,
+} from "./llm-usage-ledger.mjs";
 import { readVisionModelPolicy } from "./vision-model-policy.mjs";
 
 export const promptVersion = "event-extraction-2026-06-02";
@@ -55,6 +59,7 @@ export function readLlmExtractorConfig(env = process.env, options = {}) {
     openaiBaseUrl: normalizeBaseUrl(
       clean(env.OPENAI_BASE_URL) ?? "https://api.openai.com/v1",
     ),
+    usageEnvironment: readUsageEnvironment(env),
     collectorBaseUrl: normalizeBaseUrl(
       clean(env.COLLECTOR_BASE_URL) ?? clean(env.APP_BASE_URL) ?? "",
     ),
@@ -387,11 +392,13 @@ function buildLlmUsageEnvelope({
   statusCode,
   attemptNumber,
 }) {
-  const usage = normalizeProviderUsage(providerResponse?.usage);
   const metadata = removeUndefined({
     extractorVersion: promptVersion,
     schemaVersion: extractionSchemaVersion,
     apiStyle: config.openaiApiStyle,
+    workload: "event_extraction",
+    environment: config.usageEnvironment,
+    chargeable: true,
     articleUrl: articleSnapshot.canonicalUrl,
     failureReason,
     statusCode,
@@ -399,75 +406,23 @@ function buildLlmUsageEnvelope({
     usageSource: providerResponse?.usage ? "provider_usage" : "missing_usage",
   });
 
-  return envelope({
+  return buildSharedLlmUsageEnvelope({
     collectorId: config.collectorId,
     runId,
     observedAt,
-    payload: removeUndefined({
-      usageId: createStableCollectorObjectId("usage", [
-        config.collectorId,
-        runId,
-        articleSnapshot.canonicalUrl,
-        config.provider,
-        config.openaiModel,
-        String(attemptNumber ?? 1),
-        status,
-      ]),
-      recordedAt: observedAt,
-      operation: "event_extraction",
-      provider: config.provider,
-      model: config.openaiModel,
-      status,
-      ...usage,
-      costMicroCny: 0,
-      latencyMs,
-      sourceRunId: runId,
-      metadata,
-    }),
+    operation: "event_extraction",
+    provider: config.provider,
+    model: config.openaiModel,
+    status,
+    usage: providerResponse?.usage,
+    latencyMs,
+    sourceRunId: runId,
+    metadata,
+    usageIdParts: [
+      articleSnapshot.canonicalUrl,
+      String(attemptNumber ?? 1),
+    ],
   });
-}
-
-function normalizeProviderUsage(usage) {
-  const inputTokens = integerOrZero(
-    usage?.input_tokens ??
-      usage?.prompt_tokens ??
-      usage?.inputTokens ??
-      usage?.promptTokens,
-  );
-  const outputTokens = integerOrZero(
-    usage?.output_tokens ??
-      usage?.completion_tokens ??
-      usage?.outputTokens ??
-      usage?.completionTokens,
-  );
-  const totalTokens = integerOrZero(
-    usage?.total_tokens ?? usage?.totalTokens ?? inputTokens + outputTokens,
-  );
-  const cachedInputTokens = integerOrZero(
-    usage?.cached_input_tokens ??
-      usage?.cachedInputTokens ??
-      usage?.input_tokens_details?.cached_tokens ??
-      usage?.prompt_tokens_details?.cached_tokens,
-  );
-  const reasoningOutputTokens = integerOrZero(
-    usage?.reasoning_output_tokens ??
-      usage?.reasoningOutputTokens ??
-      usage?.output_tokens_details?.reasoning_tokens ??
-      usage?.completion_tokens_details?.reasoning_tokens,
-  );
-
-  return {
-    inputTokens,
-    outputTokens,
-    totalTokens,
-    cachedInputTokens,
-    reasoningOutputTokens,
-  };
-}
-
-function integerOrZero(value) {
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 function providerRequest({ config, articleSnapshot, evidenceAssets, runId }) {

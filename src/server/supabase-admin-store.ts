@@ -6,6 +6,7 @@ import type {
   AdminExcludedArticleRecord,
   AdminEventDraftPatch,
   AdminEventDraftRecord,
+  AdminLlmUsageRange,
   AdminLlmUsageRecord,
   AdminLlmUsageSummary,
   AdminReviewState,
@@ -134,6 +135,28 @@ type LlmUsageRow = {
   excluded_article_id: string | null;
   metadata: Record<string, unknown> | null;
 };
+
+const LLM_USAGE_COLUMNS = [
+  "usage_id",
+  "recorded_at",
+  "operation",
+  "provider",
+  "model",
+  "status",
+  "input_tokens",
+  "output_tokens",
+  "total_tokens",
+  "cached_input_tokens",
+  "reasoning_output_tokens",
+  "cost_micro_cny",
+  "latency_ms",
+  "source_run_id",
+  "collector_job_id",
+  "article_snapshot_id",
+  "event_draft_id",
+  "excluded_article_id",
+  "metadata",
+].join(",");
 
 export function getSupabaseAdminStore(
   client = getSupabaseAdminClient(),
@@ -284,40 +307,32 @@ class SupabaseAdminStore implements AdminStore {
     return data ? toExcludedArticleRecord(data) : null;
   }
 
-  async getLlmUsageSummary(): Promise<AdminLlmUsageSummary> {
-    const { data, error } = await this.client
-      .from("llm_usage_ledger")
-      .select(
-        [
-          "usage_id",
-          "recorded_at",
-          "operation",
-          "provider",
-          "model",
-          "status",
-          "input_tokens",
-          "output_tokens",
-          "total_tokens",
-          "cached_input_tokens",
-          "reasoning_output_tokens",
-          "cost_micro_cny",
-          "latency_ms",
-          "source_run_id",
-          "collector_job_id",
-          "article_snapshot_id",
-          "event_draft_id",
-          "excluded_article_id",
-          "metadata",
-        ].join(","),
-      )
-      .order("recorded_at", { ascending: false })
-      .limit(500);
+  async getLlmUsageSummary(input: {
+    startsAt?: string;
+    range: AdminLlmUsageRange;
+  }): Promise<AdminLlmUsageSummary> {
+    const rows: LlmUsageRow[] = [];
+    const pageSize = 1_000;
+    for (let offset = 0; ; offset += pageSize) {
+      let query = this.client
+        .from("llm_usage_ledger")
+        .select(LLM_USAGE_COLUMNS);
 
-    if (error) throw new Error("admin_llm_usage_list_failed");
-    const recent = ((data ?? []) as unknown as LlmUsageRow[]).map(
-      toLlmUsageRecord,
-    );
-    return summarizeLlmUsage(recent);
+      if (input.startsAt) {
+        query = query.gte("recorded_at", input.startsAt);
+      }
+
+      const { data, error } = await query
+        .order("recorded_at", { ascending: false })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error("admin_llm_usage_list_failed");
+      const page = (data ?? []) as unknown as LlmUsageRow[];
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+
+    const records = rows.map(toLlmUsageRecord);
+    return summarizeLlmUsage(records, input.range);
   }
 
   async publishEventDraft(input: {
@@ -443,7 +458,10 @@ class SupabaseAdminStore implements AdminStore {
   }
 }
 
-function summarizeLlmUsage(recent: AdminLlmUsageRecord[]): AdminLlmUsageSummary {
+function summarizeLlmUsage(
+  records: AdminLlmUsageRecord[],
+  range: AdminLlmUsageRange,
+): AdminLlmUsageSummary {
   const totals: AdminLlmUsageSummary["totals"] = {
     requestCount: 0,
     successCount: 0,
@@ -455,7 +473,7 @@ function summarizeLlmUsage(recent: AdminLlmUsageRecord[]): AdminLlmUsageSummary 
   };
   const byModel = new Map<string, AdminLlmUsageSummary["byModel"][number]>();
 
-  for (const record of recent) {
+  for (const record of records) {
     totals.requestCount += 1;
     if (record.status === "succeeded") totals.successCount += 1;
     if (record.status === "failed") totals.errorCount += 1;
@@ -464,13 +482,15 @@ function summarizeLlmUsage(recent: AdminLlmUsageRecord[]): AdminLlmUsageSummary 
     totals.totalTokens += record.totalTokens;
     totals.costMicroCny += record.costMicroCny;
 
-    const key = `${record.provider}\u0000${record.model}\u0000${record.operation}`;
+    const workload = llmUsageWorkload(record);
+    const key = `${record.provider}\u0000${record.model}\u0000${record.operation}\u0000${workload}`;
     const summary =
       byModel.get(key) ??
       {
         provider: record.provider,
         model: record.model,
         operation: record.operation,
+        workload,
         requestCount: 0,
         totalTokens: 0,
         costMicroCny: 0,
@@ -482,10 +502,17 @@ function summarizeLlmUsage(recent: AdminLlmUsageRecord[]): AdminLlmUsageSummary 
   }
 
   return {
+    range,
+    latestRecordedAt: records[0]?.recordedAt,
     totals,
     byModel: Array.from(byModel.values()),
-    recent,
+    recent: records.slice(0, 500),
   };
+}
+
+function llmUsageWorkload(record: AdminLlmUsageRecord) {
+  const workload = record.metadata.workload;
+  return typeof workload === "string" && workload ? workload : record.operation;
 }
 
 function toLlmUsageRecord(row: LlmUsageRow): AdminLlmUsageRecord {

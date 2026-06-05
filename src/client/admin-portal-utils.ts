@@ -87,3 +87,19 @@ export function formatTokenCount(value: number | undefined) {
 export function formatLlmCostCny(value: number | undefined) {
   return `¥${((value ?? 0) / 1_000_000).toFixed(4)}`;
 }
+
+export function getUsageRangeLabel(range: string | undefined) {
+  switch (range) {
+    case "7d":
+      return "Last 7 days";
+    case "all":
+      return "All";
+    case "today":
+    default:
+      return "Today";
+  }
+}
+
+export function formatUsageTimestamp(value: string | undefined) {
+  return value ? formatDateTime(value) : "No records";
+}

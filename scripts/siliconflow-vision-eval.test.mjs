@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import {
   callOpenAiCompatibleChatCompletions,
@@ -12,6 +15,7 @@ import {
   parseModelJson,
   parseVisionEvalArgs,
   readVisionProviderConfig,
+  runVisionEval,
   scoreVisionEvalOutput,
   summarizeVisionCaseMetrics,
   selectArticleImages,
@@ -473,6 +477,119 @@ describe("estimateVisionEvalCostCny", () => {
 
     expect(cost.costCny).toBeCloseTo(1.5, 6);
     expect(cost.source).toBe("provider_usage");
+  });
+});
+
+describe("runVisionEval usage upload", () => {
+  it("uploads real provider usage records without writing event data", async () => {
+    const outDir = await mkdtemp(path.join(tmpdir(), "vision-eval-usage-"));
+    const uploads = [];
+    const result = await runVisionEval({
+      env: {
+        OPENAI_API_KEY: "provider-key",
+        OPENAI_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        COLLECTOR_ID: "collector-1",
+        COLLECTOR_BASE_URL: "https://app.example.com",
+        COLLECTOR_API_KEY: "collector-secret",
+        USAGE_ENVIRONMENT: "test",
+      },
+      args: {
+        live: true,
+        providerName: "Bailian",
+        articleUrls: ["https://mp.weixin.qq.com/s/activity"],
+        caseFile: undefined,
+        sampleSize: 1,
+        models: ["qwen3-vl-plus"],
+        maxImages: 0,
+        detail: "low",
+        outDir,
+        lookbackDays: 14,
+        maxImageBytes: 4_000_000,
+        maxOutputTokens: 1024,
+        timeoutMs: 10_000,
+      },
+      now: new Date("2026-06-04T02:00:00.000Z"),
+      fetchImpl: async (url, options = {}) => {
+        const textUrl = String(url);
+        if (textUrl === "https://mp.weixin.qq.com/s/activity") {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              "<html><head><meta property=\"og:title\" content=\"活动\" /></head><body><p>6月8日 798 活动</p></body></html>",
+          };
+        }
+        if (textUrl.endsWith("/chat/completions")) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        classification: {
+                          kind: "activity",
+                          publicEligibility: "public",
+                          confidence: 0.91,
+                        },
+                        events: [
+                          {
+                            title: "活动",
+                            scheduleText: "6月8日",
+                            venueName: "798",
+                            confidence: 0.9,
+                          },
+                        ],
+                      }),
+                    },
+                  },
+                ],
+                usage: { prompt_tokens: 1000, completion_tokens: 200 },
+              }),
+          };
+        }
+        uploads.push({ url: textUrl, body: JSON.parse(options.body) });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, id: `usage-${uploads.length}` }),
+        };
+      },
+    });
+
+    expect(result.uploadedLlmUsageIds).toEqual(["usage-1"]);
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0].url).toBe("https://app.example.com/api/collector/llm-usage");
+    expect(uploads[0].body.payload).toMatchObject({
+      operation: "vision_eval",
+      provider: "Bailian",
+      model: "qwen3-vl-plus",
+      status: "succeeded",
+      inputTokens: 1000,
+      outputTokens: 200,
+      totalTokens: 1200,
+      costMicroCny: 3000,
+      sourceRunId: "vision-eval-20260604020000",
+      metadata: {
+        workload: "vision_eval",
+        environment: "test",
+        chargeable: true,
+        usageSource: "provider_usage",
+        pricingSource: "known_model_pricing",
+        articleUrl: "https://mp.weixin.qq.com/s/activity",
+      },
+    });
+    expect(JSON.stringify(uploads)).not.toContain("provider-key");
+    expect(JSON.stringify(uploads)).not.toContain("collector-secret");
+    expect(
+      uploads.some((entry) =>
+        ["/api/collector/event-draft", "/api/collector/evidence-asset"].some(
+          (path) => entry.url.endsWith(path),
+        ),
+      ),
+    ).toBe(false);
   });
 });
 

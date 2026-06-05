@@ -84,6 +84,11 @@ const adminLoginSchema = z
   })
   .strict();
 
+const llmUsageRangeSchema = z
+  .enum(["today", "7d", "all"])
+  .optional()
+  .default("today");
+
 export async function handleAdminLogin(request: Request, env: AdminEnv) {
   const parsed = adminLoginSchema.safeParse(await parseJson(request));
   if (!parsed.success) return invalidRequestResponse(parsed.error);
@@ -230,12 +235,23 @@ export async function handleAdminListLlmUsage(
   request: Request,
   store: AdminStore,
   env: AdminEnv,
+  now = new Date(),
 ) {
   const auth = authenticateAdminRequest(request, env);
   if (!auth.ok) return authErrorResponse(auth);
 
+  const url = new URL(request.url);
+  const parsedRange = llmUsageRangeSchema.safeParse(
+    url.searchParams.get("range") ?? undefined,
+  );
+  if (!parsedRange.success) return invalidRequestResponse(parsedRange.error);
+
   try {
-    const usage = await listAdminLlmUsageSummary(store);
+    const usage = await listAdminLlmUsageSummary(
+      { range: parsedRange.data },
+      store,
+      now,
+    );
     return Response.json({
       ok: true,
       usage,

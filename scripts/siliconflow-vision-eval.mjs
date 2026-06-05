@@ -7,6 +7,12 @@ import { createClient } from "@supabase/supabase-js";
 
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 import {
+  buildLlmUsageEnvelope,
+  readCollectorUsageUploadConfig,
+  readUsageEnvironment,
+  uploadLlmUsageEnvelopes,
+} from "./llm-usage-ledger.mjs";
+import {
   createWechat2RssClient,
   readWechat2RssConfig,
 } from "./wechat2rss-source.mjs";
@@ -626,6 +632,9 @@ export async function runVisionEval({
   const provider = readVisionProviderConfig(env, {
     providerName: args.providerName,
   });
+  const usageUploadConfig = readCollectorUsageUploadConfig(env);
+  const usageEnvironment = readUsageEnvironment(env);
+  const runId = createVisionEvalRunId(now);
   const samples = args.caseFile
     ? await loadCaseFileSamples({
         env,
@@ -702,6 +711,7 @@ export async function runVisionEval({
   const labelMetrics = summarizeLabelMetricsByModel({ cases, models: args.models });
 
   const result = {
+    runId,
     generatedAt: now.toISOString(),
     sampleSize: samples.length,
     requestedSampleSize: args.sampleSize,
@@ -720,6 +730,22 @@ export async function runVisionEval({
     cases,
   };
 
+  const usageEnvelopes = usageUploadConfig.ok
+    ? buildVisionEvalUsageEnvelopes({
+        usageUploadConfig,
+        runId,
+        observedAt: now.toISOString(),
+        usageEnvironment,
+        provider,
+        cases,
+      })
+    : [];
+  const uploadedLlmUsageIds = await uploadLlmUsageEnvelopes({
+    config: usageUploadConfig,
+    envelopes: usageEnvelopes,
+    fetchImpl,
+  });
+
   const runDir = path.resolve(
     process.cwd(),
     args.outDir,
@@ -728,7 +754,7 @@ export async function runVisionEval({
   await mkdir(runDir, { recursive: true });
   await writeFile(
     path.join(runDir, "vision-eval.json"),
-    JSON.stringify(result, null, 2),
+    JSON.stringify({ ...result, uploadedLlmUsageIds }, null, 2),
     "utf8",
   );
   await writeFile(
@@ -740,7 +766,57 @@ export async function runVisionEval({
   return {
     ...result,
     runDir,
+    uploadedLlmUsageIds,
   };
+}
+
+function buildVisionEvalUsageEnvelopes({
+  usageUploadConfig,
+  runId,
+  observedAt,
+  usageEnvironment,
+  provider,
+  cases,
+}) {
+  const envelopes = [];
+  for (const articleCase of cases) {
+    for (const modelResult of articleCase.results) {
+      envelopes.push(
+        buildLlmUsageEnvelope({
+          collectorId: usageUploadConfig.collectorId,
+          runId,
+          observedAt,
+          operation: "vision_eval",
+          provider: provider.providerName,
+          model: modelResult.model,
+          status: modelResult.status === "ok" ? "succeeded" : "failed",
+          usage: modelResult.usage,
+          latencyMs: modelResult.latencyMs,
+          metadata: {
+            workload: "vision_eval",
+            environment: usageEnvironment,
+            chargeable: true,
+            providerSource: provider.source,
+            caseId: articleCase.caseId ?? null,
+            articleUrl: articleCase.article.url,
+            expectedAction: articleCase.label?.expectedAction ?? null,
+            modelStatus: modelResult.status,
+            usageSource: modelResult.usage ? "provider_usage" : "missing_usage",
+          },
+          usageIdParts: [
+            articleCase.caseId ?? articleCase.article.url,
+            modelResult.model,
+            modelResult.status,
+          ],
+        }),
+      );
+    }
+  }
+  return envelopes;
+}
+
+function createVisionEvalRunId(now) {
+  return `vision-eval-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}`;
 }
 
 function buildExtractionPrompt(article, images) {

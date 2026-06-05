@@ -55,6 +55,12 @@ class RouteAdminStore implements AdminStore {
     processingState: "excluded",
   };
   llmUsageSummary: AdminLlmUsageSummary = {
+    range: {
+      key: "today",
+      label: "Today",
+      startsAt: "2026-06-03T16:00:00.000Z",
+    },
+    latestRecordedAt: "2026-06-04T02:00:00.000Z",
     totals: {
       requestCount: 1,
       successCount: 1,
@@ -69,6 +75,7 @@ class RouteAdminStore implements AdminStore {
         provider: "openai",
         model: "gpt-5-mini",
         operation: "event_extraction",
+        workload: "event_extraction",
         requestCount: 1,
         totalTokens: 1150,
         costMicroCny: 2100,
@@ -139,8 +146,13 @@ class RouteAdminStore implements AdminStore {
     return this.excludedArticle;
   }
 
-  async getLlmUsageSummary(): Promise<AdminLlmUsageSummary> {
-    return this.llmUsageSummary;
+  async getLlmUsageSummary(
+    input: Parameters<AdminStore["getLlmUsageSummary"]>[0],
+  ): Promise<AdminLlmUsageSummary> {
+    return {
+      ...this.llmUsageSummary,
+      range: input.range,
+    };
   }
 
   async getEventDraft(draftId: string) {
@@ -421,17 +433,24 @@ describe("admin route handlers", () => {
 
   it("lists the admin LLM usage summary without prompt or response payloads", async () => {
     const response = await handleAdminListLlmUsage(
-      new Request("https://example.com/api/admin/llm-usage", {
+      new Request("https://example.com/api/admin/llm-usage?range=7d", {
         headers: { authorization: "Bearer admin-secret" },
       }),
       new RouteAdminStore(),
       { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-06-04T03:00:00.000Z"),
     );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       usage: {
+        range: {
+          key: "7d",
+          label: "Last 7 days",
+          startsAt: "2026-05-28T03:00:00.000Z",
+        },
+        latestRecordedAt: "2026-06-04T02:00:00.000Z",
         totals: {
           requestCount: 1,
           totalTokens: 1150,
@@ -442,9 +461,26 @@ describe("admin route handlers", () => {
             provider: "openai",
             model: "gpt-5-mini",
             operation: "event_extraction",
+            workload: "event_extraction",
           },
         ],
       },
+    });
+  });
+
+  it("rejects invalid admin LLM usage ranges", async () => {
+    const response = await handleAdminListLlmUsage(
+      new Request("https://example.com/api/admin/llm-usage?range=yesterday", {
+        headers: { authorization: "Bearer admin-secret" },
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: "invalid_request",
     });
   });
 

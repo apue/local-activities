@@ -60,7 +60,7 @@ describe("admin portal API client", () => {
       if (url === "/api/admin/event-drafts?reviewState=needs_review") {
         return jsonResponse(200, { ok: true, drafts: [{ id: "draft-1" }] });
       }
-      if (url === "/api/admin/llm-usage") {
+      if (url === "/api/admin/llm-usage?range=all") {
         return jsonResponse(200, {
           ok: true,
           usage: { totals: { requestCount: 1 }, byModel: [], recent: [] },
@@ -70,7 +70,11 @@ describe("admin portal API client", () => {
     };
 
     await expect(
-      loadAdminState({ reviewFilter: "needs_review", fetchImpl }),
+      loadAdminState({
+        reviewFilter: "needs_review",
+        usageRange: "all",
+        fetchImpl,
+      }),
     ).resolves.toMatchObject({
       jobs: [{ jobId: "job-1" }],
       drafts: [{ id: "draft-1" }],
@@ -79,7 +83,7 @@ describe("admin portal API client", () => {
     expect(calls).toEqual([
       "GET /api/admin/collector-jobs",
       "GET /api/admin/event-drafts?reviewState=needs_review",
-      "GET /api/admin/llm-usage",
+      "GET /api/admin/llm-usage?range=all",
     ]);
   });
 

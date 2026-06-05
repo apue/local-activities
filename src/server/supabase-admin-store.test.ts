@@ -166,29 +166,9 @@ describe("supabase admin store", () => {
   });
 
   it("maps safe LLM usage rows into admin totals and model groups", async () => {
+    const calls: unknown[] = [];
     const store = getSupabaseAdminStore(
       supabaseClientReturningLlmUsage([
-        {
-          usage_id: "usage-1",
-          recorded_at: "2026-06-04T02:00:00.000Z",
-          operation: "event_extraction",
-          provider: "openai",
-          model: "gpt-5-mini",
-          status: "succeeded",
-          input_tokens: 900,
-          output_tokens: 250,
-          total_tokens: 1150,
-          cached_input_tokens: 120,
-          reasoning_output_tokens: 40,
-          cost_micro_cny: 2100,
-          latency_ms: 1800,
-          source_run_id: "run-1",
-          collector_job_id: "job-1",
-          article_snapshot_id: "snapshot-1",
-          event_draft_id: "draft-1",
-          excluded_article_id: null,
-          metadata: { schemaVersion: "event-extraction-v2-schema-v1" },
-        },
         {
           usage_id: "usage-2",
           recorded_at: "2026-06-04T02:05:00.000Z",
@@ -208,12 +188,54 @@ describe("supabase admin store", () => {
           article_snapshot_id: null,
           event_draft_id: "draft-1",
           excluded_article_id: null,
-          metadata: { failureReason: "agent_request_failed" },
+          metadata: {
+            failureReason: "agent_request_failed",
+            workload: "event_resolution",
+          },
         },
-      ]),
+        {
+          usage_id: "usage-1",
+          recorded_at: "2026-06-04T02:00:00.000Z",
+          operation: "event_extraction",
+          provider: "openai",
+          model: "gpt-5-mini",
+          status: "succeeded",
+          input_tokens: 900,
+          output_tokens: 250,
+          total_tokens: 1150,
+          cached_input_tokens: 120,
+          reasoning_output_tokens: 40,
+          cost_micro_cny: 2100,
+          latency_ms: 1800,
+          source_run_id: "run-1",
+          collector_job_id: "job-1",
+          article_snapshot_id: "snapshot-1",
+          event_draft_id: "draft-1",
+          excluded_article_id: null,
+          metadata: {
+            schemaVersion: "event-extraction-v2-schema-v1",
+            workload: "event_extraction",
+          },
+        },
+      ], calls),
     );
 
-    await expect(store.getLlmUsageSummary()).resolves.toEqual({
+    await expect(
+      store.getLlmUsageSummary({
+        range: {
+          key: "today",
+          label: "Today",
+          startsAt: "2026-06-03T16:00:00.000Z",
+        },
+        startsAt: "2026-06-03T16:00:00.000Z",
+      }),
+    ).resolves.toEqual({
+      range: {
+        key: "today",
+        label: "Today",
+        startsAt: "2026-06-03T16:00:00.000Z",
+      },
+      latestRecordedAt: "2026-06-04T02:05:00.000Z",
       totals: {
         requestCount: 2,
         successCount: 1,
@@ -227,34 +249,68 @@ describe("supabase admin store", () => {
         {
           provider: "openai",
           model: "gpt-5-mini",
-          operation: "event_extraction",
-          requestCount: 1,
-          totalTokens: 1150,
-          costMicroCny: 2100,
-        },
-        {
-          provider: "openai",
-          model: "gpt-5-mini",
           operation: "event_resolution",
+          workload: "event_resolution",
           requestCount: 1,
           totalTokens: 500,
           costMicroCny: 0,
         },
+        {
+          provider: "openai",
+          model: "gpt-5-mini",
+          operation: "event_extraction",
+          workload: "event_extraction",
+          requestCount: 1,
+          totalTokens: 1150,
+          costMicroCny: 2100,
+        },
       ],
       recent: [
+        expect.objectContaining({
+          id: "usage-2",
+          status: "failed",
+          metadata: {
+            failureReason: "agent_request_failed",
+            workload: "event_resolution",
+          },
+        }),
         expect.objectContaining({
           id: "usage-1",
           operation: "event_extraction",
           totalTokens: 1150,
-          metadata: { schemaVersion: "event-extraction-v2-schema-v1" },
-        }),
-        expect.objectContaining({
-          id: "usage-2",
-          status: "failed",
-          metadata: { failureReason: "agent_request_failed" },
+          metadata: {
+            schemaVersion: "event-extraction-v2-schema-v1",
+            workload: "event_extraction",
+          },
         }),
       ],
     });
+    expect(calls).toContainEqual([
+      "gte",
+      "recorded_at",
+      "2026-06-03T16:00:00.000Z",
+    ]);
+  });
+
+  it("does not apply a recorded_at lower bound for all-time LLM usage", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(
+      supabaseClientReturningLlmUsage([], calls),
+    );
+
+    await expect(
+      store.getLlmUsageSummary({
+        range: { key: "all", label: "All" },
+      }),
+    ).resolves.toMatchObject({
+      range: { key: "all", label: "All" },
+      totals: { requestCount: 0 },
+      recent: [],
+    });
+
+    expect(calls.some((call) => Array.isArray(call) && call[0] === "gte")).toBe(
+      false,
+    );
   });
 
   it("publishes drafts without poster fields when poster columns are pending", async () => {
@@ -493,16 +549,27 @@ function supabaseClientReturning(rows: unknown[]) {
   } as never;
 }
 
-function supabaseClientReturningLlmUsage(rows: unknown[]) {
+function supabaseClientReturningLlmUsage(rows: unknown[], calls: unknown[] = []) {
+  let start = 0;
+  let end = rows.length - 1;
   const query = {
     select() {
+      calls.push(["select"]);
       return query;
     },
     order() {
+      calls.push(["order", "recorded_at"]);
       return query;
     },
-    limit() {
-      return Promise.resolve({ data: rows, error: null });
+    gte(column: string, value: string) {
+      calls.push(["gte", column, value]);
+      return query;
+    },
+    range(from: number, to: number) {
+      calls.push(["range", from, to]);
+      start = from;
+      end = to;
+      return Promise.resolve({ data: rows.slice(start, end + 1), error: null });
     },
   };
 

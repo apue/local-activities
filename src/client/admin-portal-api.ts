@@ -15,9 +15,11 @@ export async function loginAdmin({
 
 export async function loadAdminState({
   reviewFilter,
+  usageRange = "today",
   fetchImpl = fetch,
-}: AdminPortalApiOptions & { reviewFilter?: string }) {
+}: AdminPortalApiOptions & { reviewFilter?: string; usageRange?: string }) {
   const query = reviewFilter ? `?reviewState=${reviewFilter}` : "";
+  const usageQuery = usageRange ? `?range=${encodeURIComponent(usageRange)}` : "";
   const [jobsResponse, draftsResponse, usageResponse] = await Promise.all([
     adminApiRequest<{ jobs: unknown[] }>("/api/admin/collector-jobs", {
       fetchImpl,
@@ -25,7 +27,7 @@ export async function loadAdminState({
     adminApiRequest<{ drafts: unknown[] }>(`/api/admin/event-drafts${query}`, {
       fetchImpl,
     }),
-    adminApiRequest<{ usage: unknown }>("/api/admin/llm-usage", {
+    adminApiRequest<{ usage: unknown }>(`/api/admin/llm-usage${usageQuery}`, {
       fetchImpl,
     }),
   ]);

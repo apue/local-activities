@@ -151,6 +151,8 @@ describe("lightweight LLM extractor", () => {
     const result = await runLlmExtractionOnce({
       env: {
         ...validEnv(),
+        VISION_EXTRACTION_MODEL: "qwen3-vl-plus",
+        USAGE_ENVIRONMENT: "test",
         COLLECTOR_BASE_URL: "https://app.example.com",
         COLLECTOR_API_KEY: "collector-secret",
       },
@@ -198,15 +200,27 @@ describe("lightweight LLM extractor", () => {
     expect(usageUpload?.body.payload).toMatchObject({
       operation: "event_extraction",
       provider: "openai",
-      model: "gpt-5-mini",
+      model: "qwen3-vl-plus",
       status: "succeeded",
       inputTokens: 900,
       outputTokens: 250,
       totalTokens: 1150,
       cachedInputTokens: 120,
       reasoningOutputTokens: 40,
-      costMicroCny: 0,
+      costMicroCny: 3400,
       sourceRunId: "extract-usage",
+      metadata: {
+        apiStyle: "responses",
+        chargeable: true,
+        environment: "test",
+        extractorVersion: "event-extraction-2026-06-02",
+        pricingSource: "known_model_pricing",
+        schemaVersion: "event-extraction-schema-v1",
+        usageSource: "provider_usage",
+        workload: "event_extraction",
+        articleUrl: "https://mp.weixin.qq.com/s/activity",
+        attemptNumber: 1,
+      },
     });
     expect(usageUpload?.body.payload.usageId).toMatch(/^usage-/);
     expect(JSON.stringify(usageUpload)).not.toContain("openai-secret");
