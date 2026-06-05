@@ -6,6 +6,7 @@ import {
   adminApiRequest,
   loadAdminState,
   loginAdmin,
+  patchAdminDraft,
 } from "../../src/client/admin-portal-api";
 import {
   canRunDraftReviewAction,
@@ -158,8 +159,18 @@ export function AdminPortal() {
   const [reviewFilter, setReviewFilter] = useState("");
   const [usageRange, setUsageRange] = useState<UsageRange>("today");
   const [operatorOverrideReason, setOperatorOverrideReason] = useState("");
+  const [draftPatch, setDraftPatch] = useState({
+    title: "",
+    scheduleText: "",
+    venueName: "",
+    venueAddress: "",
+    registrationUrl: "",
+    registrationQrAssetId: "",
+    summary: "",
+    entryNotes: "",
+  });
   const [draftAction, setDraftAction] = useState<
-    "needs-info" | "reject" | "publish" | null
+    "save" | "needs-info" | "reject" | "publish" | null
   >(null);
   const [status, setStatus] = useState<ApiState>("idle");
   const [message, setMessage] = useState("Loading admin state...");
@@ -188,6 +199,16 @@ export function AdminPortal() {
 
   useEffect(() => {
     setOperatorOverrideReason(selectedDraft?.operatorOverrideReason ?? "");
+    setDraftPatch({
+      title: selectedDraft?.title ?? "",
+      scheduleText: selectedDraft?.scheduleText ?? "",
+      venueName: selectedDraft?.venueName ?? "",
+      venueAddress: selectedDraft?.venueAddress ?? "",
+      registrationUrl: selectedDraft?.registrationUrl ?? "",
+      registrationQrAssetId: selectedDraft?.registrationQrAssetId ?? "",
+      summary: selectedDraft?.summary ?? "",
+      entryNotes: selectedDraft?.entryNotes ?? "",
+    });
   }, [selectedDraft?.id, selectedDraft?.operatorOverrideReason]);
 
   async function refresh(options: { usageRange?: UsageRange } = {}) {
@@ -282,6 +303,27 @@ export function AdminPortal() {
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Draft action failed.");
+    } finally {
+      setDraftAction(null);
+    }
+  }
+
+  async function saveDraftPatch() {
+    if (!selectedDraft) return;
+
+    setStatus("loading");
+    setDraftAction("save");
+    setMessage("Saving draft fields...");
+    try {
+      await patchAdminDraft({
+        draftId: selectedDraft.id,
+        patch: compactDraftPatch(draftPatch),
+      });
+      await refresh();
+      setMessage("Draft fields saved.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Save draft failed.");
     } finally {
       setDraftAction(null);
     }
@@ -469,6 +511,89 @@ export function AdminPortal() {
                 <p className={styles.summary}>
                   {selectedDraft.summary ?? "No extraction summary."}
                 </p>
+                <div className={styles.editGrid}>
+                  <label>
+                    <span>Title</span>
+                    <input
+                      value={draftPatch.title}
+                      onChange={(event) =>
+                        setDraftPatch((current) => ({
+                          ...current,
+                          title: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Schedule text</span>
+                    <input
+                      value={draftPatch.scheduleText}
+                      onChange={(event) =>
+                        setDraftPatch((current) => ({
+                          ...current,
+                          scheduleText: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Venue</span>
+                    <input
+                      value={draftPatch.venueName}
+                      onChange={(event) =>
+                        setDraftPatch((current) => ({
+                          ...current,
+                          venueName: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Registration URL</span>
+                    <input
+                      value={draftPatch.registrationUrl}
+                      onChange={(event) =>
+                        setDraftPatch((current) => ({
+                          ...current,
+                          registrationUrl: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>QR asset id</span>
+                    <input
+                      value={draftPatch.registrationQrAssetId}
+                      onChange={(event) =>
+                        setDraftPatch((current) => ({
+                          ...current,
+                          registrationQrAssetId: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Summary</span>
+                    <textarea
+                      value={draftPatch.summary}
+                      onChange={(event) =>
+                        setDraftPatch((current) => ({
+                          ...current,
+                          summary: event.target.value,
+                        }))
+                      }
+                      rows={3}
+                    />
+                  </label>
+                </div>
+                <button
+                  className={styles.primaryButton}
+                  type="button"
+                  onClick={() => void saveDraftPatch()}
+                  disabled={!canReviewSelectedDraft || draftAction !== null}
+                >
+                  {draftAction === "save" ? "Saving..." : "Save fields"}
+                </button>
                 {evidenceItems.length ? (
                   <div className={styles.evidenceGrid}>
                     {evidenceItems.map((item) => (
@@ -498,7 +623,7 @@ export function AdminPortal() {
                   </div>
                 ) : null}
                 <a className={styles.sourceLink} href={selectedDraft.articleUrl}>
-                  Open source URL
+                  Open source URL · {selectedDraft.articleUrl}
                 </a>
                 <div className={styles.blockers}>
                   {selectedDecision?.hardBlockers.length ? (
@@ -684,5 +809,13 @@ export function AdminPortal() {
         </section>
       </section>
     </main>
+  );
+}
+
+function compactDraftPatch(input: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(input)
+      .map(([key, value]) => [key, value.trim()] as const)
+      .filter(([, value]) => value.length > 0),
   );
 }

@@ -39,6 +39,21 @@ export async function loadAdminState({
   };
 }
 
+export async function patchAdminDraft({
+  draftId,
+  patch,
+  fetchImpl = fetch,
+}: AdminPortalApiOptions & {
+  draftId: string;
+  patch: Record<string, unknown>;
+}) {
+  return adminApiRequest<{ draft: unknown }>(`/api/admin/event-drafts/${draftId}`, {
+    fetchImpl,
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
 export async function adminApiRequest<T>(
   path: string,
   {

@@ -4,6 +4,7 @@ import {
   adminApiRequest,
   loadAdminState,
   loginAdmin,
+  patchAdminDraft,
 } from "./admin-portal-api";
 
 describe("admin portal API client", () => {
@@ -107,6 +108,37 @@ describe("admin portal API client", () => {
     await expect(
       adminApiRequest("/api/admin/event-drafts/draft-1/publish", { fetchImpl }),
     ).rejects.toThrow("Operator override reason required");
+  });
+
+  it("patches editable draft fields through the cookie session", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl: typeof fetch = async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      return jsonResponse(200, { ok: true, draft: { id: "draft-1" } });
+    };
+
+    await patchAdminDraft({
+      draftId: "draft-1",
+      patch: {
+        scheduleText: "至8月30日，周二至周日 10:00-18:00",
+        venueName: "Goethe 798",
+      },
+      fetchImpl,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      url: "/api/admin/event-drafts/draft-1",
+      init: {
+        method: "PATCH",
+        credentials: "same-origin",
+        body: JSON.stringify({
+          scheduleText: "至8月30日，周二至周日 10:00-18:00",
+          venueName: "Goethe 798",
+        }),
+      },
+    });
+    expect(JSON.stringify(calls[0].init)).not.toContain("authorization");
   });
 });
 
