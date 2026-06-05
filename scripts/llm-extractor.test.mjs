@@ -41,6 +41,41 @@ describe("lightweight LLM extractor", () => {
     });
   });
 
+  it("uses a configurable output token budget for provider responses", () => {
+    expect(
+      readLlmExtractorConfig({
+        COLLECTOR_ID: "collector-1",
+        AGENT_PROVIDER: "openai_compatible",
+        OPENAI_API_KEY: "provider-secret",
+      }),
+    ).toMatchObject({
+      ok: true,
+      maxOutputTokens: 2400,
+    });
+    expect(
+      readLlmExtractorConfig({
+        COLLECTOR_ID: "collector-1",
+        AGENT_PROVIDER: "openai_compatible",
+        OPENAI_API_KEY: "provider-secret",
+        VISION_EXTRACTION_MAX_OUTPUT_TOKENS: "4096",
+      }),
+    ).toMatchObject({
+      ok: true,
+      maxOutputTokens: 4096,
+    });
+    expect(
+      readLlmExtractorConfig({
+        COLLECTOR_ID: "collector-1",
+        AGENT_PROVIDER: "openai_compatible",
+        OPENAI_API_KEY: "provider-secret",
+        VISION_EXTRACTION_MAX_OUTPUT_TOKENS: "not-a-number",
+      }),
+    ).toMatchObject({
+      ok: true,
+      maxOutputTokens: 2400,
+    });
+  });
+
   it("summarizes missing live provider config with the failure reason", async () => {
     const result = await runLlmExtractionOnce({
       env: {},
@@ -157,7 +192,7 @@ describe("lightweight LLM extractor", () => {
     expect(calls[0].body.messages).toHaveLength(1);
     expect(calls[0].body.messages[0].role).toBe("user");
     expect(calls[0].body.messages[0].content).toContain("ARTICLE:");
-    expect(calls[0].body.max_tokens).toBe(800);
+    expect(calls[0].body.max_tokens).toBe(2400);
     expect(calls[0].body.response_format).toBeUndefined();
     expect(calls[0].signal).toBeDefined();
     expect(JSON.stringify(calls)).not.toContain("openai-secret");

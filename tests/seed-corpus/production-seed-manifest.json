@@ -91,13 +91,14 @@
       }
     },
     {
-      "id": "beiping-friendship-beer-festival-live-short-url",
-      "title": "北平机器·友谊万岁精酿啤酒节 live short URL duplicate",
+      "id": "beiping-friendship-beer-festival-duplicate-reference",
+      "title": "北平机器·友谊万岁精酿啤酒节 duplicate reference pending materialized capture",
       "coverage": ["duplicate_pair"],
       "source": {
-        "type": "live_url",
-        "url": "https://mp.weixin.qq.com/s/ToCTUmZumqYvCkWzz8-Igg",
-        "sourceName": "北平机器"
+        "type": "captured_reference",
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518529&idx=1&sn=e9c9ac36887462c411fa30041414de8f",
+        "sourceName": "北平机器",
+        "evalCaseId": "beiping-friendship-beer-festival-guide"
       },
       "expected": {
         "action": "extract",

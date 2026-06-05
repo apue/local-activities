@@ -53,6 +53,11 @@ export function readLlmExtractorConfig(env = process.env, options = {}) {
     visionModelPolicy,
     openaiApiStyle: normalizeOpenAIApiStyle(clean(env.OPENAI_API_STYLE)),
     agentTimeoutSeconds: readPositiveInteger(env.AGENT_TIMEOUT_SECONDS, 45),
+    maxOutputTokens: readPositiveInteger(
+      env.VISION_EXTRACTION_MAX_OUTPUT_TOKENS ??
+        env.LLM_EXTRACTOR_MAX_OUTPUT_TOKENS,
+      2400,
+    ),
     openaiBaseUrl: normalizeBaseUrl(
       clean(env.OPENAI_BASE_URL) ?? "https://api.openai.com/v1",
     ),
@@ -450,7 +455,7 @@ function providerRequest({ config, articleSnapshot, evidenceAssets, runId }) {
             }),
           },
         ],
-        max_tokens: 800,
+        max_tokens: config.maxOutputTokens,
         temperature: 0,
       },
     };
@@ -460,6 +465,7 @@ function providerRequest({ config, articleSnapshot, evidenceAssets, runId }) {
     path: "/responses",
     body: {
       model: config.openaiModel,
+      max_output_tokens: config.maxOutputTokens,
       text: {
         format: responseTextFormat(),
       },
