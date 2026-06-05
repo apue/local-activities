@@ -7,7 +7,7 @@ import {
   normalizeWechat2RssLoginListResponse,
   readWechat2RssConfig,
   runWechat2RssSmoke,
-} from "./wechat2rss-source.mjs";
+} from "../src/collector/source-providers/wechat2rss/index.mjs";
 
 describe("Wechat2RSS source adapter", () => {
   it("reads required collector configuration without leaking token values", () => {
