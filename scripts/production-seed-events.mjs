@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
@@ -62,7 +63,11 @@ export function validateProductionSeedManifest(manifest) {
 }
 
 export function buildProductionSeedPlan(manifest) {
-  const cases = manifest.cases.map((articleCase) => {
+  return buildProductionSeedPlanForCases(manifest, manifest.cases);
+}
+
+function buildProductionSeedPlanForCases(manifest, manifestCases) {
+  const cases = manifestCases.map((articleCase) => {
     const sourceType = articleCase.source.type;
     const autoImportSupported = sourceType === "live_url";
     return {
@@ -90,7 +95,7 @@ export function buildProductionSeedPlan(manifest) {
     coverage: Object.fromEntries(
       requiredSeedCoverage.map((coverage) => [
         coverage,
-        casesForCoverage(manifest, coverage),
+        casesForCoverage({ ...manifest, cases: manifestCases }, coverage),
       ]),
     ),
     cases,
@@ -115,7 +120,8 @@ export async function runProductionSeedImport({
     ...args.envFiles.map((envFile) => loadEnvFile(envFile)),
   );
   const manifest = await loadProductionSeedManifest(args.manifest);
-  const plan = buildProductionSeedPlan(manifest);
+  const selectedCases = selectManifestCases(manifest, args.caseIds);
+  const plan = buildProductionSeedPlanForCases(manifest, selectedCases);
   const runId = args.runId ?? createProductionSeedRunId(now);
   const target = assertHostedWriteAllowed({
     command: "production_seed",
@@ -152,7 +158,7 @@ export async function runProductionSeedImport({
     USAGE_ENVIRONMENT: "production_seed_acceptance",
     PRODUCTION_SEED_USAGE_ENVIRONMENT: "production_seed_acceptance",
   };
-  const importableCases = manifest.cases.filter(
+  const importableCases = selectedCases.filter(
     (articleCase) => articleCase.source.type === "live_url",
   );
   if (importableCases.length === 0) {
@@ -165,7 +171,7 @@ export async function runProductionSeedImport({
       env: seedEnv,
       url: articleCase.source.url,
       upload: true,
-      session: `${runId}-${articleCase.id}`,
+      session: createSeedSessionName({ runId, caseId: articleCase.id }),
       now,
       fetchImpl,
     });
@@ -275,6 +281,7 @@ function parseProductionSeedArgs(argv) {
     confirmTarget: undefined,
     targetBaseUrl: undefined,
     runId: undefined,
+    caseIds: [],
     help: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -301,9 +308,38 @@ function parseProductionSeedArgs(argv) {
     } else if (arg === "--run-id") {
       args.runId = requiredValue(argv, index, arg);
       index += 1;
+    } else if (arg === "--case") {
+      args.caseIds.push(requiredValue(argv, index, arg));
+      index += 1;
     } else throw new Error(`unknown_arg:${arg}`);
   }
   return args;
+}
+
+function selectManifestCases(manifest, caseIds) {
+  if (!caseIds.length) return manifest.cases;
+  const requested = new Set(caseIds);
+  const selected = manifest.cases.filter((articleCase) =>
+    requested.has(articleCase.id),
+  );
+  const missing = caseIds.filter(
+    (caseId) => !manifest.cases.some((articleCase) => articleCase.id === caseId),
+  );
+  if (missing.length) {
+    throw new Error(`production_seed_case_not_found:${missing.join(",")}`);
+  }
+  return selected;
+}
+
+export function createSeedSessionName({ runId, caseId }) {
+  const hash = createHash("sha256")
+    .update(`${runId}\u001f${caseId}`)
+    .digest("hex")
+    .slice(0, 10);
+  const runPrefix = String(runId ?? "seed")
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .slice(0, 24);
+  return `${runPrefix}-${hash}`;
 }
 
 function assertProductionSeedApproval(args) {
@@ -365,7 +401,9 @@ Apply mode is production-mutating and requires:
   --apply
   --allow-hosted-write
   --confirm-seed-import IMPORT_PRODUCTION_SEED_EVENTS
-  --confirm-target https://local-activities.vercel.app`;
+  --confirm-target https://local-activities.vercel.app
+  --target-base-url https://local-activities.vercel.app
+  --case <id>    Optional. Limit to one manifest case; may be repeated.`;
 }
 
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);

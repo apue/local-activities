@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildProductionSeedPlan,
+  createSeedSessionName,
   formatProductionSeedReport,
   loadProductionSeedManifest,
   runProductionSeedImport,
@@ -206,6 +207,63 @@ describe("production seed events", () => {
         uploadedLlmUsageIds: ["usage-1"],
       }),
     ]);
+  });
+
+  it("creates bounded agent-browser session names for long case ids", () => {
+    const session = createSeedSessionName({
+      runId: "production-seed-20260605-live",
+      caseId: "beiping-friendship-beer-festival-live-short-url",
+    });
+
+    expect(session).toMatch(/^production-seed-20260605-[a-f0-9]{10}$/);
+    expect(session.length).toBeLessThanOrEqual(40);
+  });
+
+  it("filters production seed apply to selected cases", async () => {
+    const imports = [];
+
+    const result = await runProductionSeedImport({
+      argv: [
+        "--manifest",
+        manifestPath,
+        "--apply",
+        "--allow-hosted-write",
+        "--confirm-seed-import",
+        "IMPORT_PRODUCTION_SEED_EVENTS",
+        "--confirm-target",
+        "https://local-activities.vercel.app",
+        "--target-base-url",
+        "https://local-activities.vercel.app",
+        "--run-id",
+        "production-seed-live",
+        "--case",
+        "beiping-friendship-beer-festival-live-short-url",
+      ],
+      env: {
+        COLLECTOR_BASE_URL: "http://localhost:3000",
+      },
+      importLiveUrl: async (input) => {
+        imports.push(input);
+        return {
+          runId: "wechat-url-run",
+          articleTitle: "Beiping",
+          draftSummaries: [{ title: "Beiping" }],
+          failureSummaries: [],
+          extraction: {
+            uploadedEventDraftIds: ["draft-1"],
+            uploadedLlmUsageIds: ["usage-1"],
+          },
+        };
+      },
+    });
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].url).toBe("https://mp.weixin.qq.com/s/ToCTUmZumqYvCkWzz8-Igg");
+    expect(imports[0].session.length).toBeLessThanOrEqual(40);
+    expect(result.plan).toMatchObject({
+      caseCount: 1,
+      liveImportCaseCount: 1,
+    });
   });
 });
 
