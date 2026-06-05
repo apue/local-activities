@@ -43,7 +43,7 @@ function fixtureRows() {
       },
       {
         id: 4,
-        article_url: "https://mp.weixin.qq.com/s/example",
+        article_url: "https://mp.weixin.qq.com/s/beiping-fixture",
         title: "Smoke fixture event",
         review_state: "pending",
         processing_state: "ready_for_review",
@@ -91,10 +91,19 @@ function fixtureRows() {
         article_url: "https://mp.weixin.qq.com/s/real-event",
         role: "registration_qr",
         source_url: "http://localhost:4000/img-proxy/?k=local",
+        storage_path: "fixture-assets/qr-registration-poster/asset-qr.png",
         created_at: "2026-06-04T07:00:00.000Z",
       },
     ],
-    canonicalEvents: [],
+    canonicalEvents: [
+      {
+        id: 40,
+        event_id: "event-fixture",
+        title: "Fixture case goethe-sonic-exhibition.",
+        source_url: "https://mp.weixin.qq.com/s/goethe-sonic-fixture",
+        created_at: "2026-06-04T08:00:00.000Z",
+      },
+    ],
   };
 }
 
@@ -111,7 +120,7 @@ describe("data hygiene audit", () => {
       missingTriageDraftCount: 1,
       duplicateDraftGroupCount: 1,
       likelyNegativeDraftCount: 1,
-      likelyTestRowCount: 2,
+      likelyTestRowCount: 4,
       brokenEvidenceUrlCount: 1,
       localProxyEvidenceUrlCount: 1,
       excludedArticleCount: 1,

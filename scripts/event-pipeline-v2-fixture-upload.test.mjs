@@ -48,10 +48,14 @@ describe("Event Pipeline V2 fixture upload", () => {
         call.body.payload.articleUrl === "https://mp.weixin.qq.com/s/qr-poster-fixture",
     );
     expect(qrDraft.body.payload).toMatchObject({
+      triageDecision: "possible_public_activity",
+      triageAction: "review",
       registrationQrAssetId: "asset-qr-registration-poster-qr",
       posterAssetId: "asset-qr-registration-poster-poster",
-      signals: ["qr_registration"],
     });
+    expect(qrDraft.body.payload.signals).toEqual(
+      expect.arrayContaining(["qr_registration", "fixture_data"]),
+    );
 
     const officialVisit = calls.find((call) =>
       call.url.endsWith("/api/collector/excluded-article"),
@@ -61,6 +65,64 @@ describe("Event Pipeline V2 fixture upload", () => {
       triageAction: "exclude",
       exclusionReason: "not open to ordinary attendees",
     });
+  });
+
+  it("refuses production fixture uploads without the public fixture data flag", async () => {
+    await expect(
+      runFixtureUpload({
+        env: productionEnv(),
+        caseId: "qr-registration-poster",
+        allowHostedWrite: true,
+      }),
+    ).rejects.toThrow("fixture_upload_refuses_production_public_catalog");
+  });
+
+  it("does not turn expected resolution metadata into duplicate drafts", async () => {
+    const calls = [];
+
+    await runFixtureUpload({
+      env: validEnv(),
+      caseId: "beiping-beer-festival",
+      allowHostedWrite: true,
+      now: new Date("2026-06-04T08:00:00.000Z"),
+      fetchImpl: async (url, init) => {
+        calls.push({ url, body: JSON.parse(init.body) });
+        return jsonResponse({ ok: true, id: `${url.split("/").at(-1)}-${calls.length}` });
+      },
+    });
+
+    const beipingDraft = calls.find((call) =>
+      call.url.endsWith("/api/collector/event-draft"),
+    );
+    expect(beipingDraft.body.payload.signals).toContain("fixture_data");
+    expect(beipingDraft.body.payload.signals).not.toContain("possible_duplicate");
+    expect(beipingDraft.body.payload).not.toHaveProperty("resolutionDecision");
+  });
+
+  it("allows explicit public fixture data mode for non-production fixtures", async () => {
+    const calls = [];
+
+    await runFixtureUpload({
+      env: validEnv(),
+      caseId: "qr-registration-poster",
+      allowHostedWrite: true,
+      allowPublicFixtureData: true,
+      now: new Date("2026-06-04T08:00:00.000Z"),
+      fetchImpl: async (url, init) => {
+        calls.push({ url, body: JSON.parse(init.body) });
+        return jsonResponse({ ok: true, id: `${url.split("/").at(-1)}-${calls.length}` });
+      },
+    });
+
+    const draft = calls.find((call) =>
+      call.url.endsWith("/api/collector/event-draft"),
+    );
+    expect(draft.body.payload).toMatchObject({
+      triageDecision: "public_activity",
+    });
+    expect(draft.body.payload.signals).toEqual(
+      expect.arrayContaining(["qr_registration", "fixture_data"]),
+    );
   });
 
   it("formats summaries without collector secrets", () => {
@@ -86,6 +148,14 @@ describe("Event Pipeline V2 fixture upload", () => {
 function validEnv() {
   return {
     COLLECTOR_BASE_URL: "https://activities.example",
+    COLLECTOR_API_KEY: "collector-secret",
+    COLLECTOR_ID: "home-1",
+  };
+}
+
+function productionEnv() {
+  return {
+    COLLECTOR_BASE_URL: "https://local-activities.vercel.app",
     COLLECTOR_API_KEY: "collector-secret",
     COLLECTOR_ID: "home-1",
   };

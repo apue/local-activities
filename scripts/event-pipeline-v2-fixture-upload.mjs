@@ -18,6 +18,7 @@ export async function runFixtureUpload({
   caseId,
   all = false,
   allowHostedWrite = false,
+  allowPublicFixtureData = false,
   now = new Date(),
 } = {}) {
   if (!allowHostedWrite) {
@@ -25,6 +26,10 @@ export async function runFixtureUpload({
   }
 
   const config = readCollectorUploadConfig(env);
+  const uploadEnvironment = classifyFixtureUploadEnvironment(env, config.baseUrl);
+  if (uploadEnvironment === "production" && !allowPublicFixtureData) {
+    throw new Error("fixture_upload_refuses_production_public_catalog");
+  }
   const caseIds = all ? requiredFixtureCases : [caseId].filter(Boolean);
   if (!caseIds.length) throw new Error("fixture_case_required");
 
@@ -43,6 +48,8 @@ export async function runFixtureUpload({
       fixture,
       collectorId: config.collectorId,
       now,
+      uploadEnvironment,
+      publicCatalogEnabled: allowPublicFixtureData,
     });
     const uploaded = await uploadBuiltFixture({
       config,
@@ -60,6 +67,8 @@ export async function runFixtureUpload({
   return {
     kind: "uploaded",
     caseCount: cases.length,
+    environment: uploadEnvironment,
+    publicCatalogEnabled: allowPublicFixtureData,
     totals,
     cases,
   };
@@ -92,7 +101,35 @@ function readCollectorUploadConfig(env) {
   };
 }
 
-function buildFixtureUploadCase({ fixture, collectorId, now }) {
+function classifyFixtureUploadEnvironment(env, baseUrl) {
+  const explicitTarget = (
+    env.FIXTURE_UPLOAD_TARGET ??
+    env.FIXTURE_UPLOAD_ENV ??
+    env.VERCEL_ENV ??
+    ""
+  )
+    .trim()
+    .toLowerCase();
+  if (explicitTarget === "production") return "production";
+  if (["preview", "staging", "development", "local", "test"].includes(explicitTarget)) {
+    return explicitTarget;
+  }
+
+  const hostname = new URL(baseUrl).hostname.toLowerCase();
+  if (hostname === "localhost" || hostname === "127.0.0.1") return "local";
+  if (hostname === "local-activities.vercel.app") return "production";
+  if (hostname === "activities.example") return "test";
+  if (hostname.endsWith(".vercel.app")) return "preview";
+  return "hosted";
+}
+
+function buildFixtureUploadCase({
+  fixture,
+  collectorId,
+  now,
+  uploadEnvironment,
+  publicCatalogEnabled,
+}) {
   const files = fixture.files;
   const observedAt = now.toISOString();
   const runId = `fixture-${fixture.caseId}-${now
@@ -133,6 +170,12 @@ function buildFixtureUploadCase({ fixture, collectorId, now }) {
         diagnostics: [
           { key: "fixture_case", value: fixture.caseId },
           { key: "fixture_expected_route", value: expected.route },
+          { key: "fixture_workload", value: "fixture_upload" },
+          { key: "fixture_environment", value: uploadEnvironment },
+          {
+            key: "fixture_public_catalog_enabled",
+            value: publicCatalogEnabled ? "true" : "false",
+          },
         ],
       },
     }),
@@ -167,7 +210,7 @@ function buildFixtureUploadCase({ fixture, collectorId, now }) {
             event,
             index,
             triage,
-            expected,
+            publicCatalogEnabled,
             evidenceAssetIds: evidenceAssets.map((asset) => asset.payload.assetId),
           }),
         ),
@@ -236,14 +279,16 @@ function buildEventDraft({
   event,
   index,
   triage,
-  expected,
+  publicCatalogEnabled,
   evidenceAssetIds,
 }) {
   const signals = new Set(event.signals ?? []);
+  signals.add("fixture_data");
   if (event.registrationQrAssetId) signals.add("qr_registration");
-  if (expected.expectedResolutionDecision !== "new_event") {
-    signals.add("possible_duplicate");
-  }
+  const triageDecision = publicCatalogEnabled
+    ? triage.triageDecision
+    : "possible_public_activity";
+  const triageAction = publicCatalogEnabled ? triage.triageAction : "review";
 
   return envelope({
     collectorId,
@@ -253,8 +298,8 @@ function buildEventDraft({
       articleUrl,
       extractionAttemptId: `${runId}-event-${index + 1}`,
       captureMode: captureModeFromEvent(event),
-      triageDecision: triage.triageDecision,
-      triageAction: triage.triageAction,
+      triageDecision,
+      triageAction,
       triageConfidence: triage.confidence,
       publicSignals: triage.publicSignals ?? [],
       exclusionSignals: triage.exclusionSignals ?? [],
@@ -298,7 +343,7 @@ function buildEventDraft({
       confidence: event.confidence,
       hardBlockers: event.hardBlockers ?? [],
       softBlockers: event.softBlockers ?? [],
-      resolutionDecision: expected.expectedResolutionDecision,
+      resolutionDecision: event.resolutionDecision,
     },
   });
 }
@@ -436,6 +481,7 @@ export async function runFixtureUploadCli(argv = process.argv.slice(2)) {
     caseId: args.caseId,
     all: args.all,
     allowHostedWrite: args.allowHostedWrite,
+    allowPublicFixtureData: args.allowPublicFixtureData,
   });
   console.log(formatFixtureUploadSummary(result));
   console.log(JSON.stringify(result, null, 2));

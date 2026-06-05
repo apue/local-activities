@@ -130,10 +130,29 @@ Allowed by default:
 Not allowed by default:
 
 - hosted fixture replay that inserts drafts or canonical events
+- hosted fixture upload into the production public catalog
 - hosted migration execution
 - hosted draft cleanup
 - hosted canonical-event cleanup
 - hosted publish or withdrawal actions
+
+### Fixture Data Boundaries
+
+Official source channels are production-worthy inputs, but committed fixtures are
+test artifacts. A fixture may be based on a real official-account post, yet its
+stored payload can contain synthetic URLs, `Fixture case` summaries, placeholder
+asset paths, manual expected decisions, and fixed timestamps. Those artifacts
+must validate the pipeline, not become user-facing catalog rows.
+
+`pnpm fixture:upload` therefore requires `--allow-hosted-write` before writing to
+any hosted API and refuses production public-catalog writes unless the operator
+also passes `--allow-public-fixture-data`. Without that public-data flag, uploaded
+fixture drafts are marked as `fixture_data` and routed as
+`possible_public_activity` for review-only behavior. They should not auto-publish.
+
+Fixture capture or eval workflows that call a live model may still write usage
+ledger records, because those token costs are real. Fixture replay and mocked
+tests do not call a provider and should not be recorded as chargeable usage.
 
 Write-path integration tests should use one of these targets:
 
