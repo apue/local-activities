@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildWechatArticleBundleFromText,
   buildWechatArticleSnapshotFromText,
   formatWechatUrlExtractionSummary,
   parseWechatUrlExtractionArgs,
@@ -29,6 +30,19 @@ describe("single WeChat URL extractor", () => {
   });
 
   it("builds a normalized article snapshot from browser text", () => {
+    const bundle = buildWechatArticleBundleFromText({
+      url: "https://mp.weixin.qq.com/s/example",
+      text: [
+        "六月活动简报 - 文化活动 | Boletin de junio",
+        "六月活动简报 - 文化活动 | Boletin de junio",
+        "北京塞万提斯学院 西班牙驻华大使馆",
+        "2026年6月1日 21:44 北京",
+        "白蓝映像：阿根廷短片展 - 第二场放映",
+        "6月6日星期六 16:00",
+        "北京塞万提斯学院",
+      ].join("\n"),
+      now: new Date("2026-06-03T04:00:00.000Z"),
+    });
     const snapshot = buildWechatArticleSnapshotFromText({
       url: "https://mp.weixin.qq.com/s/example",
       text: [
@@ -43,6 +57,13 @@ describe("single WeChat URL extractor", () => {
       now: new Date("2026-06-03T04:00:00.000Z"),
     });
 
+    expect(bundle).toMatchObject({
+      version: "captured-article-bundle-v1",
+      provider: "url_browser",
+      sourceUrl: "https://mp.weixin.qq.com/s/example",
+      text: expect.stringContaining("白蓝映像"),
+      images: [],
+    });
     expect(snapshot).toMatchObject({
       canonicalUrl: "https://mp.weixin.qq.com/s/example",
       finalUrl: "https://mp.weixin.qq.com/s/example",
@@ -90,6 +111,12 @@ describe("single WeChat URL extractor", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].upload).toBe(false);
     expect(calls[0].articleSnapshot.title).toBe("Monthly events");
+    expect(calls[0].evidenceAssets).toEqual([]);
+    expect(result.articleBundle).toMatchObject({
+      version: "captured-article-bundle-v1",
+      provider: "url_browser",
+      sourceUrl: "https://mp.weixin.qq.com/s/example",
+    });
     expect(result.draftSummaries).toEqual([
       {
         title: "Concert",
