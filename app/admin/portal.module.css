@@ -201,6 +201,36 @@
   font-size: 1.1rem;
 }
 
+.segmentedControl {
+  display: inline-flex;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #c8cec2;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.segmentedControl button {
+  min-height: 34px;
+  border: 0;
+  border-right: 1px solid #c8cec2;
+  background: transparent;
+  color: #20231f;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 7px 10px;
+}
+
+.segmentedControl button:last-child {
+  border-right: 0;
+}
+
+.segmentedControl .activeSegment {
+  background: #20231f;
+  color: #ffffff;
+}
+
 .list,
 .jobList {
   display: grid;
@@ -400,7 +430,7 @@
 
 .usageSummary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-top: 14px;
 }
@@ -477,6 +507,14 @@
 
   .metrics {
     width: 100%;
+  }
+
+  .segmentedControl {
+    width: 100%;
+  }
+
+  .segmentedControl button {
+    flex: 1;
   }
 
   .metrics div {

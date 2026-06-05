@@ -186,12 +186,23 @@ export type AdminLlmUsageModelSummary = {
   provider: string;
   model: string;
   operation: string;
+  workload: string;
   requestCount: number;
   totalTokens: number;
   costMicroCny: number;
 };
 
+export type AdminLlmUsageRangeKey = "today" | "7d" | "all";
+
+export type AdminLlmUsageRange = {
+  key: AdminLlmUsageRangeKey;
+  label: string;
+  startsAt?: string;
+};
+
 export type AdminLlmUsageSummary = {
+  range: AdminLlmUsageRange;
+  latestRecordedAt?: string;
   totals: {
     requestCount: number;
     successCount: number;
@@ -231,7 +242,10 @@ export type AdminStore = {
     excludedArticleId: string,
     promotedAt: string,
   ): Promise<AdminExcludedArticleRecord | null>;
-  getLlmUsageSummary(): Promise<AdminLlmUsageSummary>;
+  getLlmUsageSummary(input: {
+    startsAt?: string;
+    range: AdminLlmUsageRange;
+  }): Promise<AdminLlmUsageSummary>;
   publishEventDraft(input: {
     draft: AdminEventDraftRecord;
     publishedAt: string;
@@ -277,8 +291,16 @@ export function listAdminExcludedArticles(
   return store.listExcludedArticles(input);
 }
 
-export function listAdminLlmUsageSummary(store: AdminStore) {
-  return store.getLlmUsageSummary();
+export function listAdminLlmUsageSummary(
+  input: { range?: AdminLlmUsageRangeKey } = {},
+  store: AdminStore,
+  now = new Date(),
+) {
+  const range = resolveAdminLlmUsageRange(input.range ?? "today", now);
+  return store.getLlmUsageSummary({
+    startsAt: range.startsAt,
+    range,
+  });
 }
 
 export async function promoteAdminExcludedArticle(
@@ -356,4 +378,37 @@ function withPublishDecision(draft: AdminEventDraftRecord): AdminEventDraftRecor
     ...draft,
     publishDecision: computePublishDecision(draft),
   };
+}
+
+export function resolveAdminLlmUsageRange(
+  key: AdminLlmUsageRangeKey,
+  now = new Date(),
+): AdminLlmUsageRange {
+  if (key === "all") {
+    return { key, label: "All" };
+  }
+  if (key === "7d") {
+    return {
+      key,
+      label: "Last 7 days",
+      startsAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+  }
+  return {
+    key: "today",
+    label: "Today",
+    startsAt: startOfShanghaiDay(now).toISOString(),
+  };
+}
+
+function startOfShanghaiDay(now: Date) {
+  const shanghaiOffsetMs = 8 * 60 * 60 * 1000;
+  const shanghaiDate = new Date(now.getTime() + shanghaiOffsetMs);
+  return new Date(
+    Date.UTC(
+      shanghaiDate.getUTCFullYear(),
+      shanghaiDate.getUTCMonth(),
+      shanghaiDate.getUTCDate(),
+    ) - shanghaiOffsetMs,
+  );
 }

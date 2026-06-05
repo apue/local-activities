@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   canRunDraftReviewAction,
+  formatUsageTimestamp,
   getDraftBlockingReasons,
   formatLlmCostCny,
   formatTokenCount,
   getReviewStateLabel,
+  getUsageRangeLabel,
   isDraftPublishableForDisplay,
 } from "./admin-portal-utils";
 
@@ -111,5 +113,13 @@ describe("admin portal utils", () => {
     expect(formatTokenCount(1650)).toBe("1,650");
     expect(formatLlmCostCny(2100)).toBe("¥0.0021");
     expect(formatLlmCostCny(0)).toBe("¥0.0000");
+  });
+
+  it("formats usage range labels and timestamps", () => {
+    expect(getUsageRangeLabel("today")).toBe("Today");
+    expect(getUsageRangeLabel("7d")).toBe("Last 7 days");
+    expect(getUsageRangeLabel("all")).toBe("All");
+    expect(formatUsageTimestamp(undefined)).toBe("No records");
+    expect(formatUsageTimestamp("2026-06-04T02:05:00.000Z")).toContain("6月4日");
   });
 });

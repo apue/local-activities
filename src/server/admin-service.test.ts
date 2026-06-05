@@ -11,6 +11,7 @@ import {
   promoteAdminExcludedArticle,
   publishAdminEventDraft,
   rejectAdminEventDraft,
+  resolveAdminLlmUsageRange,
   type AdminExcludedArticleRecord,
   type AdminEventDraftRecord,
   type AdminStore,
@@ -21,7 +22,14 @@ class MemoryAdminStore implements AdminStore {
   jobs: CollectorJobRecord[] = [];
   drafts = new Map<string, AdminEventDraftRecord>();
   excludedArticles = new Map<string, AdminExcludedArticleRecord>();
+  llmUsageInput?: Parameters<AdminStore["getLlmUsageSummary"]>[0];
   llmUsageSummary = {
+    range: {
+      key: "today" as const,
+      label: "Today",
+      startsAt: "2026-06-03T16:00:00.000Z",
+    },
+    latestRecordedAt: "2026-06-04T02:05:00.000Z",
     totals: {
       requestCount: 2,
       successCount: 1,
@@ -36,6 +44,7 @@ class MemoryAdminStore implements AdminStore {
         provider: "openai",
         model: "gpt-5-mini",
         operation: "event_extraction",
+        workload: "event_extraction",
         requestCount: 2,
         totalTokens: 1850,
         costMicroCny: 3200,
@@ -123,8 +132,12 @@ class MemoryAdminStore implements AdminStore {
     );
   }
 
-  async getLlmUsageSummary() {
-    return this.llmUsageSummary;
+  async getLlmUsageSummary(input: Parameters<AdminStore["getLlmUsageSummary"]>[0]) {
+    this.llmUsageInput = input;
+    return {
+      ...this.llmUsageSummary,
+      range: input.range,
+    };
   }
 
   async promoteExcludedArticle(excludedArticleId: string, promotedAt: string) {
@@ -274,9 +287,50 @@ describe("admin service", () => {
   it("returns the read-only LLM usage summary from the admin store", async () => {
     const store = new MemoryAdminStore();
 
-    await expect(listAdminLlmUsageSummary(store)).resolves.toEqual(
-      store.llmUsageSummary,
-    );
+    await expect(
+      listAdminLlmUsageSummary(
+        { range: "today" },
+        store,
+        new Date("2026-06-04T03:00:00.000Z"),
+      ),
+    ).resolves.toMatchObject({
+      range: {
+        key: "today",
+        label: "Today",
+        startsAt: "2026-06-03T16:00:00.000Z",
+      },
+      latestRecordedAt: "2026-06-04T02:05:00.000Z",
+      totals: store.llmUsageSummary.totals,
+    });
+    expect(store.llmUsageInput).toMatchObject({
+      startsAt: "2026-06-03T16:00:00.000Z",
+    });
+  });
+
+  it("resolves admin LLM usage ranges using the Asia/Shanghai day boundary", () => {
+    expect(
+      resolveAdminLlmUsageRange(
+        "today",
+        new Date("2026-06-04T03:00:00.000Z"),
+      ),
+    ).toEqual({
+      key: "today",
+      label: "Today",
+      startsAt: "2026-06-03T16:00:00.000Z",
+    });
+    expect(
+      resolveAdminLlmUsageRange("7d", new Date("2026-06-04T03:00:00.000Z")),
+    ).toEqual({
+      key: "7d",
+      label: "Last 7 days",
+      startsAt: "2026-05-28T03:00:00.000Z",
+    });
+    expect(
+      resolveAdminLlmUsageRange("all", new Date("2026-06-04T03:00:00.000Z")),
+    ).toEqual({
+      key: "all",
+      label: "All",
+    });
   });
 
   it("returns draft detail with review context", async () => {

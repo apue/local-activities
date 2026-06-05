@@ -66,6 +66,25 @@ export function buildAdminReadonlySmokeRequests({
         }
       },
     },
+    ...["today", "7d", "all"].map((range) => ({
+      name: `admin_usage_${range}_json`,
+      method: "GET",
+      path: `/api/admin/llm-usage?range=${range}`,
+      headers: buildCookieHeaders(adminCookie),
+      validate: (response) => {
+        expectStatus(response, 200);
+        if (
+          response.json?.ok !== true ||
+          (response.json.usage?.range &&
+            response.json.usage.range.key !== range) ||
+          typeof response.json.usage?.totals?.requestCount !== "number" ||
+          !Array.isArray(response.json.usage?.byModel) ||
+          !Array.isArray(response.json.usage?.recent)
+        ) {
+          throw new Error(`admin_usage_${range}_shape_failed`);
+        }
+      },
+    })),
     {
       name: "admin_invalid_token_json",
       method: "GET",
