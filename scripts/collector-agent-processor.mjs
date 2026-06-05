@@ -5,6 +5,10 @@ import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 
 import { createCollectorHeaders } from "./collector-fixture-run.mjs";
+import {
+  buildLlmUsageEnvelope as buildSharedLlmUsageEnvelope,
+  readUsageEnvironment,
+} from "./llm-usage-ledger.mjs";
 
 const execFileAsync = promisify(execFile);
 const payloadVersion = "2026-05-collector-v1";
@@ -211,6 +215,9 @@ export async function runCollectorAgent({
         diagnostics,
         runStartedAt,
       });
+  if (response.llmUsage?.length) {
+    payloads.llmUsage = response.llmUsage;
+  }
 
   return uploadAgentPayloads({
     config,
@@ -491,10 +498,11 @@ async function requestModelWithRetries({
     message: "Agent response did not match the expected schema.",
     retryable: true,
   };
+  const llmUsage = [];
 
   for (let attempt = 1; attempt <= config.maxAttempts; attempt += 1) {
     try {
-      const data = await requestOpenAI({
+      const providerResult = await requestOpenAI({
         config,
         seedUrl,
         runId,
@@ -503,7 +511,7 @@ async function requestModelWithRetries({
         fetchImpl,
         attempt,
       });
-      const parsed = parseAgentResponse(parseOpenAIJson(data), {
+      const parsed = parseAgentResponse(parseOpenAIJson(providerResult.data), {
         publicAssetUrlPrefixes: config.publicAssetUrlPrefixes,
         articleSnapshotFallback: articleSnapshotFromObservation(observation),
         eventDraftDefaults: {
@@ -512,10 +520,41 @@ async function requestModelWithRetries({
           city: "Beijing",
         },
       });
-      if (parsed.ok) return parsed;
-      if (parsed.retryable === false) return parsed;
+      llmUsage.push(
+        buildAgentLlmUsageEnvelope({
+          config,
+          seedUrl,
+          runId,
+          vercelJobId,
+          observation,
+          providerResponse: providerResult.data,
+          latencyMs: providerResult.latencyMs,
+          status: parsed.ok ? "succeeded" : "failed",
+          failureReason: parsed.ok ? undefined : parsed.reason,
+          attemptNumber: attempt,
+        }),
+      );
+      if (parsed.ok) return { ...parsed, llmUsage };
+      if (parsed.retryable === false) return { ...parsed, llmUsage };
       lastError = parsed;
     } catch (error) {
+      if (error?.data || error?.latencyMs) {
+        llmUsage.push(
+          buildAgentLlmUsageEnvelope({
+            config,
+            seedUrl,
+            runId,
+            vercelJobId,
+            observation,
+            providerResponse: error.data,
+            latencyMs: error.latencyMs,
+            status: "failed",
+            failureReason: error?.reason ?? "agent_request_failed",
+            statusCode: error?.statusCode,
+            attemptNumber: attempt,
+          }),
+        );
+      }
       lastError = {
         reason: error?.reason ?? "agent_request_failed",
         stage: "agent_extraction",
@@ -531,6 +570,7 @@ async function requestModelWithRetries({
     stage: lastError.stage,
     message: lastError.message,
     retryable: lastError.retryable,
+    llmUsage,
   };
 }
 
@@ -544,6 +584,7 @@ async function requestOpenAI({
   attempt,
 }) {
   const controller = new AbortController();
+  const startedAt = Date.now();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
     const request = buildAgentModelRequest({
@@ -565,21 +606,69 @@ async function requestOpenAI({
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw Object.assign(new Error(`agent_request_failed:${response.status}`), {
-        reason: "agent_request_failed",
-      });
+      throw Object.assign(
+        new Error(`agent_request_failed:${response.status}`),
+        {
+          reason: "agent_request_failed",
+          statusCode: response.status,
+          data,
+          latencyMs: Date.now() - startedAt,
+        },
+      );
     }
-    return data;
+    return { data, latencyMs: Date.now() - startedAt };
   } catch (error) {
     if (error?.name === "AbortError") {
       throw Object.assign(new Error("agent_request_failed:timeout"), {
         reason: "agent_request_failed",
+        latencyMs: Date.now() - startedAt,
       });
     }
     throw error;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function buildAgentLlmUsageEnvelope({
+  config,
+  seedUrl,
+  runId,
+  vercelJobId,
+  observation,
+  providerResponse,
+  latencyMs,
+  status,
+  failureReason,
+  statusCode,
+  attemptNumber,
+}) {
+  const articleUrl = observation?.canonicalUrl ?? seedUrl;
+  return buildSharedLlmUsageEnvelope({
+    collectorId: config.collectorId,
+    runId,
+    observedAt: new Date().toISOString(),
+    operation: "event_extraction",
+    provider: config.agentProvider,
+    model: config.openaiModel,
+    status,
+    usage: providerResponse?.usage,
+    latencyMs,
+    sourceRunId: runId,
+    metadata: removeUndefined({
+      apiStyle: config.agentApiStyle,
+      workload: "agent_processor",
+      environment: config.usageEnvironment,
+      chargeable: true,
+      articleUrl,
+      collectorJobId: vercelJobId,
+      failureReason,
+      statusCode,
+      attemptNumber,
+      usageSource: providerResponse?.usage ? "provider_usage" : "missing_usage",
+    }),
+    usageIdParts: [articleUrl, String(attemptNumber ?? 1)],
+  });
 }
 
 function buildAgentModelRequest({
@@ -1534,6 +1623,26 @@ async function uploadAgentPayloads({
     uploadedIds.failureId = failure.id;
   }
 
+  for (const usage of payloads.llmUsage ?? []) {
+    usage.payload.sourceRunId =
+      uploadedIds.sourceRunId ?? usage.payload.sourceRunId;
+    usage.payload.articleSnapshotId =
+      uploadedIds.articleSnapshotId ?? usage.payload.articleSnapshotId;
+    usage.payload.eventDraftId =
+      uploadedIds.eventDraftId ?? usage.payload.eventDraftId;
+    const uploaded = await postJson({
+      baseUrl: config.baseUrl,
+      path: "/api/collector/llm-usage",
+      headers: config.headers,
+      fetchImpl,
+      body: usage,
+    });
+    uploadedIds.llmUsageIds = [
+      ...(uploadedIds.llmUsageIds ?? []),
+      uploaded.id,
+    ];
+  }
+
   if (vercelJobId) {
     await postJson({
       baseUrl: config.baseUrl,
@@ -1905,6 +2014,7 @@ function readAgentConfig(env) {
     publicAssetUrlPrefixes: parseCsv(env.PUBLIC_ASSET_URL_PREFIXES),
     sandboxSetupStartedAt: parseTimestampMs(env.SANDBOX_SETUP_STARTED_AT),
     sandboxBrowserReadyAt: parseTimestampMs(env.SANDBOX_BROWSER_READY_AT),
+    usageEnvironment: readUsageEnvironment(env),
     agentProvider,
     agentApiStyle,
     openaiBaseUrl: normalizeBaseUrl(

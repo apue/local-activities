@@ -15,7 +15,15 @@ describe("collector agent processor", () => {
         body: init.body ? JSON.parse(init.body) : {},
       });
       if (url === "https://api.openai.com/v1/responses") {
-        return jsonResponse(openaiResponse(agentSuccessResponse()));
+        return jsonResponse(
+          openaiResponse(agentSuccessResponse(), {
+            usage: {
+              input_tokens: 1200,
+              output_tokens: 300,
+              total_tokens: 1500,
+            },
+          }),
+        );
       }
       return jsonResponse({ ok: true, id: `id-${calls.length}` });
     };
@@ -53,6 +61,7 @@ describe("collector agent processor", () => {
       evidenceAssetIds: ["id-4"],
       articleSnapshotId: "id-5",
       eventDraftId: "id-6",
+      llmUsageIds: ["id-7"],
     });
     expect(calls.map((call) => call.url)).toEqual([
       "https://api.openai.com/v1/responses",
@@ -61,9 +70,27 @@ describe("collector agent processor", () => {
       "https://local-activities.example/api/collector/evidence-asset",
       "https://local-activities.example/api/collector/article-snapshot",
       "https://local-activities.example/api/collector/event-draft",
+      "https://local-activities.example/api/collector/llm-usage",
       "https://local-activities.example/api/collector/jobs/job-1/report",
     ]);
-    expect(calls[6].body).toMatchObject({
+    expect(calls[6].body.payload).toMatchObject({
+      operation: "event_extraction",
+      provider: "openai",
+      model: "gpt-5-mini",
+      status: "succeeded",
+      inputTokens: 1200,
+      outputTokens: 300,
+      totalTokens: 1500,
+      articleSnapshotId: "id-5",
+      eventDraftId: "id-6",
+      metadata: {
+        apiStyle: "responses",
+        workload: "agent_processor",
+        articleUrl: "https://mp.weixin.qq.com/s/agent",
+        usageSource: "provider_usage",
+      },
+    });
+    expect(calls[7].body).toMatchObject({
       collectorId: "home-1",
       localRunId: "agent-run",
       status: "completed",
@@ -306,6 +333,7 @@ describe("collector agent processor", () => {
       "https://local-activities.example/api/collector/article-snapshot",
       "https://local-activities.example/api/collector/event-candidates",
       "https://local-activities.example/api/collector/event-draft",
+      "https://local-activities.example/api/collector/llm-usage",
     ]);
     expect(calls[5].body).toEqual({
       title: "Agent Event",
@@ -437,6 +465,7 @@ describe("collector agent processor", () => {
       "https://api.openai.com/v1/responses",
       "https://local-activities.example/api/collector/event-draft",
       "https://local-activities.example/api/collector/event-resolution",
+      "https://local-activities.example/api/collector/llm-usage",
     ]);
     expect(calls[6].body.input[1].content).toContain("event-existing");
     expect(calls[7].body.payload.signals).toContain("possible_duplicate");
@@ -667,7 +696,18 @@ describe("collector agent processor", () => {
     const fetchImpl = async (url, init = {}) => {
       calls.push({ url, body: init.body ? JSON.parse(init.body) : {} });
       if (url === "https://api.openai.com/v1/responses") {
-        return jsonResponse(openaiResponse({ status: "success" }));
+        return jsonResponse(
+          openaiResponse(
+            { status: "success" },
+            {
+              usage: {
+                input_tokens: 500,
+                output_tokens: 25,
+                total_tokens: 525,
+              },
+            },
+          ),
+        );
       }
       return jsonResponse({ ok: true, id: `id-${calls.length}` });
     };
@@ -689,12 +729,30 @@ describe("collector agent processor", () => {
       sourceId: "id-3",
       sourceRunId: "id-4",
       failureId: "id-5",
+      llmUsageIds: ["id-6", "id-7"],
     });
     expect(calls[4].body.payload).toMatchObject({
       articleUrl: "https://mp.weixin.qq.com/s/bad",
       stage: "agent_extraction",
       reason: "agent_response_invalid_schema",
       retryable: true,
+    });
+    const usageUploads = calls.filter((call) =>
+      call.url.endsWith("/api/collector/llm-usage"),
+    );
+    expect(usageUploads).toHaveLength(2);
+    expect(usageUploads[0].body.payload).toMatchObject({
+      operation: "event_extraction",
+      provider: "openai",
+      model: "gpt-5-mini",
+      status: "failed",
+      inputTokens: 500,
+      outputTokens: 25,
+      totalTokens: 525,
+      metadata: {
+        failureReason: "agent_response_invalid_schema",
+        attemptNumber: 1,
+      },
     });
   });
 
@@ -730,6 +788,7 @@ describe("collector agent processor", () => {
       sourceId: "id-2",
       sourceRunId: "id-3",
       failureId: "id-4",
+      llmUsageIds: ["id-5"],
     });
     expect(calls[3].body.payload).toMatchObject({
       reason: "captcha_required",
@@ -960,9 +1019,10 @@ function eventResolutionResponse() {
   };
 }
 
-function openaiResponse(payload) {
+function openaiResponse(payload, overrides = {}) {
   return {
     output_text: JSON.stringify(payload),
+    ...overrides,
   };
 }
 
