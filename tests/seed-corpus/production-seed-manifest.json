@@ -1,0 +1,162 @@
+{
+  "version": "production-seed-manifest-v1",
+  "batchLabel": "event-pipeline-v3-production-acceptance",
+  "description": "Curated official-account source references for final Event Pipeline V3 production acceptance. Live URL cases can be imported automatically. Captured references document required product coverage but need materialized source capture before automatic import.",
+  "cases": [
+    {
+      "id": "us-center-qr-lecture-2026-06",
+      "title": "北京美国中心线下讲座：Grotto Art of China: A Sourcebook",
+      "coverage": ["single_event", "qr_registration"],
+      "source": {
+        "type": "live_url",
+        "url": "https://mp.weixin.qq.com/s/wbwPWrQsb0m3FmcgAhhmkw",
+        "sourceName": "北京美国中心"
+      },
+      "expected": {
+        "action": "extract",
+        "public": true,
+        "publicEventCount": 1,
+        "adminReview": false,
+        "expectsQrEvidence": true,
+        "expectsPosterEvidence": true
+      }
+    },
+    {
+      "id": "thai-festival-beijing-2026",
+      "title": "Thai Festival Beijing 2026",
+      "coverage": ["single_event"],
+      "source": {
+        "type": "live_url",
+        "url": "https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg",
+        "sourceName": "Royal Thai Embassy"
+      },
+      "expected": {
+        "action": "extract",
+        "public": true,
+        "publicEventCount": 1,
+        "adminReview": false
+      }
+    },
+    {
+      "id": "goethe-weekend-roundup",
+      "title": "Goethe Weekend Activities Roundup",
+      "coverage": ["multi_event_article", "long_running_exhibition", "recurring_activity"],
+      "source": {
+        "type": "captured_reference",
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MzU4MjYwMw==&mid=2692059580&idx=1&sn=a9e38d21c18c5ad3a82631484e880ecc",
+        "sourceName": "Goethe-Institut Beijing",
+        "evalCaseId": "goethe-weekend-roundup"
+      },
+      "expected": {
+        "action": "extract",
+        "public": true,
+        "publicEventCount": 3,
+        "adminReview": true
+      }
+    },
+    {
+      "id": "iic-save-the-date-image-sparse-multi-event",
+      "title": "Italian Cultural Institute image-dominant multi-event post",
+      "coverage": ["poster_or_image_dominant", "multi_event_article"],
+      "source": {
+        "type": "captured_reference",
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917339&idx=1&sn=362eb4f1c54b84427a481d90ac3bcfb5",
+        "sourceName": "Italian Cultural Institute",
+        "evalCaseId": "iic-save-the-date-image-sparse-multi-event"
+      },
+      "expected": {
+        "action": "extract",
+        "public": true,
+        "publicEventCount": 2,
+        "adminReview": true,
+        "expectsPosterEvidence": true
+      }
+    },
+    {
+      "id": "beiping-friendship-beer-festival-guide",
+      "title": "北平机器·友谊万岁精酿啤酒节",
+      "coverage": ["duplicate_pair", "qr_registration"],
+      "source": {
+        "type": "captured_reference",
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518529&idx=1&sn=e9c9ac36887462c411fa30041414de8f",
+        "sourceName": "北平机器",
+        "evalCaseId": "beiping-friendship-beer-festival-guide"
+      },
+      "expected": {
+        "action": "extract",
+        "public": true,
+        "publicEventCount": 1,
+        "adminReview": true,
+        "duplicateGroup": "beiping-friendship-beer-festival"
+      }
+    },
+    {
+      "id": "beiping-friendship-beer-festival-live-short-url",
+      "title": "北平机器·友谊万岁精酿啤酒节 live short URL duplicate",
+      "coverage": ["duplicate_pair"],
+      "source": {
+        "type": "live_url",
+        "url": "https://mp.weixin.qq.com/s/ToCTUmZumqYvCkWzz8-Igg",
+        "sourceName": "北平机器"
+      },
+      "expected": {
+        "action": "extract",
+        "public": true,
+        "publicEventCount": 1,
+        "adminReview": true,
+        "duplicateGroup": "beiping-friendship-beer-festival"
+      }
+    },
+    {
+      "id": "german-minister-visit-recap",
+      "title": "德国联邦经济和能源部长北京访问行程",
+      "coverage": ["official_visit_or_non_public_news"],
+      "source": {
+        "type": "captured_reference",
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MjM2NjgwNg==&mid=2653297147&idx=1&sn=c101d7a6d5e94eb115b2a478054ed397",
+        "sourceName": "German Embassy",
+        "evalCaseId": "german-minister-visit-recap"
+      },
+      "expected": {
+        "action": "exclude",
+        "public": false,
+        "publicEventCount": 0,
+        "adminReview": false
+      }
+    },
+    {
+      "id": "japan-tofu-culture-article",
+      "title": "Generic cultural article without a Beijing public event",
+      "coverage": ["generic_non_event"],
+      "source": {
+        "type": "captured_reference",
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzA3MTg5NDIxOQ==&mid=2650993263&idx=1&sn=31cdc81109a9a71c2d04c92a42d51cd1",
+        "sourceName": "Japan Cultural Center",
+        "evalCaseId": "japan-tofu-culture-article"
+      },
+      "expected": {
+        "action": "exclude",
+        "public": false,
+        "publicEventCount": 0,
+        "adminReview": false
+      }
+    },
+    {
+      "id": "daad-photo-contest",
+      "title": "DAAD photo contest review case",
+      "coverage": ["incomplete_review_case"],
+      "source": {
+        "type": "captured_reference",
+        "articleUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MjM2NjgwNg==&mid=2653297149&idx=1&sn=b261b6685068e60d8997f858f688df23",
+        "sourceName": "DAAD",
+        "evalCaseId": "daad-photo-contest"
+      },
+      "expected": {
+        "action": "review",
+        "public": false,
+        "publicEventCount": 0,
+        "adminReview": true
+      }
+    }
+  ]
+}
