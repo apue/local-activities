@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AdminDraftPublishBlockedError,
   createAdminCollectorJob,
   getAdminEventDraftDetail,
   listAdminExcludedArticles,
@@ -48,7 +49,7 @@ class MemoryAdminStore implements AdminStore {
     drafts: AdminEventDraftRecord[] = [],
     excludedArticles: AdminExcludedArticleRecord[] = [],
   ) {
-    for (const draft of drafts) this.drafts.set(draft.id, draft);
+    for (const draft of drafts) this.drafts.set(draft.id, cloneDraft(draft));
     for (const article of excludedArticles) {
       this.excludedArticles.set(article.id, article);
     }
@@ -151,6 +152,23 @@ class MemoryAdminStore implements AdminStore {
   }
 }
 
+function cloneDraft(draft: AdminEventDraftRecord): AdminEventDraftRecord {
+  return {
+    ...draft,
+    evidenceAssetIds: [...draft.evidenceAssetIds],
+    fieldEvidence: { ...draft.fieldEvidence },
+    hardBlockers: draft.hardBlockers?.map((blocker) => ({ ...blocker })),
+    softBlockers: draft.softBlockers?.map((blocker) => ({ ...blocker })),
+    publicSignals: draft.publicSignals ? [...draft.publicSignals] : undefined,
+    exclusionSignals: draft.exclusionSignals
+      ? [...draft.exclusionSignals]
+      : undefined,
+    occurrenceStartsAt: draft.occurrenceStartsAt
+      ? [...draft.occurrenceStartsAt]
+      : undefined,
+  };
+}
+
 const completeDraft: AdminEventDraftRecord = {
   id: "draft-1",
   articleUrl: "https://mp.weixin.qq.com/s/example",
@@ -242,7 +260,14 @@ describe("admin service", () => {
     await expect(
       listAdminEventDrafts({ reviewState: "needs_info" }, store),
     ).resolves.toEqual([
-      expect.objectContaining({ id: "draft-2", reviewState: "needs_info" }),
+      expect.objectContaining({
+        id: "draft-2",
+        reviewState: "needs_info",
+        publishDecision: expect.objectContaining({
+          canPublish: true,
+          hardBlockers: [],
+        }),
+      }),
     ]);
   });
 
@@ -257,9 +282,14 @@ describe("admin service", () => {
   it("returns draft detail with review context", async () => {
     const store = new MemoryAdminStore([completeDraft]);
 
-    await expect(getAdminEventDraftDetail("draft-1", store)).resolves.toEqual(
-      completeDraft,
-    );
+    await expect(getAdminEventDraftDetail("draft-1", store)).resolves.toEqual({
+      ...completeDraft,
+      publishDecision: expect.objectContaining({
+        canPublish: true,
+        hardBlockers: [],
+        softBlockers: [],
+      }),
+    });
   });
 
   it("returns Event Pipeline V2 review context on draft detail", async () => {
@@ -283,6 +313,12 @@ describe("admin service", () => {
       scheduleKind: "long_running",
       softBlockers: [{ code: "low_confidence", message: "Review confidence" }],
       resolutionDecision: "new_event",
+      publishDecision: {
+        canPublish: false,
+        canPublishWithOverride: true,
+        requiresOperatorOverride: true,
+        softBlockers: [{ code: "low_confidence", message: "Review confidence" }],
+      },
     });
   });
 
@@ -291,7 +327,11 @@ describe("admin service", () => {
 
     await expect(
       markAdminEventDraftNeedsInfo("draft-1", store),
-    ).resolves.toMatchObject({ id: "draft-1", reviewState: "needs_info" });
+    ).resolves.toMatchObject({
+      id: "draft-1",
+      reviewState: "needs_info",
+      publishDecision: expect.objectContaining({ canPublish: true }),
+    });
     await expect(rejectAdminEventDraft("draft-1", store)).resolves.toMatchObject(
       { id: "draft-1", reviewState: "rejected" },
     );
@@ -382,7 +422,13 @@ describe("admin service", () => {
         store,
         new Date("2026-05-28T08:00:00.000Z"),
       ),
-    ).rejects.toThrow("draft_not_publishable");
+    ).rejects.toMatchObject({
+      message: "draft_not_publishable",
+      publishDecision: expect.objectContaining({
+        requiresOperatorOverride: true,
+        disabledReason: "Operator override reason required",
+      }),
+    });
     await expect(
       publishAdminEventDraft(
         "draft-soft",
@@ -409,6 +455,35 @@ describe("admin service", () => {
         store,
         new Date("2026-05-28T08:00:00.000Z"),
       ),
-    ).rejects.toThrow("draft_not_publishable");
+    ).rejects.toBeInstanceOf(AdminDraftPublishBlockedError);
+  });
+
+  it("hard-blocks possible duplicate drafts even with override reason", async () => {
+    const store = new MemoryAdminStore([
+      {
+        ...completeDraft,
+        id: "draft-duplicate",
+        reviewState: "possible_duplicate",
+        resolutionDecision: "same_event",
+      },
+    ]);
+
+    await expect(
+      publishAdminEventDraft(
+        "draft-duplicate",
+        store,
+        new Date("2026-05-28T08:00:00.000Z"),
+        { operatorOverrideReason: "This is actually a new event." },
+      ),
+    ).rejects.toMatchObject({
+      message: "draft_not_publishable",
+      publishDecision: expect.objectContaining({
+        canPublishWithOverride: false,
+        hardBlockers: [
+          expect.objectContaining({ code: "possible_duplicate_review_state" }),
+          expect.objectContaining({ code: "unresolved_resolution" }),
+        ],
+      }),
+    });
   });
 });

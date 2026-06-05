@@ -3,6 +3,7 @@ import { z } from "zod";
 import { adminSessionCookie } from "./admin-auth";
 import { authenticateAdminRequest } from "./admin-auth";
 import {
+  AdminDraftPublishBlockedError,
   createAdminCollectorJob,
   getAdminEventDraftDetail,
   listAdminCollectorJobs,
@@ -386,12 +387,23 @@ function invalidRequestResponse(error: z.ZodError) {
 function serviceErrorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "admin_error";
   const status = adminErrorStatus(message);
+  const publishDecision =
+    error instanceof AdminDraftPublishBlockedError
+      ? error.publishDecision
+      : undefined;
 
   return Response.json(
-    {
-      ok: false,
-      error: message,
-    },
+    publishDecision
+      ? {
+          ok: false,
+          error: message,
+          message: publishDecision.disabledReason ?? "Draft is not publishable",
+          publishDecision,
+        }
+      : {
+          ok: false,
+          error: message,
+        },
     { status },
   );
 }

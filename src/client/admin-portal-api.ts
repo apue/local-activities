@@ -56,14 +56,20 @@ export async function adminApiRequest<T>(
   const bodyText = await response.text();
   let body = { error: `request_failed_${response.status}` } as T & {
     error?: string;
+    message?: string;
   };
   try {
-    if (bodyText) body = JSON.parse(bodyText) as T & { error?: string };
+    if (bodyText) {
+      body = JSON.parse(bodyText) as T & {
+        error?: string;
+        message?: string;
+      };
+    }
   } catch {
     // Keep the HTTP status visible when an upstream error is not JSON.
   }
   if (!response.ok) {
-    throw new Error(body.error ?? "request_failed");
+    throw new Error(body.message ?? body.error ?? "request_failed");
   }
   return body;
 }

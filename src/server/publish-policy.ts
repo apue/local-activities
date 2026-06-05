@@ -2,6 +2,8 @@ import type { AdminEventDraftRecord, AdminPublishBlocker } from "./admin-service
 
 export type PublishDecision = {
   canPublish: boolean;
+  canPublishWithOverride: boolean;
+  requiresOperatorOverride: boolean;
   hardBlockers: AdminPublishBlocker[];
   softBlockers: AdminPublishBlocker[];
   disabledReason?: string;
@@ -11,25 +13,33 @@ export function computePublishDecision(
   draft: AdminEventDraftRecord,
   options: { operatorOverrideReason?: string } = {},
 ): PublishDecision {
-  const hardBlockers = [
+  const hardBlockers = uniqueBlockers([
     ...backendHardBlockers(draft),
     ...(draft.hardBlockers ?? []),
-  ];
-  const softBlockers = [
+  ]);
+  const softBlockers = uniqueBlockers([
     ...backendSoftBlockers(draft),
     ...(draft.softBlockers ?? []),
-  ];
+  ]);
+  const hasOverride = Boolean(options.operatorOverrideReason?.trim());
+  const canPublishWithOverride =
+    hardBlockers.length === 0 && softBlockers.length > 0;
+  const requiresOperatorOverride = canPublishWithOverride && !hasOverride;
   const canPublish =
-    hardBlockers.length === 0 &&
-    (softBlockers.length === 0 || Boolean(options.operatorOverrideReason?.trim()));
+    hardBlockers.length === 0 && (softBlockers.length === 0 || hasOverride);
 
   return {
     canPublish,
+    canPublishWithOverride,
+    requiresOperatorOverride,
     hardBlockers,
     softBlockers,
     disabledReason: canPublish
       ? undefined
-      : (hardBlockers[0] ?? softBlockers[0])?.message,
+      : (hardBlockers[0]?.message ??
+        (requiresOperatorOverride
+          ? "Operator override reason required"
+          : softBlockers[0]?.message)),
   };
 }
 
@@ -39,6 +49,18 @@ function backendHardBlockers(draft: AdminEventDraftRecord) {
     blockers.push({
       code: "missing_required_public_field",
       message: "Missing required public event fields",
+    });
+  }
+  if (["approved", "rejected"].includes(draft.reviewState)) {
+    blockers.push({
+      code: "closed_review_state",
+      message: "Draft review state is already closed",
+    });
+  }
+  if (draft.reviewState === "possible_duplicate") {
+    blockers.push({
+      code: "possible_duplicate_review_state",
+      message: "Possible duplicate requires resolution before publishing",
     });
   }
   if (draft.publicEligibility === "not_public") {
@@ -80,7 +102,8 @@ function backendHardBlockers(draft: AdminEventDraftRecord) {
   if (
     draft.reservationStatus === "required" &&
     !draft.registrationUrl &&
-    !draft.registrationQrAssetId
+    !draft.registrationQrAssetId &&
+    !draft.registrationQrImageUrl
   ) {
     blockers.push({
       code: "missing_required_qr_evidence",
@@ -88,6 +111,15 @@ function backendHardBlockers(draft: AdminEventDraftRecord) {
     });
   }
   return blockers;
+}
+
+function uniqueBlockers(blockers: AdminPublishBlocker[]) {
+  const seen = new Set<string>();
+  return blockers.filter((blocker) => {
+    if (seen.has(blocker.code)) return false;
+    seen.add(blocker.code);
+    return true;
+  });
 }
 
 function backendSoftBlockers(draft: AdminEventDraftRecord) {

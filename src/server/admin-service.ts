@@ -1,6 +1,6 @@
 import type { CollectorJobRecord } from "./collector-job-service";
 import { extractFirstHttpUrl } from "../shared/seed-url";
-import { computePublishDecision } from "./publish-policy";
+import { computePublishDecision, type PublishDecision } from "./publish-policy";
 
 export type AdminReviewState =
   | "needs_review"
@@ -75,6 +75,7 @@ export type AdminEventDraftRecord = {
   hardBlockers?: AdminPublishBlocker[];
   softBlockers?: AdminPublishBlocker[];
   operatorOverrideReason?: string;
+  publishDecision?: PublishDecision;
   resolutionDecision?:
     | "new_event"
     | "same_event"
@@ -96,6 +97,16 @@ export type AdminEventDraftRecord = {
   evidenceAssetIds: string[];
   fieldEvidence: Record<string, string[]>;
 };
+
+export class AdminDraftPublishBlockedError extends Error {
+  publishDecision: PublishDecision;
+
+  constructor(publishDecision: PublishDecision) {
+    super("draft_not_publishable");
+    this.name = "AdminDraftPublishBlockedError";
+    this.publishDecision = publishDecision;
+  }
+}
 
 export type AdminEventDraftPatch = Partial<
   Omit<
@@ -251,11 +262,12 @@ export function listAdminCollectorJobs(store: AdminStore) {
   return store.listCollectorJobs();
 }
 
-export function listAdminEventDrafts(
+export async function listAdminEventDrafts(
   input: { reviewState?: string },
   store: AdminStore,
 ) {
-  return store.listEventDrafts(input);
+  const drafts = await store.listEventDrafts(input);
+  return drafts.map(withPublishDecision);
 }
 
 export function listAdminExcludedArticles(
@@ -288,7 +300,7 @@ export async function getAdminEventDraftDetail(
 ) {
   const draft = await store.getEventDraft(draftId);
   if (!draft) throw new Error("draft_not_found");
-  return draft;
+  return withPublishDecision(draft);
 }
 
 export async function patchAdminEventDraft(
@@ -298,7 +310,7 @@ export async function patchAdminEventDraft(
 ) {
   const draft = await store.updateEventDraftFields(draftId, patch);
   if (!draft) throw new Error("draft_not_found");
-  return draft;
+  return withPublishDecision(draft);
 }
 
 export async function markAdminEventDraftNeedsInfo(
@@ -307,13 +319,13 @@ export async function markAdminEventDraftNeedsInfo(
 ) {
   const draft = await store.updateEventDraftReviewState(draftId, "needs_info");
   if (!draft) throw new Error("draft_not_found");
-  return draft;
+  return withPublishDecision(draft);
 }
 
 export async function rejectAdminEventDraft(draftId: string, store: AdminStore) {
   const draft = await store.updateEventDraftReviewState(draftId, "rejected");
   if (!draft) throw new Error("draft_not_found");
-  return draft;
+  return withPublishDecision(draft);
 }
 
 export async function publishAdminEventDraft(
@@ -325,7 +337,7 @@ export async function publishAdminEventDraft(
   const draft = await store.getEventDraft(draftId);
   if (!draft) throw new Error("draft_not_found");
   const decision = computePublishDecision(draft, options);
-  if (!decision.canPublish) throw new Error("draft_not_publishable");
+  if (!decision.canPublish) throw new AdminDraftPublishBlockedError(decision);
 
   return store.publishEventDraft({
     draft: {
@@ -337,4 +349,11 @@ export async function publishAdminEventDraft(
     },
     publishedAt: now.toISOString(),
   });
+}
+
+function withPublishDecision(draft: AdminEventDraftRecord): AdminEventDraftRecord {
+  return {
+    ...draft,
+    publishDecision: computePublishDecision(draft),
+  };
 }

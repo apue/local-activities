@@ -8,6 +8,7 @@ import {
   loginAdmin,
 } from "../../src/client/admin-portal-api";
 import {
+  canRunDraftReviewAction,
   formatDateTime,
   formatLlmCostCny,
   formatTokenCount,
@@ -53,10 +54,28 @@ type EventDraft = {
   registrationQrImageAlt?: string;
   summary?: string;
   entryNotes?: string;
+  hardBlockers?: PublishBlocker[];
+  softBlockers?: PublishBlocker[];
+  operatorOverrideReason?: string;
+  publishDecision?: PublishDecision;
   confidence: number;
   reviewState: string;
   evidenceAssetIds: string[];
   fieldEvidence: Record<string, string[]>;
+};
+
+type PublishBlocker = {
+  code: string;
+  message: string;
+};
+
+type PublishDecision = {
+  canPublish: boolean;
+  canPublishWithOverride: boolean;
+  requiresOperatorOverride: boolean;
+  hardBlockers: PublishBlocker[];
+  softBlockers: PublishBlocker[];
+  disabledReason?: string;
 };
 
 type ApiState = "idle" | "loading" | "ready" | "error";
@@ -117,6 +136,10 @@ export function AdminPortal() {
   const [usage, setUsage] = useState<LlmUsageSummary>(emptyUsageSummary);
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [reviewFilter, setReviewFilter] = useState("");
+  const [operatorOverrideReason, setOperatorOverrideReason] = useState("");
+  const [draftAction, setDraftAction] = useState<
+    "needs-info" | "reject" | "publish" | null
+  >(null);
   const [status, setStatus] = useState<ApiState>("idle");
   const [message, setMessage] = useState("Loading admin state...");
 
@@ -127,6 +150,21 @@ export function AdminPortal() {
   const blockingReasons = selectedDraft
     ? getDraftBlockingReasons(selectedDraft)
     : [];
+  const selectedDecision = selectedDraft?.publishDecision;
+  const canReviewSelectedDraft = selectedDraft
+    ? canRunDraftReviewAction(selectedDraft)
+    : false;
+  const canPublishSelectedDraft = selectedDraft
+    ? isDraftPublishableForDisplay(selectedDraft, operatorOverrideReason)
+    : false;
+  const publishRequiresOverride = Boolean(
+    selectedDecision?.requiresOperatorOverride ||
+      selectedDecision?.canPublishWithOverride,
+  );
+
+  useEffect(() => {
+    setOperatorOverrideReason(selectedDraft?.operatorOverrideReason ?? "");
+  }, [selectedDraft?.id, selectedDraft?.operatorOverrideReason]);
 
   async function refresh() {
     const enteredToken = token.trim();
@@ -197,16 +235,27 @@ export function AdminPortal() {
     if (!selectedDraft) return;
 
     setStatus("loading");
+    setDraftAction(action);
     setMessage(`${action}...`);
     try {
+      const body =
+        action === "publish" && operatorOverrideReason.trim()
+          ? JSON.stringify({
+              operatorOverrideReason: operatorOverrideReason.trim(),
+            })
+          : undefined;
       await adminApiRequest(`/api/admin/event-drafts/${selectedDraft.id}/${action}`, {
         method: "POST",
+        body,
       });
       await refresh();
+      if (action === "publish") setOperatorOverrideReason("");
       setMessage(`Draft ${action} completed.`);
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Draft action failed.");
+    } finally {
+      setDraftAction(null);
     }
   }
 
@@ -343,13 +392,15 @@ export function AdminPortal() {
               {selectedDraft ? (
                 <span
                   className={
-                    isDraftPublishableForDisplay(selectedDraft)
+                    canPublishSelectedDraft
                       ? styles.readyBadge
                       : styles.blockedBadge
                   }
                 >
-                  {isDraftPublishableForDisplay(selectedDraft)
+                  {canPublishSelectedDraft
                     ? "Publishable"
+                    : selectedDecision?.canPublishWithOverride
+                      ? "Override required"
                     : "Blocked"}
                 </span>
               ) : null}
@@ -429,28 +480,70 @@ export function AdminPortal() {
                   Open source URL
                 </a>
                 <div className={styles.blockers}>
-                  {blockingReasons.length ? (
-                    blockingReasons.map((reason) => (
-                      <span key={reason}>{reason.replaceAll("_", " ")}</span>
+                  {selectedDecision?.hardBlockers.length ? (
+                    selectedDecision.hardBlockers.map((blocker) => (
+                      <span key={blocker.code} title={blocker.message}>
+                        Hard: {blocker.message}
+                      </span>
                     ))
-                  ) : (
+                  ) : null}
+                  {selectedDecision?.softBlockers.length ? (
+                    selectedDecision.softBlockers.map((blocker) => (
+                      <span
+                        className={styles.softBlocker}
+                        key={blocker.code}
+                        title={blocker.message}
+                      >
+                        Soft: {blocker.message}
+                      </span>
+                    ))
+                  ) : null}
+                  {!blockingReasons.length ? (
                     <span>minimum public fields present</span>
-                  )}
+                  ) : null}
+                  {selectedDecision?.disabledReason ? (
+                    <small>{selectedDecision.disabledReason}</small>
+                  ) : null}
                 </div>
+                {publishRequiresOverride ? (
+                  <label className={styles.overrideField}>
+                    <span>Operator override reason</span>
+                    <textarea
+                      value={operatorOverrideReason}
+                      onChange={(event) =>
+                        setOperatorOverrideReason(event.target.value)
+                      }
+                      placeholder="Why this soft-blocked draft is safe to publish"
+                      rows={3}
+                    />
+                  </label>
+                ) : null}
                 <div className={styles.actions}>
-                  <button type="button" onClick={() => actOnDraft("needs-info")}>
-                    Needs info
+                  <button
+                    type="button"
+                    onClick={() => actOnDraft("needs-info")}
+                    disabled={!canReviewSelectedDraft || draftAction !== null}
+                  >
+                    {draftAction === "needs-info" ? "Saving..." : "Needs info"}
                   </button>
-                  <button type="button" onClick={() => actOnDraft("reject")}>
-                    Reject
+                  <button
+                    type="button"
+                    onClick={() => actOnDraft("reject")}
+                    disabled={!canReviewSelectedDraft || draftAction !== null}
+                  >
+                    {draftAction === "reject" ? "Rejecting..." : "Reject"}
                   </button>
                   <button
                     className={styles.primaryButton}
                     type="button"
                     onClick={() => actOnDraft("publish")}
-                    disabled={!isDraftPublishableForDisplay(selectedDraft)}
+                    disabled={
+                      !canReviewSelectedDraft ||
+                      !canPublishSelectedDraft ||
+                      draftAction !== null
+                    }
                   >
-                    Publish
+                    {draftAction === "publish" ? "Publishing..." : "Publish"}
                   </button>
                 </div>
               </div>
