@@ -469,6 +469,11 @@ function summarizeLlmUsage(
     costMicroCny: 0,
   };
   const byModel = new Map<string, AdminLlmUsageSummary["byModel"][number]>();
+  const byEnvironment = new Map<
+    string,
+    AdminLlmUsageSummary["byEnvironment"][number]
+  >();
+  const byRun = new Map<string, AdminLlmUsageSummary["byRun"][number]>();
 
   for (const record of records) {
     totals.requestCount += 1;
@@ -480,7 +485,8 @@ function summarizeLlmUsage(
     totals.costMicroCny += record.costMicroCny;
 
     const workload = llmUsageWorkload(record);
-    const key = `${record.provider}\u0000${record.model}\u0000${record.operation}\u0000${workload}`;
+    const environment = llmUsageEnvironment(record);
+    const key = `${record.provider}\u0000${record.model}\u0000${record.operation}\u0000${workload}\u0000${environment}`;
     const summary =
       byModel.get(key) ??
       {
@@ -488,6 +494,7 @@ function summarizeLlmUsage(
         model: record.model,
         operation: record.operation,
         workload,
+        environment,
         requestCount: 0,
         totalTokens: 0,
         costMicroCny: 0,
@@ -496,6 +503,53 @@ function summarizeLlmUsage(
     summary.totalTokens += record.totalTokens;
     summary.costMicroCny += record.costMicroCny;
     byModel.set(key, summary);
+
+    const environmentSummary =
+      byEnvironment.get(environment) ??
+      {
+        environment,
+        requestCount: 0,
+        successCount: 0,
+        errorCount: 0,
+        totalTokens: 0,
+        costMicroCny: 0,
+        latestRecordedAt: record.recordedAt,
+      };
+    environmentSummary.requestCount += 1;
+    if (record.status === "succeeded") environmentSummary.successCount += 1;
+    if (record.status === "failed") environmentSummary.errorCount += 1;
+    environmentSummary.totalTokens += record.totalTokens;
+    environmentSummary.costMicroCny += record.costMicroCny;
+    if (
+      !environmentSummary.latestRecordedAt ||
+      record.recordedAt > environmentSummary.latestRecordedAt
+    ) {
+      environmentSummary.latestRecordedAt = record.recordedAt;
+    }
+    byEnvironment.set(environment, environmentSummary);
+
+    const runId = llmUsageRunId(record);
+    const runKey = `${runId}\u0000${environment}`;
+    const runSummary =
+      byRun.get(runKey) ??
+      {
+        runId,
+        environment,
+        requestCount: 0,
+        totalTokens: 0,
+        costMicroCny: 0,
+        latestRecordedAt: record.recordedAt,
+      };
+    runSummary.requestCount += 1;
+    runSummary.totalTokens += record.totalTokens;
+    runSummary.costMicroCny += record.costMicroCny;
+    if (
+      !runSummary.latestRecordedAt ||
+      record.recordedAt > runSummary.latestRecordedAt
+    ) {
+      runSummary.latestRecordedAt = record.recordedAt;
+    }
+    byRun.set(runKey, runSummary);
   }
 
   return {
@@ -503,6 +557,8 @@ function summarizeLlmUsage(
     latestRecordedAt: records[0]?.recordedAt,
     totals,
     byModel: Array.from(byModel.values()),
+    byEnvironment: Array.from(byEnvironment.values()),
+    byRun: Array.from(byRun.values()).slice(0, 100),
     recent: records.slice(0, 500),
   };
 }
@@ -510,6 +566,17 @@ function summarizeLlmUsage(
 function llmUsageWorkload(record: AdminLlmUsageRecord) {
   const workload = record.metadata.workload;
   return typeof workload === "string" && workload ? workload : record.operation;
+}
+
+function llmUsageEnvironment(record: AdminLlmUsageRecord) {
+  const environment = record.metadata.environment;
+  return typeof environment === "string" && environment
+    ? environment
+    : "unknown";
+}
+
+function llmUsageRunId(record: AdminLlmUsageRecord) {
+  return record.sourceRunId ?? record.collectorJobId ?? "unknown";
 }
 
 function toLlmUsageRecord(row: LlmUsageRow): AdminLlmUsageRecord {

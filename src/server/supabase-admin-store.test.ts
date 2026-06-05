@@ -194,6 +194,7 @@ describe("supabase admin store", () => {
           metadata: {
             failureReason: "agent_request_failed",
             workload: "event_resolution",
+            environment: "eval:model-benchmark",
           },
         },
         {
@@ -218,6 +219,7 @@ describe("supabase admin store", () => {
           metadata: {
             schemaVersion: "event-extraction-v2-schema-v1",
             workload: "event_extraction",
+            environment: "production_collector",
           },
         },
       ], calls),
@@ -254,6 +256,7 @@ describe("supabase admin store", () => {
           model: "gpt-5-mini",
           operation: "event_resolution",
           workload: "event_resolution",
+          environment: "eval:model-benchmark",
           requestCount: 1,
           totalTokens: 500,
           costMicroCny: 0,
@@ -263,9 +266,48 @@ describe("supabase admin store", () => {
           model: "gpt-5-mini",
           operation: "event_extraction",
           workload: "event_extraction",
+          environment: "production_collector",
           requestCount: 1,
           totalTokens: 1150,
           costMicroCny: 2100,
+        },
+      ],
+      byEnvironment: [
+        {
+          environment: "eval:model-benchmark",
+          requestCount: 1,
+          successCount: 0,
+          errorCount: 1,
+          totalTokens: 500,
+          costMicroCny: 0,
+          latestRecordedAt: "2026-06-04T02:05:00.000Z",
+        },
+        {
+          environment: "production_collector",
+          requestCount: 1,
+          successCount: 1,
+          errorCount: 0,
+          totalTokens: 1150,
+          costMicroCny: 2100,
+          latestRecordedAt: "2026-06-04T02:00:00.000Z",
+        },
+      ],
+      byRun: [
+        {
+          runId: "run-1",
+          environment: "eval:model-benchmark",
+          requestCount: 1,
+          totalTokens: 500,
+          costMicroCny: 0,
+          latestRecordedAt: "2026-06-04T02:05:00.000Z",
+        },
+        {
+          runId: "run-1",
+          environment: "production_collector",
+          requestCount: 1,
+          totalTokens: 1150,
+          costMicroCny: 2100,
+          latestRecordedAt: "2026-06-04T02:00:00.000Z",
         },
       ],
       recent: [
@@ -275,6 +317,7 @@ describe("supabase admin store", () => {
           metadata: {
             failureReason: "agent_request_failed",
             workload: "event_resolution",
+            environment: "eval:model-benchmark",
           },
         }),
         expect.objectContaining({
@@ -284,6 +327,7 @@ describe("supabase admin store", () => {
           metadata: {
             schemaVersion: "event-extraction-v2-schema-v1",
             workload: "event_extraction",
+            environment: "production_collector",
           },
         }),
       ],

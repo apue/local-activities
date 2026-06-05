@@ -222,7 +222,7 @@ The V3 goal is complete only when all implementation issues are merged and:
 - Dedupe, publication policy, long-running schedules, recurring schedules,
   poster evidence, QR evidence, and source URLs are validated by fixtures.
 - Usage ledger includes live extractor, eval, and production acceptance usage
-  with separate environment labels.
+  with separate environment labels and admin-visible run ids.
 - A curated production seed import has been run with operator approval and its
   public/admin results are recorded in the final issue handoff.
 

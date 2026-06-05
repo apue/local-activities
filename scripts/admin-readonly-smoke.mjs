@@ -79,6 +79,8 @@ export function buildAdminReadonlySmokeRequests({
             response.json.usage.range.key !== range) ||
           typeof response.json.usage?.totals?.requestCount !== "number" ||
           !Array.isArray(response.json.usage?.byModel) ||
+          !Array.isArray(response.json.usage?.byEnvironment) ||
+          !Array.isArray(response.json.usage?.byRun) ||
           !Array.isArray(response.json.usage?.recent)
         ) {
           throw new Error(`admin_usage_${range}_shape_failed`);

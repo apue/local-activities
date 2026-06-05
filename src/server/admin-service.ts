@@ -187,9 +187,29 @@ export type AdminLlmUsageModelSummary = {
   model: string;
   operation: string;
   workload: string;
+  environment: string;
   requestCount: number;
   totalTokens: number;
   costMicroCny: number;
+};
+
+export type AdminLlmUsageEnvironmentSummary = {
+  environment: string;
+  requestCount: number;
+  successCount: number;
+  errorCount: number;
+  totalTokens: number;
+  costMicroCny: number;
+  latestRecordedAt?: string;
+};
+
+export type AdminLlmUsageRunSummary = {
+  runId: string;
+  environment: string;
+  requestCount: number;
+  totalTokens: number;
+  costMicroCny: number;
+  latestRecordedAt?: string;
 };
 
 export type AdminLlmUsageRangeKey = "today" | "7d" | "all";
@@ -213,6 +233,8 @@ export type AdminLlmUsageSummary = {
     costMicroCny: number;
   };
   byModel: AdminLlmUsageModelSummary[];
+  byEnvironment: AdminLlmUsageEnvironmentSummary[];
+  byRun: AdminLlmUsageRunSummary[];
   recent: AdminLlmUsageRecord[];
 };
 

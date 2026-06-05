@@ -152,7 +152,9 @@ pnpm seed:production-events --env-file .env.local --manifest tests/seed-corpus/p
 This is production-mutating and requires explicit operator approval in the
 current conversation. It should produce a batch or run id and an import report.
 The operator validates public pages, admin drafts, source URLs, evidence,
-dedupe, non-public exclusions, and usage totals.
+dedupe, non-public exclusions, and usage totals. The admin usage response must
+show the production seed acceptance environment label and the import run id, so
+the acceptance spend is not conflated with eval or daily collector spend.
 
 ### Historical Browser Runner Benchmark
 

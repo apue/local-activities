@@ -122,9 +122,27 @@ type LlmUsageSummary = {
     model: string;
     operation: string;
     workload: string;
+    environment: string;
     requestCount: number;
     totalTokens: number;
     costMicroCny: number;
+  }>;
+  byEnvironment: Array<{
+    environment: string;
+    requestCount: number;
+    successCount: number;
+    errorCount: number;
+    totalTokens: number;
+    costMicroCny: number;
+    latestRecordedAt?: string;
+  }>;
+  byRun: Array<{
+    runId: string;
+    environment: string;
+    requestCount: number;
+    totalTokens: number;
+    costMicroCny: number;
+    latestRecordedAt?: string;
   }>;
   recent: LlmUsageRecord[];
 };
@@ -146,6 +164,8 @@ const emptyUsageSummary: LlmUsageSummary = {
     costMicroCny: 0,
   },
   byModel: [],
+  byEnvironment: [],
+  byRun: [],
   recent: [],
 };
 
@@ -742,15 +762,33 @@ export function AdminPortal() {
           </div>
 
           <div className={styles.usageList}>
+            {usage.byEnvironment.map((environment) => (
+              <div
+                key={environment.environment}
+                className={styles.usageRow}
+              >
+                <strong>{environment.environment.replaceAll("_", " ")}</strong>
+                <span>{environment.requestCount} calls</span>
+                <small>
+                  {formatTokenCount(environment.totalTokens)} tokens ·{" "}
+                  {formatLlmCostCny(environment.costMicroCny)} · latest{" "}
+                  {formatUsageTimestamp(environment.latestRecordedAt)}
+                </small>
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.usageList}>
             {usage.byModel.map((model) => (
               <div
-                key={`${model.provider}:${model.model}:${model.operation}`}
+                key={`${model.provider}:${model.model}:${model.operation}:${model.workload}:${model.environment}`}
                 className={styles.usageRow}
               >
                 <strong>{model.model}</strong>
                 <span>{model.operation.replaceAll("_", " ")}</span>
                 <small>
-                  {model.provider} · {model.workload.replaceAll("_", " ")} ·{" "}
+                  {model.provider} · {model.environment.replaceAll("_", " ")} ·{" "}
+                  {model.workload.replaceAll("_", " ")} ·{" "}
                   {model.requestCount} calls ·{" "}
                   {formatTokenCount(model.totalTokens)} tokens ·{" "}
                   {formatLlmCostCny(model.costMicroCny)}
@@ -760,6 +798,22 @@ export function AdminPortal() {
             {usage.byModel.length === 0 ? (
               <div className={styles.empty}>No LLM usage loaded.</div>
             ) : null}
+          </div>
+
+          <div className={styles.usageFailures}>
+            {usage.byRun.slice(0, 5).map((run) => (
+              <div
+                key={`${run.runId}:${run.environment}`}
+                className={styles.usageRow}
+              >
+                <strong>{run.runId}</strong>
+                <span>{run.environment.replaceAll("_", " ")}</span>
+                <small>
+                  {run.requestCount} calls · {formatTokenCount(run.totalTokens)}{" "}
+                  tokens · {formatLlmCostCny(run.costMicroCny)}
+                </small>
+              </div>
+            ))}
           </div>
 
           <div className={styles.usageFailures}>

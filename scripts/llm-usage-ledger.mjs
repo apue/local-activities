@@ -94,8 +94,12 @@ export function buildLlmUsageEnvelope({
   const normalizedUsage = normalizeProviderUsage(usage);
   const cost = estimateLlmCostMicroCny({ model, usage });
   const usageSource = usage ? "provider_usage" : "missing_usage";
+  const environment = normalizeUsageEnvironment(metadata.environment);
+  const batchLabel = clean(metadata.batchLabel);
   const safeMetadata = removeUndefined({
     ...metadata,
+    environment,
+    batchLabel,
     usageSource: metadata.usageSource ?? usageSource,
     pricingSource: metadata.pricingSource ?? cost.pricingSource,
   });
@@ -132,11 +136,19 @@ export function buildLlmUsageEnvelope({
 }
 
 export function readUsageEnvironment(env = process.env) {
-  return (
+  return normalizeUsageEnvironment(
     clean(env.USAGE_ENVIRONMENT) ??
-    clean(env.VERCEL_ENV) ??
-    clean(env.NODE_ENV) ??
-    "local"
+      clean(env.VERCEL_ENV) ??
+      clean(env.NODE_ENV) ??
+      "local",
+  );
+}
+
+export function readProductionSeedUsageEnvironment(env = process.env) {
+  return normalizeUsageEnvironment(
+    clean(env.PRODUCTION_SEED_USAGE_ENVIRONMENT) ??
+      clean(env.USAGE_ENVIRONMENT) ??
+      "production_seed_acceptance",
   );
 }
 
@@ -218,6 +230,11 @@ function clean(value) {
 
 function normalizeBaseUrl(value) {
   return value.replace(/\/+$/, "");
+}
+
+export function normalizeUsageEnvironment(value) {
+  const environment = clean(value) ?? "local";
+  return environment.replace(/[^a-zA-Z0-9:_-]/g, "_").slice(0, 80);
 }
 
 function removeUndefined(input) {
