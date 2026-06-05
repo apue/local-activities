@@ -9,7 +9,7 @@ import {
   captureModeForImageEvidence,
   classifyImageCandidate,
   extractImageCandidatesFromHtml,
-} from "./wechat-image-evidence.mjs";
+} from "../src/collector/evidence/wechat-images.mjs";
 
 describe("WeChat image evidence helpers", () => {
   it("extracts image candidates from WeChat-like lazy image HTML", () => {
