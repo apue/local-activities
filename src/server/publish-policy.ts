@@ -101,6 +101,7 @@ function backendHardBlockers(draft: AdminEventDraftRecord) {
   }
   if (
     draft.reservationStatus === "required" &&
+    !draft.registrationAction &&
     !draft.registrationUrl &&
     !draft.registrationQrAssetId &&
     !draft.registrationQrImageUrl

@@ -259,7 +259,9 @@ export function computeDraftBackendRouting(
   const reviewState = computeDraftReviewState(payload);
   if (
     !policy.autoPublishEnabled ||
+    payload.confidence < (policy.autoPublishConfidenceThreshold ?? 0.95) ||
     !hasMinimumPublishFields(payload) ||
+    !hasRequiredRegistrationEvidence(payload) ||
     hasBlockingSignal(payload) ||
     hasTriageReviewRequirement(payload) ||
     hasPublishBlockers(payload)
@@ -296,5 +298,14 @@ function hasMinimumPublishFields(payload: EventDraftUpload) {
       payload.startsAt &&
       payload.articleUrl &&
       (payload.venueName || payload.venueAddress),
+  );
+}
+
+function hasRequiredRegistrationEvidence(payload: EventDraftUpload) {
+  if (payload.reservationStatus !== "required") return true;
+  return Boolean(
+      payload.registrationUrl ||
+      payload.registrationAction ||
+      payload.registrationQrAssetId,
   );
 }

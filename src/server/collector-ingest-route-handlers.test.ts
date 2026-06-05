@@ -293,6 +293,7 @@ describe("collector ingest route handlers", () => {
           venueName: "Cultural Center Hall",
           city: "Beijing",
           reservationStatus: "required",
+          registrationAction: "Register from source article",
           signals: ["ready_for_review"],
           evidenceAssetIds: [],
           fieldEvidence: {},
@@ -317,7 +318,7 @@ describe("collector ingest route handlers", () => {
     });
   });
 
-  it("auto-publishes by default for admin-curated complete drafts", async () => {
+  it("keeps low-confidence complete drafts in review by default", async () => {
     class PublishingStore extends RouteIngestStore {
       async publishEventDraft() {
         return { id: "event-1" };
@@ -349,9 +350,8 @@ describe("collector ingest route handlers", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
-      reviewState: "approved",
-      autoPublished: true,
-      publishedEventId: "event-1",
+      reviewState: "needs_review",
+      autoPublished: false,
     });
   });
 
