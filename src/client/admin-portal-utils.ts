@@ -5,6 +5,14 @@ export type AdminPortalDraftLike = {
   venueAddress?: string;
   reviewState?: string;
   publishDecision?: AdminPortalPublishDecision;
+  posterAssetId?: string;
+  qrAssetId?: string;
+  registrationQrAssetId?: string;
+  posterImageUrl?: string;
+  posterImageAlt?: string;
+  posterImageSourceUrl?: string;
+  registrationQrImageUrl?: string;
+  registrationQrImageAlt?: string;
 };
 
 export type AdminPortalPublishBlocker = {
@@ -22,6 +30,15 @@ export type AdminPortalPublishDecision = {
 };
 
 export type DraftBlockingReason = string;
+
+export type DraftEvidenceItem = {
+  kind: "poster" | "registration_qr";
+  label: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  assetId?: string;
+  sourceUrl?: string;
+};
 
 export function getDraftBlockingReasons(
   draft: AdminPortalDraftLike,
@@ -48,6 +65,35 @@ export function isDraftPublishableForDisplay(
 
 export function canRunDraftReviewAction(draft: AdminPortalDraftLike) {
   return !["approved", "rejected"].includes(draft.reviewState ?? "");
+}
+
+export function getDraftEvidenceItems(
+  draft: AdminPortalDraftLike,
+): DraftEvidenceItem[] {
+  const items: DraftEvidenceItem[] = [];
+  if (draft.posterImageUrl || draft.posterAssetId || draft.posterImageSourceUrl) {
+    items.push({
+      kind: "poster",
+      label: "Poster",
+      imageUrl: draft.posterImageUrl,
+      imageAlt: draft.posterImageAlt ?? `${draft.title ?? "Event"} poster`,
+      assetId: draft.posterAssetId,
+      sourceUrl: draft.posterImageSourceUrl,
+    });
+  }
+  const qrAssetId = draft.registrationQrAssetId ?? draft.qrAssetId;
+  if (draft.registrationQrImageUrl || qrAssetId) {
+    items.push({
+      kind: "registration_qr",
+      label: "Registration QR",
+      imageUrl: draft.registrationQrImageUrl,
+      imageAlt:
+        draft.registrationQrImageAlt ??
+        `${draft.title ?? "Event"} registration QR`,
+      assetId: qrAssetId,
+    });
+  }
+  return items;
 }
 
 export function getReviewStateLabel(reviewState: string | undefined) {

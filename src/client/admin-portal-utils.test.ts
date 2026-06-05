@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canRunDraftReviewAction,
   formatUsageTimestamp,
+  getDraftEvidenceItems,
   getDraftBlockingReasons,
   formatLlmCostCny,
   formatTokenCount,
@@ -102,6 +103,34 @@ describe("admin portal utils", () => {
     expect(canRunDraftReviewAction({ ...draft, reviewState: "rejected" })).toBe(
       false,
     );
+  });
+
+  it("builds admin evidence items from images and asset references", () => {
+    expect(
+      getDraftEvidenceItems({
+        ...draft,
+        posterAssetId: "asset-poster-1",
+        posterImageUrl: "https://blob.example.com/poster.png",
+        posterImageSourceUrl: "https://mmbiz.qpic.cn/source-poster.png",
+        registrationQrAssetId: "asset-qr-1",
+      }),
+    ).toEqual([
+      {
+        kind: "poster",
+        label: "Poster",
+        imageUrl: "https://blob.example.com/poster.png",
+        imageAlt: "Italian Design Weekend poster",
+        assetId: "asset-poster-1",
+        sourceUrl: "https://mmbiz.qpic.cn/source-poster.png",
+      },
+      {
+        kind: "registration_qr",
+        label: "Registration QR",
+        imageUrl: undefined,
+        imageAlt: "Italian Design Weekend registration QR",
+        assetId: "asset-qr-1",
+      },
+    ]);
   });
 
   it("formats known review states for compact UI labels", () => {
