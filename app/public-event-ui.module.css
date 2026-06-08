@@ -111,11 +111,27 @@
 }
 
 .meta span,
+.registrationEvidence span,
 .statusPill {
   border: 1px solid #d6d9d1;
   border-radius: 999px;
   padding: 4px 8px;
   background: #fbfcf8;
+}
+
+.registrationEvidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  color: #315b7c;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.registrationEvidence span {
+  border-color: #c7d8e6;
+  background: #f4f9fc;
 }
 
 .statusPill {

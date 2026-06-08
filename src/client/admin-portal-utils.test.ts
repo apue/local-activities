@@ -5,6 +5,7 @@ import {
   formatUsageTimestamp,
   getDraftEvidenceItems,
   getDraftBlockingReasons,
+  getDraftSourceUrl,
   formatLlmCostCny,
   formatTokenCount,
   getReviewStateLabel,
@@ -131,6 +132,16 @@ describe("admin portal utils", () => {
         assetId: "asset-qr-1",
       },
     ]);
+  });
+
+  it("opens the original source URL when article URL contains shared text", () => {
+    expect(
+      getDraftSourceUrl({
+        ...draft,
+        articleUrl:
+          "活动分享：准备好感受泰国农业精品 https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg 。",
+      }),
+    ).toBe("https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg");
   });
 
   it("formats known review states for compact UI labels", () => {

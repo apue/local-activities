@@ -1,4 +1,7 @@
+import { extractFirstHttpUrl } from "../shared/seed-url";
+
 export type AdminPortalDraftLike = {
+  articleUrl?: string;
   title?: string;
   startsAt?: string;
   venueName?: string;
@@ -94,6 +97,11 @@ export function getDraftEvidenceItems(
     });
   }
   return items;
+}
+
+export function getDraftSourceUrl(draft: AdminPortalDraftLike) {
+  if (!draft.articleUrl) return "";
+  return extractFirstHttpUrl(draft.articleUrl) ?? draft.articleUrl;
 }
 
 export function getReviewStateLabel(reviewState: string | undefined) {

@@ -52,6 +52,12 @@ export default async function HomePage() {
                   <span>{event.organizer ?? "Organizer TBA"}</span>
                   <span>{event.venueName ?? event.venueAddress ?? "Venue TBA"}</span>
                 </div>
+                {event.registrationUrl || event.registrationQrImageUrl ? (
+                  <div className={styles.registrationEvidence}>
+                    {event.registrationUrl ? <span>报名链接</span> : null}
+                    {event.registrationQrImageUrl ? <span>报名二维码</span> : null}
+                  </div>
+                ) : null}
               </div>
               <span className={styles.statusPill}>
                 {formatReservationStatus(event.reservationStatus)}
