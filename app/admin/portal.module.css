@@ -269,6 +269,7 @@
 .draftRow em,
 .readyBadge,
 .blockedBadge,
+.countBadge,
 .blockers span {
   border-radius: 999px;
   padding: 4px 8px;
@@ -279,7 +280,8 @@
 }
 
 .draftRow em,
-.readyBadge {
+.readyBadge,
+.countBadge {
   background: #e5f2ec;
   color: #28614f;
 }
@@ -483,6 +485,68 @@
   flex-wrap: wrap;
 }
 
+.auditGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.auditList,
+.evalList {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.auditRow,
+.evalRow {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #d6d9d1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.auditRow div,
+.evalRow div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.auditRow strong,
+.auditRow a,
+.auditRow small,
+.evalRow strong,
+.evalRow span,
+.evalRow small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.auditRow a {
+  color: #315b7c;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.auditRow small,
+.evalRow small {
+  color: #667062;
+}
+
+.evalRow {
+  grid-template-columns: minmax(170px, 1fr) minmax(100px, 0.45fr) minmax(0, 1.4fr);
+  align-items: center;
+}
+
+.evalRow span {
+  font-weight: 850;
+}
+
 .jobRow {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr) 220px;
@@ -589,8 +653,10 @@
   }
 
   .grid,
+  .auditGrid,
   .detail dl,
   .jobRow,
+  .evalRow,
   .evidenceGrid,
   .usageSummary,
   .usageRow {

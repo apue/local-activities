@@ -149,6 +149,67 @@ type LlmUsageSummary = {
 
 type UsageRange = "today" | "7d" | "all";
 
+type ExcludedArticle = {
+  id: string;
+  articleUrl: string;
+  triageDecision: string;
+  confidence: number;
+  publicSignals: string[];
+  exclusionSignals: string[];
+  exclusionReason: string;
+  evidenceAssetIds: string[];
+  promptVersion: string;
+  provider: string;
+  model: string;
+  processingState: string;
+  promotedAt?: string;
+  createdAt?: string;
+};
+
+type ProcessingLedgerRecord = {
+  id: string;
+  sourceUrl: string;
+  state: string;
+  decision?: string;
+  reason?: string;
+  confidence?: number;
+  provider?: string;
+  model?: string;
+  draftId?: string;
+  canonicalEventId?: string;
+  excludedArticleId?: string;
+  mode: string;
+  errorDetails?: Record<string, unknown>;
+  createdAt: string;
+};
+
+type EvaluationRun = {
+  runId: string;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  schemaVersion: string;
+  corpusVersion: string;
+  status: "running" | "completed" | "failed";
+  startedAt: string;
+  completedAt?: string;
+  caseCount: number;
+  passCount: number;
+  failCount: number;
+  summary: Record<string, unknown>;
+  artifactPath?: string;
+  caseResults: Array<{
+    id: string;
+    caseId: string;
+    expectedAction?: string;
+    actualAction?: string;
+    passed: boolean;
+    errors: unknown[];
+    createdAt: string;
+  }>;
+  createdAt: string;
+};
+
 const emptyUsageSummary: LlmUsageSummary = {
   range: {
     key: "today",
@@ -174,10 +235,16 @@ export function AdminPortal() {
   const [jobs, setJobs] = useState<CollectorJob[]>([]);
   const [drafts, setDrafts] = useState<EventDraft[]>([]);
   const [usage, setUsage] = useState<LlmUsageSummary>(emptyUsageSummary);
+  const [excludedArticles, setExcludedArticles] = useState<ExcludedArticle[]>(
+    [],
+  );
+  const [ledger, setLedger] = useState<ProcessingLedgerRecord[]>([]);
+  const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRun[]>([]);
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [reviewFilter, setReviewFilter] = useState("");
   const [usageRange, setUsageRange] = useState<UsageRange>("today");
   const [operatorOverrideReason, setOperatorOverrideReason] = useState("");
+  const [rejectReason, setRejectReason] = useState("");
   const [draftPatch, setDraftPatch] = useState({
     title: "",
     scheduleText: "",
@@ -250,9 +317,17 @@ export function AdminPortal() {
       const loadedJobs = adminState.jobs as CollectorJob[];
       const loadedDrafts = adminState.drafts as EventDraft[];
       const loadedUsage = adminState.usage as LlmUsageSummary;
+      const loadedExcludedArticles =
+        adminState.excludedArticles as ExcludedArticle[];
+      const loadedLedger = adminState.ledger as ProcessingLedgerRecord[];
+      const loadedEvaluationRuns =
+        adminState.evaluationRuns as EvaluationRun[];
       setJobs(loadedJobs);
       setDrafts(loadedDrafts);
       setUsage(loadedUsage);
+      setExcludedArticles(loadedExcludedArticles);
+      setLedger(loadedLedger);
+      setEvaluationRuns(loadedEvaluationRuns);
       setSelectedDraftId((current) =>
         current && loadedDrafts.some((draft) => draft.id === current)
           ? current
@@ -284,18 +359,21 @@ export function AdminPortal() {
     setDraftAction(action);
     setMessage(`${action}...`);
     try {
-      const body =
-        action === "publish" && operatorOverrideReason.trim()
-          ? JSON.stringify({
-              operatorOverrideReason: operatorOverrideReason.trim(),
-            })
-          : undefined;
-      await adminApiRequest(`/api/admin/event-drafts/${selectedDraft.id}/${action}`, {
-        method: "POST",
-        body,
+      const body = getDraftActionBody({
+        action,
+        operatorOverrideReason,
+        rejectReason,
       });
+      await adminApiRequest(
+        `/api/admin/event-drafts/${selectedDraft.id}/${action}`,
+        {
+          method: "POST",
+          body,
+        },
+      );
       await refresh();
       if (action === "publish") setOperatorOverrideReason("");
+      if (action === "reject") setRejectReason("");
       setMessage(`Draft ${action} completed.`);
     } catch (error) {
       setStatus("error");
@@ -657,6 +735,15 @@ export function AdminPortal() {
                     />
                   </label>
                 ) : null}
+                <label className={styles.overrideField}>
+                  <span>Reject reason</span>
+                  <textarea
+                    value={rejectReason}
+                    onChange={(event) => setRejectReason(event.target.value)}
+                    placeholder="Why this draft should not become an event"
+                    rows={2}
+                  />
+                </label>
                 <div className={styles.actions}>
                   <button
                     type="button"
@@ -668,7 +755,11 @@ export function AdminPortal() {
                   <button
                     type="button"
                     onClick={() => actOnDraft("reject")}
-                    disabled={!canReviewSelectedDraft || draftAction !== null}
+                    disabled={
+                      !canReviewSelectedDraft ||
+                      !rejectReason.trim() ||
+                      draftAction !== null
+                    }
                   >
                     {draftAction === "reject" ? "Rejecting..." : "Reject"}
                   </button>
@@ -690,6 +781,121 @@ export function AdminPortal() {
               <div className={styles.empty}>Select a draft to review.</div>
             )}
           </section>
+        </section>
+
+        <section className={styles.auditGrid}>
+          <section className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.eyebrow}>Article audit</p>
+                <h2>Processing ledger</h2>
+              </div>
+              <span className={styles.countBadge}>{ledger.length} rows</span>
+            </div>
+            <div className={styles.auditList}>
+              {ledger.slice(0, 8).map((row) => (
+                <div key={row.id} className={styles.auditRow}>
+                  <div>
+                    <strong>{row.state.replaceAll("_", " ")}</strong>
+                    <small>{formatDateTime(row.createdAt)}</small>
+                  </div>
+                  <a href={row.sourceUrl} target="_blank" rel="noreferrer">
+                    {row.sourceUrl}
+                  </a>
+                  <small>
+                    {row.decision ?? "no decision"} ·{" "}
+                    {formatConfidence(row.confidence)} ·{" "}
+                    {row.provider ?? "provider missing"}/
+                    {row.model ?? "model missing"}
+                    {row.reason ? ` · ${row.reason}` : ""}
+                    {row.draftId ? ` · draft ${row.draftId}` : ""}
+                    {row.excludedArticleId
+                      ? ` · excluded ${row.excludedArticleId}`
+                      : ""}
+                  </small>
+                </div>
+              ))}
+              {ledger.length === 0 ? (
+                <div className={styles.empty}>
+                  No processing ledger rows loaded.
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <div>
+                <p className={styles.eyebrow}>Article audit</p>
+                <h2>Excluded articles</h2>
+              </div>
+              <span className={styles.countBadge}>
+                {excludedArticles.length} excluded
+              </span>
+            </div>
+            <div className={styles.auditList}>
+              {excludedArticles.slice(0, 8).map((article) => (
+                <div key={article.id} className={styles.auditRow}>
+                  <div>
+                    <strong>
+                      {article.triageDecision.replaceAll("_", " ")}
+                    </strong>
+                    <small>{formatConfidence(article.confidence)}</small>
+                  </div>
+                  <a href={article.articleUrl} target="_blank" rel="noreferrer">
+                    {article.articleUrl}
+                  </a>
+                  <small>
+                    {article.exclusionReason}
+                    {article.exclusionSignals.length
+                      ? ` · signals: ${article.exclusionSignals.join(", ")}`
+                      : ""}
+                    {article.evidenceAssetIds.length
+                      ? ` · evidence: ${article.evidenceAssetIds.length}`
+                      : ""}
+                  </small>
+                </div>
+              ))}
+              {excludedArticles.length === 0 ? (
+                <div className={styles.empty}>No excluded articles loaded.</div>
+              ) : null}
+            </div>
+          </section>
+        </section>
+
+        <section className={styles.panel}>
+          <div className={styles.panelHeader}>
+            <div>
+              <p className={styles.eyebrow}>Evaluation</p>
+              <h2>Reports</h2>
+            </div>
+            <span className={styles.countBadge}>
+              {evaluationRuns.length} runs
+            </span>
+          </div>
+          <div className={styles.evalList}>
+            {evaluationRuns.slice(0, 6).map((run) => (
+              <div key={run.runId} className={styles.evalRow}>
+                <div>
+                  <strong>{run.runId}</strong>
+                  <small>
+                    {run.status} · {formatDateTime(run.startedAt)}
+                  </small>
+                </div>
+                <span>
+                  {run.passCount}/{run.caseCount} passed
+                </span>
+                <small>
+                  {run.provider}/{run.model} · {run.corpusVersion} ·{" "}
+                  {run.promptVersion}
+                  {run.artifactPath ? ` · ${run.artifactPath}` : ""}
+                </small>
+              </div>
+            ))}
+            {evaluationRuns.length === 0 ? (
+              <div className={styles.empty}>No evaluation reports loaded.</div>
+            ) : null}
+          </div>
         </section>
 
         <section className={styles.panel}>
@@ -845,4 +1051,30 @@ function compactDraftPatch(input: Record<string, string>) {
       .map(([key, value]) => [key, value.trim()] as const)
       .filter(([, value]) => value.length > 0),
   );
+}
+
+function getDraftActionBody({
+  action,
+  operatorOverrideReason,
+  rejectReason,
+}: {
+  action: "needs-info" | "reject" | "publish";
+  operatorOverrideReason: string;
+  rejectReason: string;
+}) {
+  if (action === "publish" && operatorOverrideReason.trim()) {
+    return JSON.stringify({
+      operatorOverrideReason: operatorOverrideReason.trim(),
+    });
+  }
+  if (action === "reject" && rejectReason.trim()) {
+    return JSON.stringify({
+      reason: rejectReason.trim(),
+    });
+  }
+  return undefined;
+}
+
+function formatConfidence(value: number | undefined) {
+  return typeof value === "number" ? `${Math.round(value * 100)}%` : "n/a";
 }

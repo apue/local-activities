@@ -3,17 +3,21 @@ import { describe, expect, it } from "vitest";
 import type { AdminCollectorJobRecord } from "./admin-collector-jobs";
 import type {
   AdminEventDraftRecord,
+  AdminEvaluationRunRecord,
   AdminExcludedArticleRecord,
   AdminLlmUsageSummary,
+  AdminProcessingLedgerRecord,
   AdminStore,
 } from "./admin-service";
 import {
   handleAdminDraftAction,
+  handleAdminListEvaluationRuns,
   handleAdminLogin,
   handleAdminListExcludedArticles,
   handleAdminListCollectorJobs,
   handleAdminListEventDrafts,
   handleAdminListLlmUsage,
+  handleAdminListProcessingLedger,
   handleAdminPromoteExcludedArticle,
   handleAdminPatchEventDraft,
 } from "./admin-route-handlers";
@@ -52,6 +56,52 @@ class RouteAdminStore implements AdminStore {
     provider: "recorded",
     model: "fixture-model",
     processingState: "excluded",
+  };
+  ledger: AdminProcessingLedgerRecord = {
+    id: "ledger-1",
+    articleBundleId: "bundle-1",
+    sourceUrl: "https://mp.weixin.qq.com/s/activity",
+    state: "published",
+    decision: "public_activity",
+    reason: "Auto-published complete event.",
+    confidence: 0.97,
+    provider: "dashscope",
+    model: "qwen3-vl-plus",
+    mode: "production",
+    draftId: "draft-1",
+    canonicalEventId: "event-1",
+    metadata: {},
+    createdAt: "2026-06-04T02:01:00.000Z",
+  };
+  evaluationRun: AdminEvaluationRunRecord = {
+    runId: "eval-1",
+    provider: "dashscope",
+    model: "qwen3-vl-plus",
+    promptVersion: "event-analysis-2026-06-08",
+    schemaVersion: "event-analysis-schema-v1",
+    parameters: { temperature: 0 },
+    corpusVersion: "regression-2026-06",
+    status: "completed",
+    startedAt: "2026-06-04T02:00:00.000Z",
+    completedAt: "2026-06-04T02:03:00.000Z",
+    caseCount: 1,
+    passCount: 1,
+    failCount: 0,
+    summary: { passRate: 1 },
+    caseResults: [
+      {
+        id: "result-1",
+        runId: "eval-1",
+        caseId: "basic-public-event",
+        expectedAction: "publish",
+        actualAction: "publish",
+        passed: true,
+        scores: { event: 1 },
+        errors: [],
+        createdAt: "2026-06-04T02:03:00.000Z",
+      },
+    ],
+    createdAt: "2026-06-04T02:00:00.000Z",
   };
   llmUsageSummary: AdminLlmUsageSummary = {
     range: {
@@ -133,6 +183,14 @@ class RouteAdminStore implements AdminStore {
     return [this.excludedArticle];
   }
 
+  async listProcessingLedger(): Promise<AdminProcessingLedgerRecord[]> {
+    return [this.ledger];
+  }
+
+  async listEvaluationRuns(): Promise<AdminEvaluationRunRecord[]> {
+    return [this.evaluationRun];
+  }
+
   async promoteExcludedArticle(
     excludedArticleId: string,
     promotedAt: string,
@@ -162,9 +220,14 @@ class RouteAdminStore implements AdminStore {
   async updateEventDraftReviewState(
     draftId: string,
     reviewState: AdminEventDraftRecord["reviewState"],
+    options?: { reason?: string },
   ) {
     if (draftId !== this.draft.id) return null;
-    this.draft = { ...this.draft, reviewState };
+    this.draft = {
+      ...this.draft,
+      reviewState,
+      operatorOverrideReason: options?.reason ?? this.draft.operatorOverrideReason,
+    };
     return this.draft;
   }
 
@@ -322,6 +385,105 @@ describe("admin route handlers", () => {
           processingState: "excluded",
         }),
       ],
+    });
+  });
+
+  it("rejects invalid excluded article filters", async () => {
+    const response = await handleAdminListExcludedArticles(
+      new Request(
+        "https://example.com/api/admin/excluded-articles?processingState=published",
+        {
+          headers: { authorization: "Bearer admin-secret" },
+        },
+      ),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: "invalid_request",
+    });
+  });
+
+  it("lists processing ledger rows for admin article audit", async () => {
+    const response = await handleAdminListProcessingLedger(
+      new Request(
+        "https://example.com/api/admin/processing-ledger?state=published&mode=production",
+        {
+          headers: { authorization: "Bearer admin-secret" },
+        },
+      ),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      ledger: [
+        expect.objectContaining({
+          id: "ledger-1",
+          sourceUrl: "https://mp.weixin.qq.com/s/activity",
+          state: "published",
+          decision: "public_activity",
+          reason: "Auto-published complete event.",
+        }),
+      ],
+    });
+  });
+
+  it("lists evaluation runs with case results for admin reports", async () => {
+    const response = await handleAdminListEvaluationRuns(
+      new Request(
+        "https://example.com/api/admin/evaluation-runs?status=completed",
+        {
+          headers: { authorization: "Bearer admin-secret" },
+        },
+      ),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      evaluationRuns: [
+        expect.objectContaining({
+          runId: "eval-1",
+          status: "completed",
+          caseResults: [
+            expect.objectContaining({
+              caseId: "basic-public-event",
+              passed: true,
+            }),
+          ],
+        }),
+      ],
+    });
+  });
+
+  it("requires a reason when rejecting drafts", async () => {
+    const response = await handleAdminDraftAction(
+      new Request("https://example.com/api/admin/event-drafts/draft-1/reject", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({}),
+      }),
+      "draft-1",
+      "reject",
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-05-28T08:00:00.000Z"),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: "invalid_request",
     });
   });
 
@@ -563,7 +725,13 @@ describe("admin route handlers", () => {
     });
 
     const rejected = await handleAdminDraftAction(
-      request(),
+      new Request("https://example.com/api/admin/event-drafts/draft-1/reject", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          reason: "Human rejected this as non-public.",
+        }),
+      }),
       "draft-1",
       "reject",
       store,
@@ -576,6 +744,7 @@ describe("admin route handlers", () => {
       draft: {
         id: "draft-1",
         reviewState: "rejected",
+        operatorOverrideReason: "Human rejected this as non-public.",
         publishDecision: expect.objectContaining({
           canPublish: false,
           hardBlockers: [

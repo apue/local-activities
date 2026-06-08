@@ -66,6 +66,51 @@ export function buildAdminReadonlySmokeRequests({
         }
       },
     },
+    {
+      name: "admin_excluded_articles_json",
+      method: "GET",
+      path: "/api/admin/excluded-articles",
+      headers: buildCookieHeaders(adminCookie),
+      validate: (response) => {
+        expectStatus(response, 200);
+        if (
+          response.json?.ok !== true ||
+          !Array.isArray(response.json.excludedArticles)
+        ) {
+          throw new Error("admin_excluded_articles_shape_failed");
+        }
+      },
+    },
+    {
+      name: "admin_processing_ledger_json",
+      method: "GET",
+      path: "/api/admin/processing-ledger?mode=production",
+      headers: buildCookieHeaders(adminCookie),
+      validate: (response) => {
+        expectStatus(response, 200);
+        if (
+          response.json?.ok !== true ||
+          !Array.isArray(response.json.ledger)
+        ) {
+          throw new Error("admin_processing_ledger_shape_failed");
+        }
+      },
+    },
+    {
+      name: "admin_evaluation_runs_json",
+      method: "GET",
+      path: "/api/admin/evaluation-runs",
+      headers: buildCookieHeaders(adminCookie),
+      validate: (response) => {
+        expectStatus(response, 200);
+        if (
+          response.json?.ok !== true ||
+          !Array.isArray(response.json.evaluationRuns)
+        ) {
+          throw new Error("admin_evaluation_runs_shape_failed");
+        }
+      },
+    },
     ...["today", "7d", "all"].map((range) => ({
       name: `admin_usage_${range}_json`,
       method: "GET",
