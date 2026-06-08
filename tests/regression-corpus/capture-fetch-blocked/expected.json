@@ -1,0 +1,9 @@
+{
+  "action": "capture_failure",
+  "eventCount": 0,
+  "sourceHealth": {
+    "ok": false,
+    "failureReason": "fetch_blocked"
+  },
+  "eventDrafts": []
+}

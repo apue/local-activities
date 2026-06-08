@@ -1,0 +1,11 @@
+{
+  "id": "korean-red-flavor",
+  "title": "Korean Culture Activity: Red Flavor",
+  "labels": ["ordinary_public_event"],
+  "source": {
+    "type": "event_pipeline_v2_fixture",
+    "fixtureId": "korean-red-flavor",
+    "url": "https://mp.weixin.qq.com/s/korean-red-fixture"
+  },
+  "rationale": "Representative ordinary public official cultural event promoted from the V2 fixture inventory."
+}

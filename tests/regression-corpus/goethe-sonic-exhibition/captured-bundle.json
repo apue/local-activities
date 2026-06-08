@@ -1,0 +1,33 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-goethe-sonic-exhibition",
+  "sourceId": "goethe-sonic-exhibition",
+  "sourceName": "Goethe-Institut Beijing",
+  "provider": "local_fixture",
+  "sourceUrl": "https://mp.weixin.qq.com/s/goethe-sonic-exhibition-fixture",
+  "canonicalUrl": "https://mp.weixin.qq.com/s/goethe-sonic-exhibition-fixture",
+  "finalUrl": "https://mp.weixin.qq.com/s/goethe-sonic-exhibition-fixture",
+  "title": "Sonic exhibition",
+  "authorName": "Goethe-Institut Beijing",
+  "publishedAt": "2026-06-01T00:00:00.000Z",
+  "capturedAt": "2026-06-01T00:00:00.000Z",
+  "languageHints": ["en", "zh"],
+  "captureMode": "text_complete",
+  "text": "Sonic exhibition at Goethe-Institut Beijing. Exhibition period: 2026-06-10 to 2026-08-31. Open during institute hours.",
+  "html": "<article><p>Exhibition period: 2026-06-10 to 2026-08-31.</p></article>",
+  "images": [
+    {
+      "id": "exhibition-poster",
+      "sourceUrl": "https://mmbiz.qpic.cn/regression/goethe-sonic-exhibition.jpg",
+      "role": "poster",
+      "alt": "exhibition poster",
+      "width": 900,
+      "height": 1200
+    }
+  ],
+  "links": [],
+  "miniPrograms": [],
+  "contentHash": "regression-goethe-sonic-exhibition",
+  "diagnostics": [{ "key": "promoted_from", "value": "fixtures/event-pipeline-v2/goethe-sonic-exhibition" }],
+  "captureWarnings": []
+}

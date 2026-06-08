@@ -17,6 +17,7 @@
     "fixture:replay": "node scripts/event-pipeline-v2-fixture-replay.mjs",
     "fixture:e2e": "node scripts/event-pipeline-v2-fixture-e2e.mjs",
     "fixture:upload": "node scripts/event-pipeline-v2-fixture-upload.mjs",
+    "regression:replay": "node scripts/regression-corpus-replay.mjs",
     "collector:bootstrap-env": "node scripts/collector-bootstrap-env.mjs",
     "collector:fixture": "node scripts/collector-fixture-run.mjs",
     "collector:console": "node scripts/local-collector-console.mjs",

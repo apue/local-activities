@@ -126,6 +126,7 @@ Before V4 is considered complete, run:
 pnpm test
 pnpm typecheck
 pnpm fixture:e2e -- --all
+pnpm regression:replay -- --all
 ```
 
 When `.env.local` is available, also run:
@@ -135,8 +136,8 @@ pnpm env:check --env-file .env.local --target local-app
 pnpm smoke:admin-readonly --env-file .env.local
 ```
 
-When V4 corpus/mock E2E commands are implemented, include them in the final
-validation report.
+Include `pnpm regression:replay -- --all` in the final validation report for the
+V4 self-contained corpus/mock E2E path.
 
 Live source, live LLM, storage, hosted write, cleanup, production seed import,
 and public publish commands remain operator-approved only.

@@ -1,0 +1,10 @@
+{
+  "id": "beiping-mini-program-action",
+  "title": "Beiping mini-program action registration",
+  "labels": ["mini_program_action_registration"],
+  "source": {
+    "type": "operator_investigation_reference",
+    "url": "https://mp.weixin.qq.com/s/0Chl_ewq9yiDbjcBZmuwtQ"
+  },
+  "rationale": "Represents the available Beiping article behavior where registration is exposed through WeChat action surfaces rather than a plain URL."
+}

@@ -1,0 +1,15 @@
+{
+  "version": "capture-result-v1",
+  "ok": false,
+  "failure": {
+    "stage": "page_fetch",
+    "reason": "fetch_blocked",
+    "message": "Source returned an anti-platform block response during approved capture.",
+    "retryable": true,
+    "sourceUrl": "https://mp.weixin.qq.com/s/capture-fetch-blocked",
+    "diagnostics": [
+      { "key": "http_status", "value": "429" },
+      { "key": "operator_visible_state", "value": "fetch_blocked" }
+    ]
+  }
+}
