@@ -252,6 +252,32 @@ describe("collector ingest service", () => {
     expect(store.publishedDrafts).toEqual([]);
   });
 
+  it("does not auto-publish high-confidence drafts blocked by backend publication policy", async () => {
+    for (const overrides of [
+      { eventKind: "news" as const },
+      { publicEligibility: "not_public" as const },
+      { resolutionDecision: "update_existing" as const },
+    ]) {
+      const store = new MemoryIngestStore();
+      const envelope = completeDraftEnvelope({
+        confidence: 1,
+        ...overrides,
+      });
+
+      await expect(
+        ingestEventDraft(envelope, store, {
+          autoPublishEnabled: true,
+          autoPublishConfidenceThreshold: 0.95,
+          now: new Date("2026-05-28T08:00:00.000Z"),
+        }),
+      ).resolves.toMatchObject({
+        id: "draft-1",
+        autoPublished: false,
+      });
+      expect(store.publishedDrafts).toEqual([]);
+    }
+  });
+
   it("does not auto-publish QR-required drafts without registration evidence", async () => {
     const store = new MemoryIngestStore();
     const envelope = completeDraftEnvelope({

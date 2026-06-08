@@ -27,6 +27,7 @@ const baseDraft: AdminEventDraftRecord = {
 describe("publish policy", () => {
   it("allows high-confidence complete public drafts without blockers", () => {
     expect(computePublishDecision(baseDraft)).toEqual({
+      publishState: "public",
       canPublish: true,
       canPublishWithOverride: false,
       requiresOperatorOverride: false,
@@ -34,6 +35,24 @@ describe("publish policy", () => {
       softBlockers: [],
       disabledReason: undefined,
     });
+  });
+
+  it("marks human-readable drafts with missing required public fields as needs_info", () => {
+    const decision = computePublishDecision({
+      ...baseDraft,
+      startsAt: undefined,
+      scheduleText: "Saturday afternoon; exact time is visible on the source poster.",
+      summary: "The source describes a public cultural activity but the exact start time was not extracted.",
+    });
+
+    expect(decision).toMatchObject({
+      publishState: "needs_info",
+      canPublish: false,
+      hardBlockers: [
+        expect.objectContaining({ code: "missing_required_public_field" }),
+      ],
+    });
+    expect(decision.disabledReason).toBe("Missing required public event fields");
   });
 
   it("hard-blocks non-public official visit/news content", () => {
@@ -53,6 +72,32 @@ describe("publish policy", () => {
     });
   });
 
+  it("rejects extracted news and not-Beijing events regardless of high confidence", () => {
+    expect(
+      computePublishDecision({
+        ...baseDraft,
+        eventKind: "news",
+        confidence: 0.99,
+      }),
+    ).toMatchObject({
+      publishState: "rejected",
+      canPublish: false,
+      hardBlockers: [expect.objectContaining({ code: "news_not_public_event" })],
+    });
+
+    expect(
+      computePublishDecision({
+        ...baseDraft,
+        city: "Shanghai" as AdminEventDraftRecord["city"],
+        confidence: 0.99,
+      }),
+    ).toMatchObject({
+      publishState: "rejected",
+      canPublish: false,
+      hardBlockers: [expect.objectContaining({ code: "not_beijing_event" })],
+    });
+  });
+
   it("hard-blocks non-renderable schedules and unresolved duplicates", () => {
     const decision = computePublishDecision({
       ...baseDraft,
@@ -64,8 +109,36 @@ describe("publish policy", () => {
     expect(decision.canPublish).toBe(false);
     expect(decision.hardBlockers.map((blocker) => blocker.code)).toEqual([
       "non_renderable_schedule",
-      "unresolved_resolution",
+      "duplicate_event_unresolved",
     ]);
+  });
+
+  it("blocks duplicate pairs and update cases before public publication", () => {
+    expect(
+      computePublishDecision({
+        ...baseDraft,
+        resolutionDecision: "same_event",
+        canonicalEventId: "event-1",
+      }),
+    ).toMatchObject({
+      publishState: "blocked",
+      hardBlockers: [
+        expect.objectContaining({ code: "duplicate_event_unresolved" }),
+      ],
+    });
+
+    expect(
+      computePublishDecision({
+        ...baseDraft,
+        resolutionDecision: "update_existing",
+        canonicalEventId: "event-1",
+      }),
+    ).toMatchObject({
+      publishState: "blocked",
+      hardBlockers: [
+        expect.objectContaining({ code: "event_update_requires_review" }),
+      ],
+    });
   });
 
   it("hard-blocks drafts that are still marked possible duplicate", () => {
@@ -141,6 +214,7 @@ describe("publish policy", () => {
       confidence: 0.62,
     });
     expect(softBlocked.canPublish).toBe(false);
+    expect(softBlocked.publishState).toBe("needs_review");
     expect(softBlocked.canPublishWithOverride).toBe(true);
     expect(softBlocked.requiresOperatorOverride).toBe(true);
     expect(softBlocked.disabledReason).toBe("Operator override reason required");
@@ -159,12 +233,34 @@ describe("publish policy", () => {
         { operatorOverrideReason: "Human reviewed schedule and venue." },
       ),
     ).toMatchObject({
+      publishState: "public",
       canPublish: true,
       canPublishWithOverride: true,
       requiresOperatorOverride: false,
       softBlockers: [
         expect.objectContaining({ code: "low_confidence" }),
         expect.objectContaining({ code: "missing_end_time" }),
+      ],
+    });
+  });
+
+  it("does not treat high LLM confidence as a direct publication command", () => {
+    const decision = computePublishDecision({
+      ...baseDraft,
+      confidence: 1,
+      hardBlockers: [
+        {
+          code: "model_claimed_publishable",
+          message: "Model claimed this can publish, but backend policy must decide.",
+        },
+      ],
+    });
+
+    expect(decision).toMatchObject({
+      publishState: "blocked",
+      canPublish: false,
+      hardBlockers: [
+        expect.objectContaining({ code: "model_claimed_publishable" }),
       ],
     });
   });

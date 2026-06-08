@@ -264,6 +264,7 @@ export function computeDraftBackendRouting(
     !hasRequiredRegistrationEvidence(payload) ||
     hasBlockingSignal(payload) ||
     hasTriageReviewRequirement(payload) ||
+    hasBackendPublishPolicyBlocker(payload) ||
     hasPublishBlockers(payload)
   ) {
     return {
@@ -290,6 +291,17 @@ function hasTriageReviewRequirement(payload: EventDraftUpload) {
 
 function hasPublishBlockers(payload: EventDraftUpload) {
   return Boolean(payload.hardBlockers?.length || payload.softBlockers?.length);
+}
+
+function hasBackendPublishPolicyBlocker(payload: EventDraftUpload) {
+  return Boolean(
+    payload.publicEligibility === "not_public" ||
+      payload.eventKind === "news" ||
+      payload.eventKind === "visit" ||
+      payload.eventKind === "unsupported" ||
+      payload.scheduleKind === "unsupported" ||
+      (payload.resolutionDecision && payload.resolutionDecision !== "new_event"),
+  );
 }
 
 function hasMinimumPublishFields(payload: EventDraftUpload) {
