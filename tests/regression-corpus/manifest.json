@@ -18,8 +18,11 @@
     { "id": "goethe-sonic-exhibition", "labels": ["long_running_exhibition"] },
     { "id": "beiping-beer-festival", "labels": ["duplicate_or_update"] },
     { "id": "official-visit-news", "labels": ["official_visit_non_public_news"] },
+    { "id": "mexico-embassy-private-invitation", "labels": ["not_general_public"] },
     { "id": "japan-tofu-culture-article", "labels": ["generic_not_event"] },
     { "id": "goethe-venice-biennale-german-pavilion", "labels": ["not_beijing"] },
+    { "id": "qr-present-not-registration", "labels": ["qr_present_not_registration"] },
+    { "id": "sparse-poster-review", "labels": ["information_sparse_requires_review", "poster_or_image_dominant"] },
     { "id": "capture-fetch-blocked", "labels": ["capture_failure"] }
   ]
 }
