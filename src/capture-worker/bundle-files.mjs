@@ -97,6 +97,9 @@ export function edgePayloadFromManifest({ manifest, storagePrefix }) {
 function imageReferenceFiles(images) {
   return images.map((image) => {
     const record = imageManifestRecord({ image });
+    if (record.hasBytes) {
+      return imageFile(record.path, imageBody(image), record.contentType);
+    }
     return jsonFile(record.path, record);
   });
 }
@@ -109,6 +112,8 @@ function imageManifestRecord({ image }) {
     : `images/${image.id}.reference.json`;
   return removeUndefined({
     ...image,
+    bytes: undefined,
+    body: undefined,
     path,
     hasBytes,
   });
@@ -130,6 +135,14 @@ function jsonFile(path, value) {
   };
 }
 
+function imageFile(path, body, contentType) {
+  return {
+    path,
+    body,
+    contentType: contentType ?? "application/octet-stream",
+  };
+}
+
 function textFile(path, body) {
   return {
     path,
@@ -138,6 +151,10 @@ function textFile(path, body) {
       ? "text/html; charset=utf-8"
       : "text/plain; charset=utf-8",
   };
+}
+
+function imageBody(image) {
+  return image.bytes ?? image.body;
 }
 
 function hashText(value) {
