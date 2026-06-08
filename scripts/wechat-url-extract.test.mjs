@@ -5,6 +5,7 @@ import {
   buildWechatArticleSnapshotFromText,
   formatWechatUrlExtractionSummary,
   parseWechatUrlExtractionArgs,
+  readWechatArticlePageWithAgentBrowser,
   runWechatUrlExtractionOnce,
 } from "./wechat-url-extract.mjs";
 
@@ -19,12 +20,14 @@ describe("single WeChat URL extractor", () => {
         "--upload",
         "--session",
         "wechat-test",
+        "--keep-open",
       ]),
     ).toEqual({
       url: "https://mp.weixin.qq.com/s/example",
       envFile: ".env.collector",
       upload: true,
       session: "wechat-test",
+      keepOpen: true,
       help: false,
     });
   });
@@ -163,6 +166,44 @@ describe("single WeChat URL extractor", () => {
     expect(formatWechatUrlExtractionSummary(result)).toContain("failures=1");
   });
 
+  it("maps typed page read failures without running extraction", async () => {
+    const calls = [];
+    const result = await runWechatUrlExtractionOnce({
+      env: { COLLECTOR_ID: "collector-1" },
+      url: "https://mp.weixin.qq.com/s/login",
+      now: new Date("2026-06-03T04:00:00.000Z"),
+      readArticlePage: async () => {
+        throw Object.assign(new Error("agent_browser_failed:401"), {
+          reason: "login_required",
+          stage: "page_fetch",
+          retryable: true,
+          diagnostics: [{ key: "status", value: "401" }],
+        });
+      },
+      extract: async (input) => {
+        calls.push(input);
+        throw new Error("extractor_should_not_run");
+      },
+    });
+
+    expect(calls).toHaveLength(0);
+    expect(result.captureResult).toMatchObject({
+      ok: false,
+      failure: {
+        reason: "login_required",
+        stage: "page_fetch",
+        sourceUrl: "https://mp.weixin.qq.com/s/login",
+        retryable: true,
+      },
+    });
+    expect(result.failureSummaries).toEqual([
+      expect.objectContaining({
+        reason: "login_required",
+        diagnostics: [{ key: "status", value: "401" }],
+      }),
+    ]);
+  });
+
   it("passes URL browser HTML image evidence into the extractor", async () => {
     const calls = [];
     const result = await runWechatUrlExtractionOnce({
@@ -199,6 +240,104 @@ describe("single WeChat URL extractor", () => {
       "poster",
       "qr",
     ]);
+  });
+
+  it("reads WeChat pages through DOM eval and closes the agent-browser session by default", async () => {
+    const commands = [];
+    const page = await readWechatArticlePageWithAgentBrowser({
+      url: "https://mp.weixin.qq.com/s/dom-eval",
+      session: "wechat-dom-test",
+      execAgentBrowser: async (args) => {
+        commands.push(args);
+        const command = args.includes("eval") ? "eval" : args.at(-1);
+        if (command === "eval") {
+          return {
+            data: {
+              result: {
+                finalUrl: "https://mp.weixin.qq.com/s/dom-eval-final",
+                canonicalUrl: "https://mp.weixin.qq.com/s/dom-eval-canonical",
+                title: "DOM event",
+                authorName: "DOM Source",
+                publishedAt: "2026-06-01T13:44:00.000Z",
+                text: "DOM event\nDOM Source\n扫码报名",
+                html: "<body><img data-src=\"https://mmbiz.qpic.cn/dom-poster.jpg\" alt=\"活动海报\" /></body>",
+                links: [{ url: "https://example.com/register", text: "Register" }],
+                miniPrograms: [{ appId: "wx-dom", path: "pages/register" }],
+                diagnostics: [{ key: "dom_eval", value: "ok" }],
+                captureWarnings: [{ code: "html_body_get_skipped", message: "Used DOM eval" }],
+              },
+            },
+          };
+        }
+        return {};
+      },
+    });
+
+    expect(page).toMatchObject({
+      finalUrl: "https://mp.weixin.qq.com/s/dom-eval-final",
+      canonicalUrl: "https://mp.weixin.qq.com/s/dom-eval-canonical",
+      text: expect.stringContaining("DOM event"),
+      html: expect.stringContaining("dom-poster"),
+      links: [{ url: "https://example.com/register", text: "Register" }],
+      miniPrograms: [{ appId: "wx-dom", path: "pages/register" }],
+      diagnostics: [{ key: "dom_eval", value: "ok" }],
+    });
+    expect(commands).toEqual([
+      ["--session", "wechat-dom-test", "open", "https://mp.weixin.qq.com/s/dom-eval"],
+      ["--session", "wechat-dom-test", "wait", "--load", "networkidle"],
+      [
+        "--session",
+        "wechat-dom-test",
+        "eval",
+        expect.stringContaining("document.body"),
+        "--json",
+      ],
+      ["--session", "wechat-dom-test", "close"],
+    ]);
+  });
+
+  it("keeps the agent-browser session open only when explicitly requested", async () => {
+    const commands = [];
+    await readWechatArticlePageWithAgentBrowser({
+      url: "https://mp.weixin.qq.com/s/keep-open",
+      session: "wechat-keep-open-test",
+      keepOpen: true,
+      execAgentBrowser: async (args) => {
+        commands.push(args);
+        if (args.includes("eval")) {
+          return { data: { result: { text: "Keep open", html: "<body>Keep open</body>" } } };
+        }
+        return {};
+      },
+    });
+
+    expect(commands.some((args) => args.at(-1) === "close")).toBe(false);
+  });
+
+  it("closes the agent-browser session when page capture throws", async () => {
+    const commands = [];
+
+    await expect(
+      readWechatArticlePageWithAgentBrowser({
+        url: "https://mp.weixin.qq.com/s/browser-error",
+        session: "wechat-error-test",
+        execAgentBrowser: async (args) => {
+          commands.push(args);
+          if (args.includes("eval")) {
+            throw Object.assign(new Error("cdp connection lost"), {
+              reason: "browser_error",
+            });
+          }
+          return {};
+        },
+      }),
+    ).rejects.toMatchObject({
+      reason: "browser_error",
+      stage: "page_fetch",
+      retryable: true,
+    });
+
+    expect(commands.at(-1)).toEqual(["--session", "wechat-error-test", "close"]);
   });
 
   it("stores URL browser image evidence before extraction when enabled", async () => {

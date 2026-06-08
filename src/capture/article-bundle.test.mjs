@@ -5,6 +5,9 @@ import {
   articleBundleToEvidenceAssets,
   articleBundleToExtractionInput,
   createCapturedArticleBundle,
+  createCaptureFailureResult,
+  createCaptureSuccessResult,
+  validateCaptureResult,
   validateCapturedArticleBundle,
 } from "./article-bundle.mjs";
 
@@ -101,13 +104,131 @@ describe("captured article bundle", () => {
     );
   });
 
-  it("rejects bundles without readable article text", () => {
+  it("allows image-dominant bundles when readable text is empty", () => {
+    const bundle = createCapturedArticleBundle({
+      provider: "url_browser",
+      sourceUrl: "https://mp.weixin.qq.com/s/image-only",
+      captureMode: "image_dominant",
+      text: " ",
+      images: [
+        {
+          id: "image-001",
+          sourceUrl: "https://mmbiz.qpic.cn/image-only-poster.jpg",
+          role: "poster",
+        },
+      ],
+    });
+
+    expect(validateCapturedArticleBundle(bundle)).toBe(true);
+    expect(articleBundleToArticleSnapshot(bundle)).toMatchObject({
+      canonicalUrl: "https://mp.weixin.qq.com/s/image-only",
+      visibleText: "",
+      captureMode: "image_dominant",
+      evidenceAssetIds: [expect.stringMatching(/^asset-/)],
+    });
+  });
+
+  it("rejects bundles without readable article material", () => {
     expect(() =>
       createCapturedArticleBundle({
         provider: "url_browser",
         sourceUrl: "https://mp.weixin.qq.com/s/empty",
         text: " ",
       }),
-    ).toThrow("captured_bundle_text_required");
+    ).toThrow("captured_bundle_material_required");
+  });
+
+  it("preserves canonical URL, content hash, links, mini-program actions, diagnostics, and warnings", () => {
+    const bundle = createCapturedArticleBundle({
+      provider: "url_browser",
+      sourceUrl: "https://mp.weixin.qq.com/s/source",
+      canonicalUrl: "https://mp.weixin.qq.com/s/canonical",
+      finalUrl: "https://mp.weixin.qq.com/s/final",
+      capturedAt: "2026-06-05T02:00:00.000Z",
+      text: "Registration opens today",
+      html: "<a href=\"/register\">Register</a>",
+      links: [
+        {
+          url: "/register",
+          text: "Register",
+          role: "registration",
+        },
+      ],
+      miniPrograms: [
+        {
+          appId: "wx123",
+          path: "pages/register",
+          text: "Mini registration",
+          actionType: "registration",
+        },
+      ],
+      diagnostics: [{ key: "dom_eval", value: "ok" }],
+      captureWarnings: [{ code: "body_html_fallback", message: "Used DOM eval" }],
+    });
+
+    expect(bundle).toMatchObject({
+      canonicalUrl: "https://mp.weixin.qq.com/s/canonical",
+      finalUrl: "https://mp.weixin.qq.com/s/final",
+      contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      links: [
+        {
+          url: "https://mp.weixin.qq.com/register",
+          text: "Register",
+          role: "registration",
+        },
+      ],
+      miniPrograms: [
+        {
+          appId: "wx123",
+          path: "pages/register",
+          text: "Mini registration",
+          actionType: "registration",
+        },
+      ],
+      diagnostics: [{ key: "dom_eval", value: "ok" }],
+      captureWarnings: [{ code: "body_html_fallback", message: "Used DOM eval" }],
+    });
+    expect(articleBundleToArticleSnapshot(bundle)).toMatchObject({
+      canonicalUrl: "https://mp.weixin.qq.com/s/canonical",
+      finalUrl: "https://mp.weixin.qq.com/s/final",
+      contentHash: bundle.contentHash,
+    });
+  });
+
+  it("wraps successful and failed captures in a typed capture result", () => {
+    const bundle = createCapturedArticleBundle({
+      provider: "url_browser",
+      sourceUrl: "https://mp.weixin.qq.com/s/success",
+      text: "Successful capture",
+    });
+    const success = createCaptureSuccessResult({
+      bundle,
+      diagnostics: [{ key: "runner", value: "fake" }],
+    });
+    const failure = createCaptureFailureResult({
+      stage: "page_fetch",
+      reason: "login_required",
+      message: "Login is required before capture.",
+      retryable: true,
+      sourceUrl: "https://mp.weixin.qq.com/s/login",
+      diagnostics: [{ key: "status", value: "401" }],
+    });
+
+    expect(validateCaptureResult(success)).toBe(true);
+    expect(validateCaptureResult(failure)).toBe(true);
+    expect(success).toMatchObject({
+      ok: true,
+      bundle,
+      diagnostics: [{ key: "runner", value: "fake" }],
+    });
+    expect(failure).toMatchObject({
+      ok: false,
+      failure: {
+        stage: "page_fetch",
+        reason: "login_required",
+        retryable: true,
+        sourceUrl: "https://mp.weixin.qq.com/s/login",
+      },
+    });
   });
 });
