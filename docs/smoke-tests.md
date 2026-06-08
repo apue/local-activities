@@ -68,8 +68,22 @@ pnpm capture:wechat2rss:once -- --dry-run --env-file .env.collector
 
 The dry run prints discovered bundle metadata and intended Storage paths without
 uploading bundle files, invoking analysis, or writing production event rows.
+Use `--limit <positive integer>` to query the configured lookback window but
+process only the first N discovered articles, for example:
+
+```bash
+pnpm capture:wechat2rss:once -- --dry-run --env-file .env.collector --limit 3
+```
+
 Use `--apply` only after `analyze-article-bundle` exists and the target has been
-approved for bundle uploads.
+approved for bundle uploads. For bounded production acceptance, combine `--apply`
+with a small `--limit`.
+
+When running the Edge Function locally for acceptance, set
+`ANALYZE_FUNCTION_URL` to that local function URL and optionally set
+`ANALYZE_FUNCTION_TIMEOUT_MS` for slow live model calls. Use `--proxy-url` only
+for outbound Supabase/Vercel/LLM calls that need the local proxy; the worker
+does not proxy localhost function URLs.
 
 ## Hosted Data Cleanup
 

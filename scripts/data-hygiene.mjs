@@ -8,6 +8,7 @@ import {
   assertHostedWriteAllowed,
   writeTargetSummary,
 } from "../src/config/write-guard.mjs";
+import { createCurlProxyFetch } from "../src/net/curl-proxy-fetch.mjs";
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 
 const defaultLimit = 1_000;
@@ -34,11 +35,6 @@ const resetTableSpecs = [
     "id,article_url,triage_decision,exclusion_reason,confidence,processing_state,created_at",
   ],
   ["evidence_assets", "id", "id,article_url,role,media_type,source_url,storage_path,created_at"],
-  [
-    "article_snapshots",
-    "id",
-    "id,canonical_url,title,author_name,capture_mode,created_at",
-  ],
   [
     "article_bundles",
     "id",
@@ -71,7 +67,6 @@ export async function fetchDataAuditRows({
   return {
     eventDrafts: byTable.event_drafts,
     excludedArticles: byTable.excluded_articles,
-    articleSnapshots: byTable.article_snapshots,
     evidenceAssets: byTable.evidence_assets,
     canonicalEvents: byTable.canonical_events,
     sourceRuns: byTable.source_runs,
@@ -105,7 +100,6 @@ export async function fetchStorageAuditObjects({
 export function summarizeDataAudit(rows) {
   const eventDrafts = rows.eventDrafts ?? [];
   const excludedArticles = rows.excludedArticles ?? [];
-  const articleSnapshots = rows.articleSnapshots ?? [];
   const evidenceAssets = rows.evidenceAssets ?? [];
   const canonicalEvents = rows.canonicalEvents ?? [];
   const sourceRuns = rows.sourceRuns ?? [];
@@ -152,15 +146,6 @@ export function summarizeDataAudit(rows) {
         id: article.id,
         url: article.article_url,
       })),
-    ...articleSnapshots
-      .filter((snapshot) =>
-        isLikelyTestRow(snapshot.canonical_url, snapshot.title, snapshot.capture_mode),
-      )
-      .map((snapshot) => ({
-        table: "article_snapshots",
-        id: snapshot.id,
-        url: snapshot.canonical_url,
-      })),
     ...evidenceAssets
       .filter((asset) =>
         isLikelyTestRow(asset.article_url, asset.source_url, asset.storage_path),
@@ -191,7 +176,6 @@ export function summarizeDataAudit(rows) {
     tableCounts: {
       eventDrafts: eventDrafts.length,
       excludedArticles: excludedArticles.length,
-      articleSnapshots: articleSnapshots.length,
       evidenceAssets: evidenceAssets.length,
       canonicalEvents: canonicalEvents.length,
       articleBundles: articleBundles.length,
@@ -213,10 +197,6 @@ export function summarizeDataAudit(rows) {
     draftTriageDecisions: countBy(
       eventDrafts,
       (draft) => draft.triage_decision ?? "missing",
-    ),
-    snapshotCaptureModes: countBy(
-      articleSnapshots,
-      (snapshot) => snapshot.capture_mode ?? "unknown",
     ),
     evidenceRoles: countBy(evidenceAssets, (asset) => asset.role ?? "unknown"),
     duplicateDraftGroups,
@@ -342,7 +322,6 @@ export function formatDataAuditMarkdown(audit) {
     "| --- | ---: |",
     `| event_drafts | ${audit.tableCounts.eventDrafts} |`,
     `| excluded_articles | ${audit.tableCounts.excludedArticles} |`,
-    `| article_snapshots | ${audit.tableCounts.articleSnapshots} |`,
     `| evidence_assets | ${audit.tableCounts.evidenceAssets} |`,
     `| canonical_events | ${audit.tableCounts.canonicalEvents} |`,
     `| article_bundles | ${audit.tableCounts.articleBundles} |`,
@@ -417,7 +396,6 @@ export function planDataReset(rows) {
     event_drafts: rows.eventDrafts ?? [],
     excluded_articles: rows.excludedArticles ?? [],
     evidence_assets: rows.evidenceAssets ?? [],
-    article_snapshots: rows.articleSnapshots ?? [],
     article_bundles: rows.articleBundles ?? [],
     collector_failures: rows.collectorFailures ?? [],
     source_runs: rows.sourceRuns ?? [],
@@ -520,7 +498,6 @@ export function formatDataResetMarkdown({
     "| --- | ---: |",
     `| event_drafts | ${audit.tableCounts.eventDrafts} |`,
     `| excluded_articles | ${audit.tableCounts.excludedArticles} |`,
-    `| article_snapshots | ${audit.tableCounts.articleSnapshots} |`,
     `| evidence_assets | ${audit.tableCounts.evidenceAssets} |`,
     `| canonical_events | ${audit.tableCounts.canonicalEvents} |`,
     `| article_bundles | ${audit.tableCounts.articleBundles} |`,
@@ -580,7 +557,8 @@ export async function runDataAuditCli({
     env,
     ...args.envFiles.map((envFile) => loadEnvFile(envFile)),
   );
-  const runtimeClient = client ?? createSupabaseClientFromEnv(mergedEnv);
+  const runtimeClient = client ??
+    createSupabaseClientFromEnv(mergedEnv, { proxyUrl: args.proxyUrl });
   const resetRequested = args.apply || args.resetAll;
   const rows = await fetchDataAuditRows({
     client: runtimeClient,
@@ -730,7 +708,7 @@ function isMissingStorageBucketError(error) {
   return message.includes("not found") || message.includes("does not exist");
 }
 
-function createSupabaseClientFromEnv(env) {
+function createSupabaseClientFromEnv(env, { proxyUrl } = {}) {
   const supabaseUrl =
     env.NEXT_PUBLIC_SUPABASE_URL?.trim() ??
     env.SUPABASE_URL?.trim() ??
@@ -741,13 +719,15 @@ function createSupabaseClientFromEnv(env) {
     env.SUPA_SERVICE_KEY?.trim();
   if (!supabaseUrl) throw new Error("missing_next_public_supabase_url");
   if (!supabaseSecretKey) throw new Error("missing_supabase_secret_key");
-  return createClient(supabaseUrl, supabaseSecretKey, {
+  const options = {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
       detectSessionInUrl: false,
     },
-  });
+  };
+  if (proxyUrl) options.global = { fetch: createCurlProxyFetch(proxyUrl) };
+  return createClient(supabaseUrl, supabaseSecretKey, options);
 }
 
 function parseArgs(argv) {
@@ -763,6 +743,7 @@ function parseArgs(argv) {
     confirmTarget: undefined,
     targetBaseUrl: undefined,
     runId: undefined,
+    proxyUrl: undefined,
     help: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -807,6 +788,9 @@ function parseArgs(argv) {
     } else if (arg === "--run-id") {
       args.runId = requiredValue(argv, index, arg);
       index += 1;
+    } else if (arg === "--proxy-url") {
+      args.proxyUrl = requiredValue(argv, index, arg);
+      index += 1;
     } else {
       throw new Error(`unknown_arg:${arg}`);
     }
@@ -837,6 +821,7 @@ Options:
   --target-base-url <url>
                     Explicit target base URL for write guarding.
   --run-id <id>      Optional reset run id printed in the report.
+  --proxy-url <url>  Optional HTTP proxy for Supabase REST/storage calls.
   --help             Show this help text.`);
 }
 

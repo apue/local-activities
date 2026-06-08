@@ -86,6 +86,8 @@ export const targets = {
       "EVAL_ARTIFACTS_BUCKET",
       "CAPTURE_WORKER_POLL_INTERVAL_SECONDS",
       "CAPTURE_WORKER_STATE_FILE",
+      "ANALYZE_FUNCTION_URL",
+      "ANALYZE_FUNCTION_TIMEOUT_MS",
     ],
   },
   "supabase-functions": {

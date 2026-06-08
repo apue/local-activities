@@ -8,51 +8,6 @@ import { createCapturedArticleBundle } from "./article-bundle.mjs";
 
 const maxBundleTextLength = 40_000;
 
-export function createUrlBrowserArticleBundle({
-  sourceId,
-  sourceName,
-  sourceUrl,
-  canonicalUrl,
-  finalUrl,
-  title,
-  authorName,
-  publishedAt,
-  capturedAt = new Date().toISOString(),
-  text = "",
-  html,
-  links,
-  miniPrograms,
-  diagnostics,
-  captureWarnings,
-  languageHints,
-}) {
-  const normalizedText = cleanText(text).slice(0, maxBundleTextLength);
-  const images = imagesFromHtml(html, sourceUrl);
-  const htmlLinks = linksFromHtml(html, sourceUrl);
-  const htmlMiniPrograms = miniProgramsFromHtml(html);
-  return createCapturedArticleBundle({
-    sourceId,
-    sourceName,
-    provider: "url_browser",
-    sourceUrl,
-    canonicalUrl,
-    finalUrl: finalUrl ?? sourceUrl,
-    title,
-    authorName,
-    publishedAt,
-    capturedAt,
-    languageHints: languageHints ?? inferLanguageHints(normalizedText),
-    captureMode: captureModeForBundle({ text: normalizedText, images }),
-    text: normalizedText,
-    html,
-    images,
-    links: [...htmlLinks, ...(links ?? [])],
-    miniPrograms: [...htmlMiniPrograms, ...(miniPrograms ?? [])],
-    diagnostics,
-    captureWarnings,
-  });
-}
-
 export function createWechat2RssArticleBundle({
   article,
   capturedAt = new Date().toISOString(),

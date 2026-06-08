@@ -8,13 +8,23 @@ The initial focus is narrow by design: embassy, cultural-center, and official in
 
 - Help users answer: "What official cultural activities are worth planning for this weekend?"
 - Start as a Vercel-hosted web app, optimized for mobile and WeChat in-app browsing.
-- Use seed URLs from WeChat official-account articles to create sources, then let a local collector check those sources every 4 hours.
+- Use an external capture worker near Wechat2RSS to upload article bundles and trigger Supabase analysis.
 - Keep source health, ingestion failures, duplicate detection, event updates, and cancellations visible in the admin system.
-- Treat collector outputs as drafts or evidence; the backend owns validation, matching, revision history, and publishing.
+- Treat capture outputs as untrusted source material; Supabase analysis owns validation, dedupe, evidence, ledger, and publishing state.
 
 ## Current Repository State
 
-This repository has a minimal Next.js scaffold, health checks, shared planning docs, and the first backend contract/schema foundation. The implementation is still incomplete: public event views, admin workflows, collector APIs, local collector runtime, matching, and full deployment verification are being built through GitHub issues and PRs.
+The active pipeline is:
+
+```text
+external capture worker
+-> Supabase Storage article bundle
+-> Supabase Edge Function analysis
+-> Supabase DB ledger/drafts/events/evidence/usage/eval
+-> Vercel public catalog and admin portal
+```
+
+Vercel serves the public/admin app. It does not crawl WeChat or run the production LLM analysis pipeline.
 
 ## Documents
 
@@ -34,13 +44,13 @@ This repository has a minimal Next.js scaffold, health checks, shared planning d
 - Web framework: Next.js App Router
 - Hosting: Vercel
 - Database: Supabase Postgres
-- Collector runtime: local Node.js worker with Playwright-compatible adapter abstraction
+- Capture runtime: external Node.js worker next to Wechat2RSS
 - LLM usage: structured event extraction and uncertain-case assistance
 - Map/geocoding: AMAP-first provider abstraction for China
 - Calendar: `.ics` export/feed first; OAuth calendar writes later only if needed
-- Search/crawling: provider adapters for Exa, Serper, and Firecrawl plus replaceable collector outputs
-- Durable orchestration: Vercel Workflow for bounded multi-step backend work when implementation needs it
+- Search/crawling: provider adapters for Exa, Serper, and Firecrawl where allowed
+- Backend analysis: Supabase Edge Function with OpenAI-compatible model provider
 
 ## Next Step
 
-Review the documents and follow the [Bootstrap Quickstart](docs/quickstart.md) when it is time to scaffold the application.
+Review the documents and follow the [Bootstrap Quickstart](docs/quickstart.md) for local setup and validation.

@@ -147,9 +147,7 @@ function textFile(path, body) {
   return {
     path,
     body: String(body ?? ""),
-    contentType: path.endsWith(".html")
-      ? "text/html; charset=utf-8"
-      : "text/plain; charset=utf-8",
+    contentType: path.endsWith(".html") ? "text/html" : "text/plain",
   };
 }
 

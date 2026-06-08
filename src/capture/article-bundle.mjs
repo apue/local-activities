@@ -200,38 +200,6 @@ export function validateCaptureResult(result) {
   return true;
 }
 
-export function articleBundleToExtractionInput(bundle) {
-  validateCapturedArticleBundle(bundle);
-  return {
-    articleSnapshot: articleBundleToArticleSnapshot(bundle),
-    evidenceAssets: articleBundleToEvidenceAssets(bundle),
-  };
-}
-
-export function articleBundleToArticleSnapshot(bundle) {
-  validateCapturedArticleBundle(bundle);
-  const text = String(bundle.text ?? "");
-  const imageEvidenceAssetIds = bundle.images
-    .map((image) => evidenceAssetIdFor(bundle, image))
-    .filter(Boolean);
-  return removeUndefined({
-    sourceId: bundle.sourceId,
-    sourceName: bundle.sourceName,
-    canonicalUrl: bundle.canonicalUrl ?? bundle.sourceUrl,
-    finalUrl: bundle.finalUrl,
-    title: bundle.title,
-    authorName: bundle.authorName,
-    publishedAt: bundle.publishedAt,
-    capturedAt: bundle.capturedAt,
-    languageHints: bundle.languageHints ?? [],
-    captureMode: bundle.captureMode,
-    visibleText: text,
-    textHash: hashText(text),
-    evidenceAssetIds: imageEvidenceAssetIds,
-    contentHash: bundle.contentHash,
-  });
-}
-
 export function articleBundleToEvidenceAssets(bundle) {
   validateCapturedArticleBundle(bundle);
   return bundle.images.map((image) =>

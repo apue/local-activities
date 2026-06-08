@@ -31,13 +31,13 @@ type CollectorJobRow = {
   claimed_at: string | null;
   lease_expires_at: string | null;
   collector_id: string | null;
-  local_run_id: string | null;
+  capture_run_id: string | null;
   attempt_number: number;
   last_heartbeat_at: string | null;
   last_heartbeat_stage: AdminCollectorJobRecord["lastHeartbeatStage"] | null;
   suggested_disposition: AdminCollectorJobRecord["suggestedDisposition"] | null;
   source_run_id: string | null;
-  article_snapshot_ids: string[] | null;
+  article_bundle_ids: string[] | null;
   event_draft_ids: string[] | null;
   evidence_asset_ids: string[] | null;
   failure_ids: string[] | null;
@@ -193,7 +193,7 @@ type LlmUsageRow = {
   latency_ms: number | null;
   source_run_id: string | null;
   collector_job_id: string | null;
-  article_snapshot_id: string | null;
+  article_bundle_id: string | null;
   event_draft_id: string | null;
   excluded_article_id: string | null;
   evaluation_run_id: string | null;
@@ -217,7 +217,7 @@ const LLM_USAGE_COLUMNS = [
   "latency_ms",
   "source_run_id",
   "collector_job_id",
-  "article_snapshot_id",
+  "article_bundle_id",
   "event_draft_id",
   "excluded_article_id",
   "evaluation_run_id",
@@ -723,7 +723,7 @@ function toLlmUsageRecord(row: LlmUsageRow): AdminLlmUsageRecord {
     latencyMs: row.latency_ms ?? undefined,
     sourceRunId: row.source_run_id ?? undefined,
     collectorJobId: row.collector_job_id ?? undefined,
-    articleSnapshotId: row.article_snapshot_id ?? undefined,
+    articleBundleId: row.article_bundle_id ?? undefined,
     eventDraftId: row.event_draft_id ?? undefined,
     excludedArticleId: row.excluded_article_id ?? undefined,
     evaluationRunId: row.evaluation_run_id ?? undefined,
@@ -948,13 +948,13 @@ function toJobRecord(row: CollectorJobRow): AdminCollectorJobRecord {
     claimedAt: row.claimed_at ?? undefined,
     leaseExpiresAt: row.lease_expires_at ?? undefined,
     collectorId: row.collector_id ?? undefined,
-    localRunId: row.local_run_id ?? undefined,
+    captureRunId: row.capture_run_id ?? undefined,
     attemptNumber: row.attempt_number,
     lastHeartbeatAt: row.last_heartbeat_at ?? undefined,
     lastHeartbeatStage: row.last_heartbeat_stage ?? undefined,
     suggestedDisposition: row.suggested_disposition ?? undefined,
     sourceRunId: row.source_run_id ?? undefined,
-    articleSnapshotIds: row.article_snapshot_ids ?? [],
+    articleBundleIds: row.article_bundle_ids ?? [],
     eventDraftIds: row.event_draft_ids ?? [],
     evidenceAssetIds: row.evidence_asset_ids ?? [],
     failureIds: row.failure_ids ?? [],
@@ -973,9 +973,7 @@ function toJobRecord(row: CollectorJobRow): AdminCollectorJobRecord {
 function normalizeJobRunner(
   value: string,
 ): AdminCollectorJobRecord["preferredRunner"] {
-  return value === "local_collector"
-    ? "local_collector"
-    : "external_capture_worker";
+  return "external_capture_worker";
 }
 
 function normalizeJobRunnerState(
@@ -985,9 +983,6 @@ function normalizeJobRunnerState(
   if (
     value === "external_pending" ||
     value === "external_running" ||
-    value === "local_pending" ||
-    value === "local_claimed" ||
-    value === "local_running" ||
     value === "completed" ||
     value === "failed"
   ) {

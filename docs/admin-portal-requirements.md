@@ -133,7 +133,7 @@ The error detail view is intentionally simple. It must show the operational info
 - short human-readable note
 - last attempt time
 - consecutive failure count
-- snapshot or screenshot availability
+- bundle or screenshot availability
 - suggested next action
 - bounded log excerpt or diagnostic summary
 
@@ -173,7 +173,7 @@ validation succeeds.
 ## Data And State Rules
 
 - Event drafts are not canonical events.
-- Article snapshots and event drafts are evidence for review, not public product state.
+- Article bundles and event drafts are evidence for review, not public product state.
 - Source health and failure reasons are product-visible admin state.
 - Backend validation owns publish eligibility.
 - Deduplication and secondary-mention handling must happen before publish.

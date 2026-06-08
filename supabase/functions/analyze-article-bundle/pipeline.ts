@@ -98,7 +98,7 @@ export async function runAnalysisPipeline({
       providerName,
       model,
     });
-    await writeArticleBundle(db, request, "processed", bundle);
+    await markArticleBundleProcessed({ db, request, bundle });
     return { status: writeResult.state, ledgerState: writeResult.state };
   } catch (error) {
     await writeUsage(db, {
@@ -130,6 +130,26 @@ export async function runAnalysisPipeline({
     }, "ledger_id");
     await writeArticleBundle(db, request, "failed", bundle);
     return { status: "failed", ledgerState: "failed" };
+  }
+}
+
+async function markArticleBundleProcessed({
+  db,
+  request,
+  bundle,
+}: {
+  db: DatabaseWriter;
+  request: AnalyzeRequest;
+  bundle?: ArticleBundle;
+}) {
+  try {
+    await writeArticleBundle(db, request, "processed", bundle);
+  } catch (error) {
+    console.warn(JSON.stringify({
+      event: "article_bundle_status_update_failed",
+      bundleId: request.bundleId,
+      error: errorDetails(error),
+    }));
   }
 }
 
@@ -215,6 +235,8 @@ async function writeAnalysisOutput({
       ? "same_event"
       : output.dedupe.decision;
     let eventCanonicalEventId: string | undefined;
+    const shouldCreateCanonicalEvent =
+      dedupeDecision === "new_event" && canCreateCanonicalEvent(event);
     if (request.mode === "production") {
       await writeUnique(
         db,
@@ -229,15 +251,11 @@ async function writeAnalysisOutput({
           providerName,
           model,
           dedupeDecision,
+          shouldCreateCanonicalEvent,
         }),
         "draft_id",
       );
-      if (
-        dedupeDecision === "new_event" &&
-        event.publish?.createCanonicalEvent &&
-        event.startsAt &&
-        event.publicEligibility === "public"
-      ) {
+      if (shouldCreateCanonicalEvent) {
         eventCanonicalEventId = id(`event-${index + 1}`, request.bundleId);
         firstCanonicalEventId ??= eventCanonicalEventId;
         await writeUnique(
@@ -272,7 +290,11 @@ async function writeAnalysisOutput({
     }
   }
 
-  const ledgerState = firstCanonicalEventId ? "published" : output.decision;
+  const ledgerState = firstCanonicalEventId
+    ? "published"
+    : output.decision === "published"
+    ? "needs_review"
+    : output.decision;
   await writeLedger(db, {
     request,
     output,
@@ -285,6 +307,61 @@ async function writeAnalysisOutput({
     canonicalEventId: firstCanonicalEventId,
   });
   return { state: ledgerState };
+}
+
+function canCreateCanonicalEvent(event: ExtractedEvent): boolean {
+  if (!hasRequiredPublicFields(event)) return false;
+  if (event.publicEligibility === "not_public") return false;
+  if (!isPublicActivity(event)) return false;
+  if (hasExcludedEventKind(event)) return false;
+  if (event.scheduleKind === "unsupported") return false;
+  if (missingRequiredRegistrationEvidence(event)) return false;
+
+  if (event.publish?.createCanonicalEvent && event.publicEligibility === "public") {
+    return true;
+  }
+
+  return isHighConfidencePublicActivity(event);
+}
+
+function hasRequiredPublicFields(event: ExtractedEvent): boolean {
+  return Boolean(
+    event.title &&
+      event.startsAt &&
+      event.organizer &&
+      (event.venueName || event.venueAddress) &&
+      isBeijingEvent(event),
+  );
+}
+
+function isPublicActivity(event: ExtractedEvent): boolean {
+  return event.triageDecision === "public_activity" &&
+    event.triageAction === "extract";
+}
+
+function hasExcludedEventKind(event: ExtractedEvent): boolean {
+  return ["news", "visit", "cancellation", "unsupported"].includes(
+    event.eventKind ?? "",
+  );
+}
+
+function missingRequiredRegistrationEvidence(event: ExtractedEvent): boolean {
+  if (event.reservationStatus !== "required") return false;
+  return !event.registrationAction &&
+    !event.registrationUrl &&
+    !(event.evidence ?? []).some((selection) =>
+      selection.role === "qr" || selection.role === "registration"
+    );
+}
+
+function isHighConfidencePublicActivity(event: ExtractedEvent): boolean {
+  return (event.confidence ?? 0) >= 0.95 &&
+    ["public", "unclear", undefined].includes(event.publicEligibility);
+}
+
+function isBeijingEvent(event: ExtractedEvent): boolean {
+  const city = String(event.city ?? "").trim().toLowerCase();
+  return city === "beijing" || city === "北京" || city === "北京市";
 }
 
 async function writeArticleBundle(
@@ -390,7 +467,7 @@ async function writeEvidenceAssets({
   eventIndex: number;
 }) {
   const assets: WrittenEvidenceAsset[] = [];
-  for (const selection of event.evidence ?? []) {
+  for (const selection of evidenceSelectionsForEvent({ event, bundle })) {
     const image = bundle.images.find((candidate) =>
       candidate.imageId === selection.imageId
     );
@@ -442,6 +519,74 @@ async function writeEvidenceAssets({
   return assets;
 }
 
+function evidenceSelectionsForEvent({
+  event,
+  bundle,
+}: {
+  event: ExtractedEvent;
+  bundle: ArticleBundle;
+}): EvidenceSelection[] {
+  const imageIds = new Set(bundle.images.map((image) => image.imageId));
+  const selections: EvidenceSelection[] = [];
+  const seenRoles = new Set<string>();
+  for (const selection of event.evidence ?? []) {
+    if (!imageIds.has(selection.imageId)) continue;
+    selections.push(selection);
+    seenRoles.add(selection.role);
+  }
+  const registrationImage = imageForUrl(bundle, event.registrationUrl);
+  if (registrationImage && !seenRoles.has("qr")) {
+    selections.push({
+      imageId: registrationImage.imageId,
+      role: "qr",
+      confidence: 0.7,
+    });
+    seenRoles.add("qr");
+  }
+  for (const image of bundle.images) {
+    const role = fallbackEvidenceRole(image.roleHint);
+    if (!role || seenRoles.has(role)) continue;
+    seenRoles.add(role);
+    selections.push({
+      imageId: image.imageId,
+      role,
+      confidence: 0.55,
+    });
+  }
+  return selections;
+}
+
+function imageForUrl(
+  bundle: ArticleBundle,
+  url: string | undefined,
+): BundleImage | undefined {
+  const target = normalizeEvidenceUrl(url);
+  if (!target) return undefined;
+  return bundle.images.find((image) =>
+    normalizeEvidenceUrl(image.sourceUrl) === target
+  );
+}
+
+function normalizeEvidenceUrl(url: string | undefined): string | undefined {
+  const text = stringValue(url);
+  if (!text) return undefined;
+  try {
+    const parsed = new URL(text);
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return text;
+  }
+}
+
+function fallbackEvidenceRole(
+  roleHint: string | undefined,
+): EvidenceSelection["role"] | undefined {
+  if (roleHint === "poster" || roleHint === "cover") return "poster";
+  if (roleHint === "qr" || roleHint === "registration") return roleHint;
+  return undefined;
+}
+
 function draftPayload({
   draftId,
   request,
@@ -452,6 +597,7 @@ function draftPayload({
   providerName,
   model,
   dedupeDecision,
+  shouldCreateCanonicalEvent,
 }: {
   draftId: string;
   request: AnalyzeRequest;
@@ -462,6 +608,7 @@ function draftPayload({
   providerName: string;
   model: string;
   dedupeDecision: string;
+  shouldCreateCanonicalEvent: boolean;
 }) {
   return {
     draft_id: draftId,
@@ -499,7 +646,9 @@ function draftPayload({
     registration_qr_asset_id: qr?.assetId,
     resolution_decision: dedupeDecision,
     confidence: event.confidence ?? 0,
-    review_state: dedupeDecision === "same_event"
+    review_state: shouldCreateCanonicalEvent
+      ? "approved"
+      : dedupeDecision === "same_event"
       ? "possible_duplicate"
       : "needs_review",
     evidence_asset_ids: evidenceAssetIds,
@@ -689,14 +838,37 @@ function id(prefix: string, bundleId: string): string {
 }
 
 function errorDetails(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      name: error.name,
+    };
+  }
+  if (isRecord(error)) {
+    return {
+      message: stringValue(error.message) ?? stringifyErrorObject(error),
+      name: stringValue(error.name),
+      code: stringValue(error.code),
+    };
+  }
   return {
     message: errorMessage(error),
-    name: error instanceof Error ? error.name : undefined,
   };
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (isRecord(error)) return stringifyErrorObject(error);
+  return String(error);
+}
+
+function stringifyErrorObject(error: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
 }
 
 function usageMetrics(value: Partial<UsageMetrics> | undefined): UsageMetrics {
@@ -719,4 +891,8 @@ function numberValue(value: unknown): number | undefined {
 function stringValue(value: unknown): string | undefined {
   const text = String(value ?? "").trim();
   return text || undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -41,19 +41,74 @@ async function signByteBackedImages(
   storage: StorageReader,
   images: BundleImage[],
 ): Promise<BundleImage[]> {
-  const createSignedUrl = storage.createSignedUrl;
-  if (!createSignedUrl) return images;
   return await Promise.all(images.map(async (image) => {
     if (image.publicUrl || !image.hasBytes || !image.bundleStoragePath) {
       return image;
     }
-    const signedUrl = await createSignedUrl(
-      articleBundleBucket,
+    const dataUrl = await readImageDataUrl(storage, image);
+    if (dataUrl) return { ...image, publicUrl: dataUrl };
+    const createSignedUrl = storage.createSignedUrl;
+    if (!createSignedUrl) return image;
+    const signedUrl = await safeCreateSignedUrl(
+      createSignedUrl,
       image.bundleStoragePath,
-      10 * 60,
     );
     return signedUrl ? { ...image, publicUrl: signedUrl } : image;
   }));
+}
+
+async function readImageDataUrl(
+  storage: StorageReader,
+  image: BundleImage,
+): Promise<string | undefined> {
+  const downloadBytes = storage.downloadBytes;
+  if (!downloadBytes || !image.bundleStoragePath) return undefined;
+  const contentType = normalizeImageContentType(image.contentType);
+  if (!contentType) return undefined;
+  const bytes = await safeDownloadBytes(downloadBytes, image.bundleStoragePath);
+  if (!bytes?.length) return undefined;
+  return `data:${contentType};base64,${base64FromBytes(bytes)}`;
+}
+
+async function safeDownloadBytes(
+  downloadBytes: NonNullable<StorageReader["downloadBytes"]>,
+  path: string,
+): Promise<Uint8Array | null> {
+  try {
+    return await downloadBytes(articleBundleBucket, path);
+  } catch {
+    return null;
+  }
+}
+
+async function safeCreateSignedUrl(
+  createSignedUrl: NonNullable<StorageReader["createSignedUrl"]>,
+  path: string,
+): Promise<string | null> {
+  try {
+    return await createSignedUrl(articleBundleBucket, path, 10 * 60);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeImageContentType(value: unknown): string | undefined {
+  const contentType = String(value ?? "").split(";")[0].trim().toLowerCase();
+  if (contentType === "image/jpg") return "image/jpeg";
+  return ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(
+      contentType,
+    )
+    ? contentType
+    : undefined;
+}
+
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
+  }
+  return btoa(binary);
 }
 
 function stripBucketPrefix(storagePrefix: string, bucket: string): string {
@@ -169,7 +224,7 @@ function uniqueImages(objectPrefix: string, values: unknown[]): BundleImage[] {
       height: numberValue(value.height),
       altText: clean(value.altText) ?? clean(value.alt),
       nearbyText: clean(value.nearbyText),
-      roleHint: clean(value.roleHint),
+      roleHint: clean(value.roleHint) ?? clean(value.role),
     });
   }
   return images;

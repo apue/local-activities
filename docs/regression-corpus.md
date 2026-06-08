@@ -7,18 +7,16 @@ during CI.
 
 ## Current State
 
-The project currently has useful cases in three layers:
+The project currently has useful cases in two layers:
 
 | Layer | Location | Strength | Weakness |
 | --- | --- | --- | --- |
 | Self-contained regression corpus | `tests/regression-corpus/*` | committed, contract-validated, replayable through mock E2E | second real Beiping duplicate/update source is still operator-sourced |
-| Vision eval labels | `tests/eval/vision-cases.json` | broadest real-world coverage | many cases depend on Supabase snapshot ids, not self-contained bundles |
 | Production seed manifest | `tests/seed-corpus/production-seed-manifest.json` | product acceptance intent | mostly manifest references, not a full replay corpus |
 
-The 15-case self-contained corpus is the primary CI-safe replay suite. Vision
-eval labels and production seed references remain useful source inventory for
-adding future cases, but they are not a substitute for committed article
-bundles.
+The 15-case self-contained corpus is the primary CI-safe replay suite.
+Production seed references remain useful source inventory for adding future
+cases, but they are not a substitute for committed article bundles.
 
 ## Target Case Format
 
@@ -87,7 +85,7 @@ for CI regression.
 
 ## Expected Test Paths
 
-The reset pipeline should support these paths:
+The reset pipeline should support these offline paths:
 
 ```text
 capture fixture -> CapturedArticleBundle contract test
@@ -95,25 +93,25 @@ CapturedArticleBundle -> EvidenceSet fixture test
 CapturedArticleBundle + EvidenceSet + mocked LLM response -> normalized candidates
 candidate set -> dedupe decision fixture test
 candidate + evidence + dedupe decision -> publish-policy table test
-fake modules -> pipeline orchestrator mock E2E
+captured bundle + expected output -> reset replay mock E2E
 ```
 
 The corpus replay command validates the case contracts and runs a deterministic
-mock E2E path through `runArticlePipelineOnce` for all 15 current cases:
+mock E2E path for all 15 current cases:
 
 ```bash
 pnpm regression:replay -- --all
 ```
 
 It loads `captured-bundle.json`, runs `validateCapturedArticleBundle`, extracts
-evidence with `extractEvidenceFromArticleBundle`, and injects fake
-extract/dedupe/publish adapters from `expected.json`. Capture-failure cases load
-`capture-result.json` and exercise the orchestrator capture failure path.
+evidence with `extractEvidenceFromArticleBundle`, and applies mocked
+analysis/dedupe/publish decisions from `expected.json`. Capture-failure cases
+load `capture-result.json` and exercise the reset capture-contract failure path.
 
 Live evaluation remains separate:
 
 ```text
-live URL or Supabase snapshot -> live model eval -> usage recorded under eval label
+captured bundle or live URL -> live model eval -> usage recorded under eval label
 ```
 
 Production acceptance remains separate:
@@ -156,7 +154,7 @@ pnpm regression:replay -- --all
 Each new case should include:
 
 - stable case id
-- source type and source URL or captured snapshot reference
+- source type and source URL or captured bundle reference
 - labels such as `positive`, `negative`, `qr_registration`, `multi_event`,
   `not_beijing_event`, `not_general_public`, or `duplicate_pair`
 - expected public eligibility

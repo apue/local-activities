@@ -247,7 +247,7 @@ export type AdminLlmUsageRecord = {
   latencyMs?: number;
   sourceRunId?: string;
   collectorJobId?: string;
-  articleSnapshotId?: string;
+  articleBundleId?: string;
   eventDraftId?: string;
   excludedArticleId?: string;
   evaluationRunId?: string;

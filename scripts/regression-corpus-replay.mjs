@@ -10,7 +10,6 @@ import {
   validateCaptureResult,
 } from "../src/capture/article-bundle.mjs";
 import { extractEvidenceFromArticleBundle } from "../src/collector/evidence/extractor.mjs";
-import { runArticlePipelineOnce } from "../src/collector/orchestrator/pipeline.mjs";
 
 export const requiredCoverageLabels = [
   "ordinary_public_event",
@@ -171,35 +170,116 @@ async function replayLoadedCase(item) {
     item.bundle?.sourceUrl ??
     item.captureResult?.failure?.sourceUrl ??
     item.case.source?.url;
-  const report = await runArticlePipelineOnce({
-    env: { COLLECTOR_ID: "regression-corpus" },
-    runId: `regression-${item.case.id}`,
+  const report = runOfflineResetReplayPipeline({
+    item,
+    expected,
     sourceUrl,
-    now: new Date("2026-06-08T00:00:00.000Z"),
-    fetchImpl: async () => {
-      throw new Error("regression_replay_network_forbidden");
-    },
-    capture: async () => captureResultForCase(item),
-    extractEvidence: async ({ bundle }) => extractEvidenceFromArticleBundle(bundle),
-    extractEvents: async ({ runId, evidenceSet }) => ({
-      kind: "drafts",
-      runId,
-      eventDrafts: (expected.eventDrafts ?? []).map((payload, index) =>
-        eventDraftEnvelope({ payload, runId, index }),
-      ),
-      evidenceAssets: evidenceSet.evidenceAssets ?? [],
-      failures: [],
-    }),
-    resolveDedupe: async ({ eventDraft }) => ({
-      ...(expected.dedupe ?? { decision: "new_event" }),
-      eventDraftId: eventDraft.payload.draftId,
-    }),
-    decidePublish: async () => expected.publish ?? { state: "needs_review", reasons: [] },
+    runId: `regression-${item.case.id}`,
   });
 
   const result = summarizeReport({ item, report });
   assertExpectedReplay({ item, result });
   return result;
+}
+
+function runOfflineResetReplayPipeline({ item, expected, sourceUrl, runId }) {
+  const capturedAt = "2026-06-08T00:00:00.000Z";
+  const report = {
+    kind: "failed",
+    status: "failed",
+    runId,
+    sourceUrl,
+    observedAt: capturedAt,
+    sourceHealth: { ok: true },
+    stageStatuses: {},
+    failures: [],
+    dedupeDecisions: [],
+    publishDecisions: [],
+  };
+
+  try {
+    markStage(report, "capture_contract", "success");
+    const captureResult = captureResultForCase(item);
+    report.captureResult = captureResult;
+
+    if (!captureResult.ok) {
+      const failure = {
+        stage: captureResult.failure.stage,
+        reason: captureResult.failure.reason,
+        message: captureResult.failure.message,
+        retryable: captureResult.failure.retryable,
+        sourceUrl: captureResult.failure.sourceUrl,
+        diagnostics: captureResult.failure.diagnostics ?? [],
+      };
+      report.sourceHealth = {
+        ok: false,
+        failureReason: failure.reason,
+        diagnostics: failure.diagnostics,
+      };
+      report.failures.push(failure);
+      markStage(report, "capture_contract", "failed");
+      markStage(report, "offline_sink", "skipped");
+      markStage(report, "cleanup", "success");
+      return report;
+    }
+
+    const bundle = captureResult.bundle;
+    validateCapturedArticleBundle(bundle);
+    report.articleBundle = bundle;
+    report.articleTitle = bundle.title;
+
+    const evidenceSet = extractEvidenceFromArticleBundle(bundle);
+    report.evidenceSet = evidenceSet;
+    markStage(report, "evidence_contract", "success");
+
+    const eventDrafts = (expected.eventDrafts ?? []).map((payload, index) =>
+      eventDraftEnvelope({ payload, runId, index })
+    );
+    report.extraction = {
+      kind: "mocked_analysis",
+      runId,
+      eventDrafts,
+      evidenceAssets: evidenceSet.evidenceAssets ?? [],
+      failures: [],
+    };
+    markStage(report, "mock_analysis", "success");
+
+    report.dedupeDecisions = eventDrafts.map((eventDraft) => ({
+      ...(expected.dedupe ?? { decision: "new_event" }),
+      eventDraftId: eventDraft.payload.draftId,
+    }));
+    markStage(report, "dedupe_policy", "success");
+
+    report.publishDecisions = eventDrafts.map(() =>
+      expected.publish ?? { state: "needs_review", reasons: [] }
+    );
+    markStage(report, "publish_policy", "success");
+
+    const duplicate = report.dedupeDecisions.some((decision) =>
+      ["same", "same_event", "reject"].includes(decision.decision ?? decision.action)
+    );
+    markStage(report, "offline_sink", "skipped");
+    markStage(report, "cleanup", "success");
+    report.kind = duplicate ? "duplicate" : "offline_replayed";
+    report.status = "success";
+    return report;
+  } catch (error) {
+    report.failures.push({
+      stage: "offline_replay",
+      reason: "regression_replay_failed",
+      message: error instanceof Error ? error.message : String(error),
+      retryable: false,
+      sourceUrl,
+      diagnostics: [],
+    });
+    markStage(report, "offline_replay", "failed");
+    markStage(report, "cleanup", "success");
+    return report;
+  }
+}
+
+function markStage(report, stage, status) {
+  report.stageStatuses[stage] = status;
 }
 
 function captureResultForCase(item) {
@@ -310,10 +390,10 @@ function validateExpected({ expected, caseId }) {
 
 function eventDraftEnvelope({ payload, runId, index }) {
   return {
-    collectorId: "regression-corpus",
+    evaluatorId: "regression-corpus",
     runId,
     observedAt: "2026-06-08T00:00:00.000Z",
-    payloadVersion: "2026-05-collector-v1",
+    payloadVersion: "reset-regression-replay-v1",
     payload: {
       draftId: payload.draftId ?? `draft-${index + 1}`,
       ...payload,

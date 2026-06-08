@@ -182,6 +182,129 @@ describe("capture worker Supabase adapter", () => {
     expect(calls.some((call) => call[0] === "functions.invoke")).toBe(true);
   });
 
+  it("can invoke analysis through an explicit function URL after uploading bundle files", async () => {
+    const calls = [];
+    const fetchCalls = [];
+    const adapter = createSupabaseCaptureAdapter({
+      client: fakeSupabaseClient({ calls }),
+      collectorEdgeToken: "collector-edge-secret",
+      collectorId: "collector-local",
+      analyzeFunctionUrl: "http://127.0.0.1:54321/functions/v1/analyze-article-bundle",
+      fetchImpl: async (url, init) => {
+        fetchCalls.push([url, init]);
+        return {
+          ok: true,
+          status: 200,
+          async text() {
+            return "{\"ok\":true}";
+          },
+        };
+      },
+    });
+
+    await adapter.uploadAndAnalyzeBundle({
+      files: [
+        {
+          path: "manifest.json",
+          body: "{\"local\":true}",
+          contentType: "application/json",
+        },
+      ],
+      manifest: {
+        bundleId: "bundle_local",
+        sourceProvider: "wechat2rss",
+        sourceUrl: "https://mp.weixin.qq.com/s/local-function",
+        canonicalUrl: "https://mp.weixin.qq.com/s/local-function",
+        capturedAt: "2026-06-08T11:00:00.000Z",
+        contentHash: "hash-local",
+        mode: "production",
+      },
+      storagePrefix: "article-bundles/bundle_local",
+    });
+
+    expect(calls.some((call) => call[0] === "functions.invoke")).toBe(false);
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0][0]).toBe(
+      "http://127.0.0.1:54321/functions/v1/analyze-article-bundle",
+    );
+    expect(fetchCalls[0][1]).toMatchObject({
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-collector-edge-token": "collector-edge-secret",
+        "x-collector-id": "collector-local",
+      },
+    });
+    expect(JSON.parse(fetchCalls[0][1].body)).toMatchObject({
+      sourceUrl: "https://mp.weixin.qq.com/s/local-function",
+      bundleId: "bundle_local",
+      storagePrefix: "article-bundles/bundle_local",
+      contentHash: "hash-local",
+      sourceProvider: "wechat2rss",
+      mode: "production",
+    });
+  });
+
+  it("aborts explicit function URL analysis calls after the configured timeout", async () => {
+    const adapter = createSupabaseCaptureAdapter({
+      client: fakeSupabaseClient({ calls: [] }),
+      collectorEdgeToken: "collector-edge-secret",
+      analyzeFunctionUrl: "http://127.0.0.1:54321/functions/v1/analyze-article-bundle",
+      analyzeFunctionTimeoutMs: 5,
+      fetchImpl: async (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init.signal.addEventListener("abort", () => {
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }),
+    });
+
+    await expect(
+      adapter.uploadAndAnalyzeBundle({
+        files: [],
+        manifest: {
+          bundleId: "bundle_timeout",
+          sourceProvider: "wechat2rss",
+          sourceUrl: "https://mp.weixin.qq.com/s/timeout",
+          canonicalUrl: "https://mp.weixin.qq.com/s/timeout",
+          capturedAt: "2026-06-08T11:00:00.000Z",
+          contentHash: "hash-timeout",
+          mode: "production",
+        },
+        storagePrefix: "article-bundles/bundle_timeout",
+      }),
+    ).rejects.toThrow("analyze_function_url_timeout");
+  });
+
+  it("times out explicit function URL analysis calls even when fetch ignores abort signals", async () => {
+    const adapter = createSupabaseCaptureAdapter({
+      client: fakeSupabaseClient({ calls: [] }),
+      collectorEdgeToken: "collector-edge-secret",
+      analyzeFunctionUrl: "http://127.0.0.1:54321/functions/v1/analyze-article-bundle",
+      analyzeFunctionTimeoutMs: 5,
+      fetchImpl: async () => new Promise(() => {}),
+    });
+
+    const result = await Promise.race([
+      adapter.uploadAndAnalyzeBundle({
+        files: [],
+        manifest: {
+          bundleId: "bundle_timeout_ignored_abort",
+          sourceProvider: "wechat2rss",
+          sourceUrl: "https://mp.weixin.qq.com/s/timeout-ignored-abort",
+          canonicalUrl: "https://mp.weixin.qq.com/s/timeout-ignored-abort",
+          capturedAt: "2026-06-08T11:00:00.000Z",
+          contentHash: "hash-timeout-ignored-abort",
+          mode: "production",
+        },
+        storagePrefix: "article-bundles/bundle_timeout_ignored_abort",
+      }).catch((error) => error instanceof Error ? error.message : String(error)),
+      delay(30).then(() => "still_pending"),
+    ]);
+
+    expect(result).toBe("analyze_function_url_timeout:5");
+  });
+
   it("refuses to invoke analysis without a collector edge token", async () => {
     const adapter = createSupabaseCaptureAdapter({
       client: fakeSupabaseClient({ calls: [] }),
@@ -232,6 +355,24 @@ describe("capture worker Supabase adapter", () => {
       ],
     ]);
   });
+
+  it("passes an injected fetch implementation to the Supabase client", () => {
+    const created = [];
+    const fetchImpl = async () => new Response("{}");
+    createSupabaseCaptureClientFromEnv({
+      env: {
+        NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
+        SUPABASE_SECRET_KEY: "sb_secret_value",
+      },
+      fetchImpl,
+      createClientImpl: (url, key, options) => {
+        created.push([url, key, options]);
+        return { ok: true };
+      },
+    });
+
+    expect(created[0][2].global.fetch).toBe(fetchImpl);
+  });
 });
 
 function fakeSupabaseClient({ calls, selectResult = { data: null, error: null } }) {
@@ -276,4 +417,8 @@ function fakeSupabaseClient({ calls, selectResult = { data: null, error: null } 
       },
     },
   };
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

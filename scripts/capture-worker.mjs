@@ -12,6 +12,7 @@ import {
   createSupabaseCaptureClientFromEnv,
 } from "../src/capture-worker/supabase-adapter.mjs";
 import { runWechat2RssCaptureOnce } from "../src/capture-worker/wechat2rss-worker.mjs";
+import { createCurlProxyFetch } from "../src/net/curl-proxy-fetch.mjs";
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -31,26 +32,50 @@ async function main() {
     baseUrl: wechatConfig.baseUrl,
     token: wechatConfig.token,
   });
+  const runtime = createCaptureWorkerRuntime({
+    args,
+    env: process.env,
+  });
+
+  const result = await runWechat2RssCaptureOnce({
+    wechat2rss,
+    supabase: runtime.supabase,
+    idempotency: runtime.idempotency,
+    dryRun: args.dryRun,
+    mode: args.mode,
+    lookbackDays: wechatConfig.lookbackDays,
+    limit: args.limit,
+    fetchImpl: runtime.fetchImpl,
+  });
+  console.log(JSON.stringify(result, null, 2));
+  if (!result.ok) process.exitCode = 1;
+}
+
+export function createCaptureWorkerRuntime({
+  args = {},
+  env = process.env,
+  createProxyFetchImpl = createCurlProxyFetch,
+  createSupabaseClientImpl = createSupabaseCaptureClientFromEnv,
+  createSupabaseAdapterImpl = createSupabaseCaptureAdapter,
+} = {}) {
+  const fetchImpl = args.proxyUrl ? createProxyFetchImpl(args.proxyUrl) : undefined;
   const supabase = args.dryRun
     ? undefined
-    : createSupabaseAdapterFromEnv(process.env);
+    : createSupabaseAdapterFromEnv(env, {
+      fetchImpl,
+      createSupabaseClientImpl,
+      createSupabaseAdapterImpl,
+    });
   const idempotency =
     supabase ??
     createIdempotencyAdapterForArgs({
       dryRun: args.dryRun,
-      env: process.env,
+      env,
+      fetchImpl,
+      createSupabaseClientImpl,
+      createSupabaseAdapterImpl,
     });
-
-  const result = await runWechat2RssCaptureOnce({
-    wechat2rss,
-    supabase,
-    idempotency,
-    dryRun: args.dryRun,
-    mode: args.mode,
-    lookbackDays: wechatConfig.lookbackDays,
-  });
-  console.log(JSON.stringify(result, null, 2));
-  if (!result.ok) process.exitCode = 1;
+  return { fetchImpl, supabase, idempotency };
 }
 
 export function createIdempotencyAdapterForArgs({
@@ -58,13 +83,21 @@ export function createIdempotencyAdapterForArgs({
   env = process.env,
   createSupabaseClientImpl = createSupabaseCaptureClientFromEnv,
   createSupabaseAdapterImpl = createSupabaseCaptureAdapter,
+  proxyUrl,
+  fetchImpl,
 } = {}) {
   if (!dryRun) return undefined;
+  const effectiveFetchImpl = fetchImpl ??
+    (proxyUrl ? createCurlProxyFetch(proxyUrl) : undefined);
   if (hasSupabaseIdempotencyEnv(env)) {
     return createSupabaseAdapterImpl({
-      client: createSupabaseClientImpl({ env }),
+      client: createSupabaseClientImpl({
+        env,
+        fetchImpl: effectiveFetchImpl,
+      }),
       collectorEdgeToken: env.COLLECTOR_EDGE_TOKEN,
       collectorId: env.COLLECTOR_ID,
+      fetchImpl: effectiveFetchImpl,
     });
   }
   return {
@@ -74,11 +107,33 @@ export function createIdempotencyAdapterForArgs({
   };
 }
 
-function createSupabaseAdapterFromEnv(env) {
-  return createSupabaseCaptureAdapter({
-    client: createSupabaseCaptureClientFromEnv({ env }),
+export function createSupabaseAdapterFromEnv(
+  env,
+  {
+    proxyUrl,
+    fetchImpl,
+    createSupabaseClientImpl = createSupabaseCaptureClientFromEnv,
+    createSupabaseAdapterImpl = createSupabaseCaptureAdapter,
+  } = {},
+) {
+  const effectiveFetchImpl = fetchImpl ??
+    (proxyUrl ? createCurlProxyFetch(proxyUrl) : undefined);
+  const analyzeFunctionUrl = clean(env.ANALYZE_FUNCTION_URL);
+  return createSupabaseAdapterImpl({
+    client: createSupabaseClientImpl({
+      env,
+      fetchImpl: effectiveFetchImpl,
+    }),
+    analyzeFunctionTimeoutMs: parsePositiveIntegerEnv(
+      env.ANALYZE_FUNCTION_TIMEOUT_MS,
+    ),
+    analyzeFunctionUrl,
     collectorEdgeToken: env.COLLECTOR_EDGE_TOKEN,
     collectorId: env.COLLECTOR_ID,
+    fetchImpl: fetchForAnalyzeFunctionUrl({
+      analyzeFunctionUrl,
+      fetchImpl: effectiveFetchImpl,
+    }),
   });
 }
 
@@ -99,6 +154,7 @@ export function parseArgs(argv) {
     dryRun: true,
     mode: "production",
     envFiles: [],
+    proxyUrl: undefined,
     help: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -116,8 +172,15 @@ export function parseArgs(argv) {
       if (!["production", "eval"].includes(value)) throw new Error(`invalid_mode:${value}`);
       args.mode = value;
       index += 1;
+    } else if (arg === "--limit") {
+      const value = requiredValue(argv, index, arg);
+      args.limit = parsePositiveInteger(value, "limit");
+      index += 1;
     } else if (arg === "--env-file") {
       args.envFiles.push(requiredValue(argv, index, arg));
+      index += 1;
+    } else if (arg === "--proxy-url") {
+      args.proxyUrl = requiredValue(argv, index, arg);
       index += 1;
     } else {
       throw new Error(`unknown_arg:${arg}`);
@@ -162,9 +225,34 @@ function requiredValue(argv, index, arg) {
   return value;
 }
 
+function parsePositiveInteger(value, name) {
+  if (!/^[1-9][0-9]*$/.test(value)) throw new Error(`invalid_${name}:${value}`);
+  return Number(value);
+}
+
+function parsePositiveIntegerEnv(value) {
+  const text = clean(value);
+  if (!text) return undefined;
+  return parsePositiveInteger(text, "analyze_function_timeout_ms");
+}
+
+function fetchForAnalyzeFunctionUrl({ analyzeFunctionUrl, fetchImpl }) {
+  if (!fetchImpl) return undefined;
+  const text = clean(analyzeFunctionUrl);
+  if (!text) return fetchImpl;
+  try {
+    const url = new URL(text);
+    return ["localhost", "127.0.0.1", "::1"].includes(url.hostname)
+      ? undefined
+      : fetchImpl;
+  } catch {
+    return fetchImpl;
+  }
+}
+
 function helpText() {
   return [
-    "Usage: pnpm capture:wechat2rss:once [--dry-run|--apply] [--mode production|eval] [--env-file .env.local]",
+    "Usage: pnpm capture:wechat2rss:once [--dry-run|--apply] [--mode production|eval] [--limit N] [--env-file .env.local] [--proxy-url http://127.0.0.1:7897]",
     "",
     "Dry-run is the default. Use --apply to upload article bundles and invoke analyze-article-bundle.",
   ].join("\n");

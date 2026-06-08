@@ -16,10 +16,13 @@ describe("public catalog smoke", () => {
         ".env.local",
         "--max-details",
         "3",
+        "--proxy-url",
+        "http://127.0.0.1:7897",
       ]),
     ).toEqual({
       envFiles: [".env.local"],
       maxDetails: 3,
+      proxyUrl: "http://127.0.0.1:7897",
       help: false,
     });
   });
@@ -31,7 +34,10 @@ describe("public catalog smoke", () => {
         APP_BASE_URL: "https://local-activities.example/",
       },
       requestImpl: async (request) => {
-        calls.push(request.path);
+        calls.push({
+          path: request.path,
+          proxyUrl: request.proxyUrl,
+        });
         if (request.path === "/") {
           return textResult(
             200,
@@ -48,7 +54,10 @@ describe("public catalog smoke", () => {
       },
     });
 
-    expect(calls).toEqual(["/", "/events/event-1"]);
+    expect(calls).toEqual([
+      { path: "/", proxyUrl: undefined },
+      { path: "/events/event-1", proxyUrl: undefined },
+    ]);
     expect(result).toMatchObject({
       kind: "passed",
       detailCount: 1,
@@ -90,10 +99,12 @@ describe("public catalog smoke", () => {
       baseUrl: "https://local-activities.example",
       detailCount: 0,
       checked: ["public_home"],
+      proxyEnabled: true,
     });
 
     expect(summary).toContain("Public catalog smoke passed");
     expect(summary).toContain("details=0");
+    expect(summary).toContain("proxy=enabled");
   });
 });
 
