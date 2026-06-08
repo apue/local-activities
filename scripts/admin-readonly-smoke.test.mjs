@@ -42,6 +42,27 @@ describe("admin readonly smoke", () => {
       }
 
       if (
+        request.path === "/api/admin/excluded-articles" &&
+        request.headers.cookie === "admin_session=admin-secret"
+      ) {
+        return jsonResult(200, { ok: true, excludedArticles: [] });
+      }
+
+      if (
+        request.path === "/api/admin/processing-ledger?mode=production" &&
+        request.headers.cookie === "admin_session=admin-secret"
+      ) {
+        return jsonResult(200, { ok: true, ledger: [] });
+      }
+
+      if (
+        request.path === "/api/admin/evaluation-runs" &&
+        request.headers.cookie === "admin_session=admin-secret"
+      ) {
+        return jsonResult(200, { ok: true, evaluationRuns: [] });
+      }
+
+      if (
         request.path.startsWith("/api/admin/llm-usage?range=") &&
         request.headers.cookie === "admin_session=admin-secret"
       ) {
@@ -87,6 +108,9 @@ describe("admin readonly smoke", () => {
       "/admin",
       "/api/admin/collector-jobs",
       "/api/admin/event-drafts",
+      "/api/admin/excluded-articles",
+      "/api/admin/processing-ledger?mode=production",
+      "/api/admin/evaluation-runs",
       "/api/admin/llm-usage?range=today",
       "/api/admin/llm-usage?range=7d",
       "/api/admin/llm-usage?range=all",
@@ -94,6 +118,9 @@ describe("admin readonly smoke", () => {
     ]);
     expect(calls.map((call) => call.method)).toEqual([
       "POST",
+      "GET",
+      "GET",
+      "GET",
       "GET",
       "GET",
       "GET",
@@ -114,6 +141,9 @@ describe("admin readonly smoke", () => {
         "admin_page",
         "admin_jobs_json",
         "admin_drafts_json",
+        "admin_excluded_articles_json",
+        "admin_processing_ledger_json",
+        "admin_evaluation_runs_json",
         "admin_usage_today_json",
         "admin_usage_7d_json",
         "admin_usage_all_json",
@@ -162,6 +192,24 @@ describe("admin readonly smoke", () => {
       {
         name: "admin_drafts_json",
         path: "/api/admin/event-drafts",
+        authorization: undefined,
+        cookie: "admin_session=admin-secret",
+      },
+      {
+        name: "admin_excluded_articles_json",
+        path: "/api/admin/excluded-articles",
+        authorization: undefined,
+        cookie: "admin_session=admin-secret",
+      },
+      {
+        name: "admin_processing_ledger_json",
+        path: "/api/admin/processing-ledger?mode=production",
+        authorization: undefined,
+        cookie: "admin_session=admin-secret",
+      },
+      {
+        name: "admin_evaluation_runs_json",
+        path: "/api/admin/evaluation-runs",
         authorization: undefined,
         cookie: "admin_session=admin-secret",
       },

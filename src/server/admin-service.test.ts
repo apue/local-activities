@@ -5,7 +5,9 @@ import {
   AdminDraftPublishBlockedError,
   getAdminEventDraftDetail,
   listAdminExcludedArticles,
+  listAdminEvaluationRuns,
   listAdminLlmUsageSummary,
+  listAdminProcessingLedger,
   listAdminEventDrafts,
   markAdminEventDraftNeedsInfo,
   promoteAdminExcludedArticle,
@@ -14,6 +16,8 @@ import {
   resolveAdminLlmUsageRange,
   type AdminExcludedArticleRecord,
   type AdminEventDraftRecord,
+  type AdminEvaluationRunRecord,
+  type AdminProcessingLedgerRecord,
   type AdminStore,
 } from "./admin-service";
 
@@ -21,6 +25,8 @@ class MemoryAdminStore implements AdminStore {
   jobs: AdminCollectorJobRecord[] = [];
   drafts = new Map<string, AdminEventDraftRecord>();
   excludedArticles = new Map<string, AdminExcludedArticleRecord>();
+  ledgerRows: AdminProcessingLedgerRecord[] = [];
+  evaluationRuns: AdminEvaluationRunRecord[] = [];
   llmUsageInput?: Parameters<AdminStore["getLlmUsageSummary"]>[0];
   llmUsageSummary = {
     range: {
@@ -102,10 +108,12 @@ class MemoryAdminStore implements AdminStore {
   async updateEventDraftReviewState(
     draftId: string,
     reviewState: AdminEventDraftRecord["reviewState"],
+    options?: { reason?: string },
   ) {
     const draft = this.drafts.get(draftId);
     if (!draft) return null;
     draft.reviewState = reviewState;
+    if (options?.reason) draft.operatorOverrideReason = options.reason;
     return draft;
   }
 
@@ -127,6 +135,25 @@ class MemoryAdminStore implements AdminStore {
     if (!input.processingState) return articles;
     return articles.filter(
       (article) => article.processingState === input.processingState,
+    );
+  }
+
+  async listProcessingLedger(input: {
+    state?: AdminProcessingLedgerRecord["state"];
+    mode?: AdminProcessingLedgerRecord["mode"];
+  }) {
+    return this.ledgerRows.filter(
+      (row) =>
+        (!input.state || row.state === input.state) &&
+        (!input.mode || row.mode === input.mode),
+    );
+  }
+
+  async listEvaluationRuns(input: {
+    status?: AdminEvaluationRunRecord["status"];
+  }) {
+    return this.evaluationRuns.filter(
+      (run) => !input.status || run.status === input.status,
     );
   }
 
@@ -340,9 +367,29 @@ describe("admin service", () => {
       reviewState: "needs_info",
       publishDecision: expect.objectContaining({ canPublish: true }),
     });
-    await expect(rejectAdminEventDraft("draft-1", store)).resolves.toMatchObject(
-      { id: "draft-1", reviewState: "rejected" },
-    );
+    await expect(
+      rejectAdminEventDraft("draft-1", store, {
+        reason: "No public attendance signal.",
+      }),
+    ).resolves.toMatchObject({
+      id: "draft-1",
+      reviewState: "rejected",
+      operatorOverrideReason: "No public attendance signal.",
+    });
+  });
+
+  it("stores rejection reasons as operator feedback", async () => {
+    const store = new MemoryAdminStore([completeDraft]);
+
+    await expect(
+      rejectAdminEventDraft("draft-1", store, {
+        reason: "Embassy internal event, not publicly attendable.",
+      }),
+    ).resolves.toMatchObject({
+      id: "draft-1",
+      reviewState: "rejected",
+      operatorOverrideReason: "Embassy internal event, not publicly attendable.",
+    });
   });
 
   it("lists excluded articles and promotes false negatives to extraction", async () => {
@@ -368,6 +415,98 @@ describe("admin service", () => {
     await expect(
       promoteAdminExcludedArticle("missing", new MemoryAdminStore()),
     ).rejects.toThrow("excluded_article_not_found");
+  });
+
+  it("lists processing ledger rows for article audit", async () => {
+    const store = new MemoryAdminStore();
+    store.ledgerRows = [
+      {
+        id: "ledger-1",
+        sourceUrl: "https://mp.weixin.qq.com/s/activity",
+        state: "published",
+        decision: "public_activity",
+        reason: "Auto-published complete public event.",
+        confidence: 0.98,
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        mode: "production",
+        metadata: {},
+        createdAt: "2026-06-08T01:00:00.000Z",
+      },
+      {
+        id: "ledger-2",
+        sourceUrl: "https://mp.weixin.qq.com/s/news",
+        state: "excluded",
+        decision: "non_public_news",
+        reason: "No public attendance signal.",
+        confidence: 0.92,
+        mode: "production",
+        metadata: {},
+        createdAt: "2026-06-08T02:00:00.000Z",
+      },
+    ];
+
+    await expect(
+      listAdminProcessingLedger({ state: "excluded" }, store),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "ledger-2",
+        state: "excluded",
+        reason: "No public attendance signal.",
+      }),
+    ]);
+  });
+
+  it("lists evaluation reports with case results", async () => {
+    const store = new MemoryAdminStore();
+    store.evaluationRuns = [
+      {
+        runId: "eval-1",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        promptVersion: "event-analysis-2026-06-08",
+        schemaVersion: "event-analysis-schema-v1",
+        parameters: { temperature: 0 },
+        corpusVersion: "regression-2026-06",
+        status: "completed",
+        startedAt: "2026-06-08T01:00:00.000Z",
+        completedAt: "2026-06-08T01:02:00.000Z",
+        caseCount: 2,
+        passCount: 1,
+        failCount: 1,
+        summary: { notes: "one QR miss" },
+        caseResults: [
+          {
+            id: "result-1",
+            runId: "eval-1",
+            caseId: "qr-registration",
+            expectedAction: "publish",
+            actualAction: "needs_review",
+            passed: false,
+            scores: { poster: 1, qr: 0 },
+            errors: [{ code: "missing_qr" }],
+            createdAt: "2026-06-08T01:02:00.000Z",
+          },
+        ],
+        createdAt: "2026-06-08T01:00:00.000Z",
+      },
+    ];
+
+    await expect(
+      listAdminEvaluationRuns({ status: "completed" }, store),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        runId: "eval-1",
+        status: "completed",
+        failCount: 1,
+        caseResults: [
+          expect.objectContaining({
+            caseId: "qr-registration",
+            passed: false,
+          }),
+        ],
+      }),
+    ]);
   });
 
   it("publishes complete drafts into canonical events", async () => {

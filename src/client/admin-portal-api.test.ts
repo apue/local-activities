@@ -51,7 +51,7 @@ describe("admin portal API client", () => {
     expect(JSON.stringify(calls[0].init)).not.toContain("admin-secret");
   });
 
-  it("loads jobs, drafts, and usage with the cookie session", async () => {
+  it("loads jobs, drafts, usage, article audit, excluded articles, and eval reports", async () => {
     const calls: string[] = [];
     const fetchImpl: typeof fetch = async (url, init = {}) => {
       calls.push(`${init.method ?? "GET"} ${url}`);
@@ -67,6 +67,24 @@ describe("admin portal API client", () => {
           usage: { totals: { requestCount: 1 }, byModel: [], recent: [] },
         });
       }
+      if (url === "/api/admin/excluded-articles") {
+        return jsonResponse(200, {
+          ok: true,
+          excludedArticles: [{ id: "excluded-1" }],
+        });
+      }
+      if (url === "/api/admin/processing-ledger?mode=production") {
+        return jsonResponse(200, {
+          ok: true,
+          ledger: [{ id: "ledger-1" }],
+        });
+      }
+      if (url === "/api/admin/evaluation-runs") {
+        return jsonResponse(200, {
+          ok: true,
+          evaluationRuns: [{ runId: "eval-1" }],
+        });
+      }
       return jsonResponse(404, { error: "unexpected_request" });
     };
 
@@ -80,12 +98,46 @@ describe("admin portal API client", () => {
       jobs: [{ jobId: "job-1" }],
       drafts: [{ id: "draft-1" }],
       usage: { totals: { requestCount: 1 } },
+      excludedArticles: [{ id: "excluded-1" }],
+      ledger: [{ id: "ledger-1" }],
+      evaluationRuns: [{ runId: "eval-1" }],
     });
     expect(calls).toEqual([
       "GET /api/admin/collector-jobs",
       "GET /api/admin/event-drafts?reviewState=needs_review",
       "GET /api/admin/llm-usage?range=all",
+      "GET /api/admin/excluded-articles",
+      "GET /api/admin/processing-ledger?mode=production",
+      "GET /api/admin/evaluation-runs",
     ]);
+  });
+
+  it("sends rejection reasons through the draft action endpoint", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl: typeof fetch = async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      return jsonResponse(200, { ok: true, draft: { id: "draft-1" } });
+    };
+
+    await adminApiRequest("/api/admin/event-drafts/draft-1/reject", {
+      fetchImpl,
+      method: "POST",
+      body: JSON.stringify({
+        reason: "Human rejected as non-public.",
+      }),
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      url: "/api/admin/event-drafts/draft-1/reject",
+      init: {
+        method: "POST",
+        credentials: "same-origin",
+        body: JSON.stringify({
+          reason: "Human rejected as non-public.",
+        }),
+      },
+    });
   });
 
   it("keeps HTTP status visible when an upstream error is not JSON", async () => {

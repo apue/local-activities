@@ -157,6 +157,77 @@ export type AdminExcludedArticleRecord = {
   createdAt?: string;
 };
 
+export type AdminProcessingLedgerState =
+  | "captured"
+  | "analysis_started"
+  | "published"
+  | "needs_review"
+  | "needs_info"
+  | "excluded"
+  | "duplicate"
+  | "failed";
+
+export type AdminProcessingLedgerMode = "production" | "eval";
+
+export type AdminProcessingLedgerRecord = {
+  id: string;
+  articleBundleId?: string;
+  sourceUrl: string;
+  contentHash?: string;
+  state: AdminProcessingLedgerState;
+  decision?: string;
+  reason?: string;
+  confidence?: number;
+  provider?: string;
+  model?: string;
+  promptVersion?: string;
+  schemaVersion?: string;
+  usageId?: string;
+  draftId?: string;
+  canonicalEventId?: string;
+  excludedArticleId?: string;
+  mode: AdminProcessingLedgerMode;
+  errorDetails?: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type AdminEvaluationCaseResultRecord = {
+  id: string;
+  runId: string;
+  caseId: string;
+  articleBundleId?: string;
+  expectedAction?: string;
+  actualAction?: string;
+  passed: boolean;
+  scores: Record<string, unknown>;
+  errors: unknown[];
+  usageId?: string;
+  artifactPath?: string;
+  createdAt: string;
+};
+
+export type AdminEvaluationRunRecord = {
+  runId: string;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  schemaVersion: string;
+  parameters: Record<string, unknown>;
+  corpusVersion: string;
+  status: "running" | "completed" | "failed";
+  startedAt: string;
+  completedAt?: string;
+  caseCount: number;
+  passCount: number;
+  failCount: number;
+  summary: Record<string, unknown>;
+  artifactBucket?: string;
+  artifactPath?: string;
+  caseResults: AdminEvaluationCaseResultRecord[];
+  createdAt: string;
+};
+
 export type AdminLlmUsageStatus = "succeeded" | "failed";
 
 export type AdminLlmUsageRecord = {
@@ -166,6 +237,7 @@ export type AdminLlmUsageRecord = {
   provider: string;
   model: string;
   status: AdminLlmUsageStatus;
+  mode?: "production" | "eval";
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
@@ -178,6 +250,7 @@ export type AdminLlmUsageRecord = {
   articleSnapshotId?: string;
   eventDraftId?: string;
   excludedArticleId?: string;
+  evaluationRunId?: string;
   metadata: Record<string, unknown>;
 };
 
@@ -246,6 +319,7 @@ export type AdminStore = {
   updateEventDraftReviewState(
     draftId: string,
     reviewState: AdminReviewState,
+    options?: { reason?: string },
   ): Promise<AdminEventDraftRecord | null>;
   updateEventDraftFields(
     draftId: string,
@@ -258,6 +332,13 @@ export type AdminStore = {
     excludedArticleId: string,
     promotedAt: string,
   ): Promise<AdminExcludedArticleRecord | null>;
+  listProcessingLedger(input: {
+    state?: AdminProcessingLedgerState;
+    mode?: AdminProcessingLedgerMode;
+  }): Promise<AdminProcessingLedgerRecord[]>;
+  listEvaluationRuns(input: {
+    status?: AdminEvaluationRunRecord["status"];
+  }): Promise<AdminEvaluationRunRecord[]>;
   getLlmUsageSummary(input: {
     startsAt?: string;
     range: AdminLlmUsageRange;
@@ -285,6 +366,23 @@ export function listAdminExcludedArticles(
   store: AdminStore,
 ) {
   return store.listExcludedArticles(input);
+}
+
+export function listAdminProcessingLedger(
+  input: {
+    state?: AdminProcessingLedgerState;
+    mode?: AdminProcessingLedgerMode;
+  },
+  store: AdminStore,
+) {
+  return store.listProcessingLedger(input);
+}
+
+export function listAdminEvaluationRuns(
+  input: { status?: AdminEvaluationRunRecord["status"] },
+  store: AdminStore,
+) {
+  return store.listEvaluationRuns(input);
 }
 
 export function listAdminLlmUsageSummary(
@@ -340,8 +438,17 @@ export async function markAdminEventDraftNeedsInfo(
   return withPublishDecision(draft);
 }
 
-export async function rejectAdminEventDraft(draftId: string, store: AdminStore) {
-  const draft = await store.updateEventDraftReviewState(draftId, "rejected");
+export async function rejectAdminEventDraft(
+  draftId: string,
+  store: AdminStore,
+  options: { reason: string },
+) {
+  const reason = options.reason.trim();
+  const draft = await store.updateEventDraftReviewState(
+    draftId,
+    "rejected",
+    { reason },
+  );
   if (!draft) throw new Error("draft_not_found");
   return withPublishDecision(draft);
 }

@@ -6,9 +6,11 @@ import {
   AdminDraftPublishBlockedError,
   getAdminEventDraftDetail,
   listAdminCollectorJobs,
+  listAdminEvaluationRuns,
   listAdminExcludedArticles,
   listAdminEventDrafts,
   listAdminLlmUsageSummary,
+  listAdminProcessingLedger,
   markAdminEventDraftNeedsInfo,
   patchAdminEventDraft,
   promoteAdminExcludedArticle,
@@ -25,6 +27,12 @@ type AdminEnv = {
 const draftPublishActionSchema = z
   .object({
     operatorOverrideReason: z.string().trim().min(1).max(2_000).optional(),
+  })
+  .strict();
+
+const draftRejectActionSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(2_000),
   })
   .strict();
 
@@ -58,6 +66,32 @@ const llmUsageRangeSchema = z
   .enum(["today", "7d", "all"])
   .optional()
   .default("today");
+
+const processingLedgerStateSchema = z
+  .enum([
+    "captured",
+    "analysis_started",
+    "published",
+    "needs_review",
+    "needs_info",
+    "excluded",
+    "duplicate",
+    "failed",
+  ])
+  .optional();
+
+const processingLedgerModeSchema = z
+  .enum(["production", "eval"])
+  .optional()
+  .default("production");
+
+const excludedArticleProcessingStateSchema = z
+  .enum(["excluded", "promoted_to_extraction"])
+  .optional();
+
+const evaluationRunStatusSchema = z
+  .enum(["running", "completed", "failed"])
+  .optional();
 
 export async function handleAdminLogin(request: Request, env: AdminEnv) {
   const parsed = adminLoginSchema.safeParse(await parseJson(request));
@@ -130,17 +164,95 @@ export async function handleAdminListExcludedArticles(
   if (!auth.ok) return authErrorResponse(auth);
 
   const url = new URL(request.url);
-  const processingState =
-    url.searchParams.get("processingState") ?? undefined;
+  const parsedProcessingState = excludedArticleProcessingStateSchema.safeParse(
+    url.searchParams.get("processingState") ?? undefined,
+  );
+  if (!parsedProcessingState.success) {
+    return invalidRequestResponse(parsedProcessingState.error);
+  }
   try {
     const excludedArticles = await listAdminExcludedArticles(
-      { processingState: processingState as never },
+      { processingState: parsedProcessingState.data },
       store,
     );
     return Response.json({
       ok: true,
       excludedArticles,
     });
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminListProcessingLedger(
+  request: Request,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const url = new URL(request.url);
+  const parsedState = processingLedgerStateSchema.safeParse(
+    url.searchParams.get("state") ?? undefined,
+  );
+  if (!parsedState.success) return invalidRequestResponse(parsedState.error);
+  const parsedMode = processingLedgerModeSchema.safeParse(
+    url.searchParams.get("mode") ?? undefined,
+  );
+  if (!parsedMode.success) return invalidRequestResponse(parsedMode.error);
+
+  try {
+    const ledger = await listAdminProcessingLedger(
+      { state: parsedState.data, mode: parsedMode.data },
+      store,
+    );
+    return Response.json(
+      {
+        ok: true,
+        ledger,
+      },
+      {
+        headers: {
+          "cache-control": "no-store",
+        },
+      },
+    );
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminListEvaluationRuns(
+  request: Request,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const url = new URL(request.url);
+  const parsedStatus = evaluationRunStatusSchema.safeParse(
+    url.searchParams.get("status") ?? undefined,
+  );
+  if (!parsedStatus.success) return invalidRequestResponse(parsedStatus.error);
+
+  try {
+    const evaluationRuns = await listAdminEvaluationRuns(
+      { status: parsedStatus.data },
+      store,
+    );
+    return Response.json(
+      {
+        ok: true,
+        evaluationRuns,
+      },
+      {
+        headers: {
+          "cache-control": "no-store",
+        },
+      },
+    );
   } catch (error) {
     return serviceErrorResponse(error);
   }
@@ -265,7 +377,11 @@ export async function handleAdminDraftAction(
       return Response.json({ ok: true, draft });
     }
     if (action === "reject") {
-      const draft = await rejectAdminEventDraft(draftId, store);
+      const parsed = draftRejectActionSchema.safeParse(
+        (await parseJson(request)) ?? {},
+      );
+      if (!parsed.success) return invalidRequestResponse(parsed.error);
+      const draft = await rejectAdminEventDraft(draftId, store, parsed.data);
       return Response.json({ ok: true, draft });
     }
 

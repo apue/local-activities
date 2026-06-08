@@ -118,6 +118,115 @@ describe("supabase admin store", () => {
     ]);
   });
 
+  it("maps processing ledger rows for article audit", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(
+      supabaseClientForProcessingLedger(calls),
+    );
+
+    const ledger = await store.listProcessingLedger({
+      state: "excluded",
+      mode: "production",
+    });
+    expect(ledger).toEqual([
+      expect.objectContaining({
+        id: "ledger-1",
+        articleBundleId: "bundle-1",
+        sourceUrl: "https://mp.weixin.qq.com/s/news",
+        state: "excluded",
+        decision: "non_public_news",
+        reason: "No public attendance signal.",
+        confidence: 0.93,
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        mode: "production",
+        excludedArticleId: "excluded-1",
+        errorDetails: {
+          safe: "kept",
+          nested: {
+            other: "ok",
+          },
+          callbackUrl: "https://example.com/callback?token=%5Bredacted%5D",
+        },
+        metadata: {
+          source: "fixture",
+          nested: {
+            safe: "kept",
+          },
+        },
+      }),
+    ]);
+    expect(JSON.stringify(ledger)).not.toContain("do not leak");
+    expect(JSON.stringify(ledger)).not.toContain("secret-token");
+    expect(JSON.stringify(ledger)).not.toContain("session=secret");
+    expect(calls).toContainEqual(["eq", "state", "excluded"]);
+    expect(calls).toContainEqual(["eq", "mode", "production"]);
+  });
+
+  it("maps evaluation runs with their case results", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(
+      supabaseClientForEvaluationRuns(calls),
+    );
+
+    const evaluationRuns = await store.listEvaluationRuns({
+      status: "completed",
+    });
+    expect(evaluationRuns).toEqual([
+      expect.objectContaining({
+        runId: "eval-1",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        status: "completed",
+        caseCount: 2,
+        passCount: 1,
+        failCount: 1,
+        parameters: {
+          temperature: 0,
+          nested: {
+            safe: "kept",
+          },
+        },
+        summary: {
+          notes: "one QR miss",
+          nested: {
+            safe: "kept",
+          },
+        },
+        caseResults: [
+          expect.objectContaining({
+            id: "result-1",
+            runId: "eval-1",
+            caseId: "qr-registration",
+            expectedAction: "publish",
+            actualAction: "needs_review",
+            passed: false,
+            scores: {
+              poster: 1,
+              qr: 0,
+              nested: {
+                safe: "kept",
+              },
+            },
+            errors: [
+              {
+                code: "missing_qr",
+                nested: {
+                  safe: "kept",
+                },
+              },
+            ],
+          }),
+        ],
+      }),
+    ]);
+    expect(JSON.stringify(evaluationRuns)).not.toContain("do not leak");
+    expect(JSON.stringify(evaluationRuns)).not.toContain("secret");
+    expect(JSON.stringify(evaluationRuns)).not.toContain("Authorization");
+    expect(calls).toContainEqual(["eq", "status", "completed"]);
+    expect(calls).toContainEqual(["in", "run_id", ["eval-1"]]);
+  });
+
   it("maps collector job result fields for admin smoke verification", async () => {
     const store = getSupabaseAdminStore(
       supabaseClientReturning([
@@ -178,6 +287,7 @@ describe("supabase admin store", () => {
           provider: "openai",
           model: "gpt-5-mini",
           status: "failed",
+          mode: "eval",
           input_tokens: 500,
           output_tokens: 0,
           total_tokens: 500,
@@ -190,10 +300,10 @@ describe("supabase admin store", () => {
           article_snapshot_id: null,
           event_draft_id: "draft-1",
           excluded_article_id: null,
+          evaluation_run_id: "eval-1",
           metadata: {
             failureReason: "analysis_request_failed",
             workload: "event_resolution",
-            environment: "eval:model-benchmark",
           },
         },
         {
@@ -203,6 +313,7 @@ describe("supabase admin store", () => {
           provider: "openai",
           model: "gpt-5-mini",
           status: "succeeded",
+          mode: "production",
           input_tokens: 900,
           output_tokens: 250,
           total_tokens: 1150,
@@ -215,10 +326,10 @@ describe("supabase admin store", () => {
           article_snapshot_id: "snapshot-1",
           event_draft_id: "draft-1",
           excluded_article_id: null,
+          evaluation_run_id: null,
           metadata: {
             schemaVersion: "event-analysis-schema-v1",
             workload: "event_extraction",
-            environment: "production_collector",
           },
         },
       ], calls),
@@ -255,7 +366,7 @@ describe("supabase admin store", () => {
           model: "gpt-5-mini",
           operation: "event_resolution",
           workload: "event_resolution",
-          environment: "eval:model-benchmark",
+          environment: "eval:eval-1",
           requestCount: 1,
           totalTokens: 500,
           costMicroCny: 0,
@@ -265,7 +376,7 @@ describe("supabase admin store", () => {
           model: "gpt-5-mini",
           operation: "event_extraction",
           workload: "event_extraction",
-          environment: "production_collector",
+          environment: "production",
           requestCount: 1,
           totalTokens: 1150,
           costMicroCny: 2100,
@@ -273,7 +384,7 @@ describe("supabase admin store", () => {
       ],
       byEnvironment: [
         {
-          environment: "eval:model-benchmark",
+          environment: "eval:eval-1",
           requestCount: 1,
           successCount: 0,
           errorCount: 1,
@@ -282,7 +393,7 @@ describe("supabase admin store", () => {
           latestRecordedAt: "2026-06-04T02:05:00.000Z",
         },
         {
-          environment: "production_collector",
+          environment: "production",
           requestCount: 1,
           successCount: 1,
           errorCount: 0,
@@ -293,8 +404,8 @@ describe("supabase admin store", () => {
       ],
       byRun: [
         {
-          runId: "run-1",
-          environment: "eval:model-benchmark",
+          runId: "eval-1",
+          environment: "eval:eval-1",
           requestCount: 1,
           totalTokens: 500,
           costMicroCny: 0,
@@ -302,7 +413,7 @@ describe("supabase admin store", () => {
         },
         {
           runId: "run-1",
-          environment: "production_collector",
+          environment: "production",
           requestCount: 1,
           totalTokens: 1150,
           costMicroCny: 2100,
@@ -313,20 +424,21 @@ describe("supabase admin store", () => {
         expect.objectContaining({
           id: "usage-2",
           status: "failed",
+          mode: "eval",
+          evaluationRunId: "eval-1",
           metadata: {
             failureReason: "analysis_request_failed",
             workload: "event_resolution",
-            environment: "eval:model-benchmark",
           },
         }),
         expect.objectContaining({
           id: "usage-1",
           operation: "event_extraction",
+          mode: "production",
           totalTokens: 1150,
           metadata: {
             schemaVersion: "event-analysis-schema-v1",
             workload: "event_extraction",
-            environment: "production_collector",
           },
         }),
       ],
@@ -565,6 +677,172 @@ function supabaseClientForExcludedArticles(
               processing_state: "promoted_to_extraction",
               promoted_at: "2026-06-03T09:00:00.000Z",
             },
+            error: null,
+          });
+        },
+      };
+      return query;
+    },
+  } as never;
+}
+
+function supabaseClientForProcessingLedger(calls: unknown[] = []) {
+  const rows = [
+    {
+      ledger_id: "ledger-1",
+      article_bundle_id: "bundle-1",
+      source_url: "https://mp.weixin.qq.com/s/news",
+      content_hash: "hash-1",
+      state: "excluded",
+      decision: "non_public_news",
+      reason: "No public attendance signal.",
+      confidence: 0.93,
+      provider: "dashscope",
+      model: "qwen3-vl-plus",
+      prompt_version: "event-analysis-2026-06-08",
+      schema_version: "event-analysis-schema-v1",
+      usage_id: "usage-1",
+      draft_id: null,
+      canonical_event_id: null,
+      excluded_article_id: "excluded-1",
+      mode: "production",
+      error_details: {
+        safe: "kept",
+        prompt: "do not leak",
+        nested: {
+          raw_response: "do not leak",
+          other: "ok",
+        },
+        callbackUrl: "https://example.com/callback?token=secret-token",
+      },
+      metadata: {
+        source: "fixture",
+        nested: {
+          safe: "kept",
+          cookie: "session=secret",
+        },
+      },
+      created_at: "2026-06-08T01:00:00.000Z",
+    },
+  ];
+  const query = {
+    select() {
+      calls.push(["select"]);
+      return query;
+    },
+    eq(column: string, value: string) {
+      calls.push(["eq", column, value]);
+      return query;
+    },
+    order(column: string) {
+      calls.push(["order", column]);
+      return query;
+    },
+    limit(count: number) {
+      calls.push(["limit", count]);
+      return Promise.resolve({ data: rows, error: null });
+    },
+  };
+
+  return {
+    from(table: string) {
+      expect(table).toBe("processing_ledger");
+      return query;
+    },
+  } as never;
+}
+
+function supabaseClientForEvaluationRuns(calls: unknown[] = []) {
+  const runRows = [
+    {
+      run_id: "eval-1",
+      provider: "dashscope",
+      model: "qwen3-vl-plus",
+      prompt_version: "event-analysis-2026-06-08",
+      schema_version: "event-analysis-schema-v1",
+      parameters: {
+        temperature: 0,
+        prompt: "do not leak",
+        nested: {
+          safe: "kept",
+          api_key: "secret",
+        },
+      },
+      corpus_version: "regression-2026-06",
+      status: "completed",
+      started_at: "2026-06-08T01:00:00.000Z",
+      completed_at: "2026-06-08T01:02:00.000Z",
+      case_count: 2,
+      pass_count: 1,
+      fail_count: 1,
+      summary: {
+        notes: "one QR miss",
+        nested: {
+          safe: "kept",
+          raw_response: "do not leak",
+        },
+      },
+      artifact_bucket: "eval-artifacts",
+      artifact_path: "runs/eval-1/report.json",
+      created_at: "2026-06-08T01:00:00.000Z",
+    },
+  ];
+  const caseRows = [
+    {
+      result_id: "result-1",
+      run_id: "eval-1",
+      case_id: "qr-registration",
+      article_bundle_id: "bundle-1",
+      expected_action: "publish",
+      actual_action: "needs_review",
+      passed: false,
+      scores: {
+        poster: 1,
+        qr: 0,
+        nested: {
+          safe: "kept",
+          token: "secret",
+        },
+      },
+      errors: [
+        {
+          code: "missing_qr",
+          raw_response: "do not leak",
+          nested: {
+            safe: "kept",
+            header: "Authorization: Bearer secret",
+          },
+        },
+      ],
+      usage_id: "usage-1",
+      artifact_path: "runs/eval-1/qr-registration.json",
+      created_at: "2026-06-08T01:02:00.000Z",
+    },
+  ];
+
+  return {
+    from(table: string) {
+      const query = {
+        select() {
+          calls.push(["select", table]);
+          return query;
+        },
+        eq(column: string, value: string) {
+          calls.push(["eq", column, value]);
+          return query;
+        },
+        in(column: string, values: string[]) {
+          calls.push(["in", column, values]);
+          return query;
+        },
+        order(column: string) {
+          calls.push(["order", table, column]);
+          return query;
+        },
+        limit(count: number) {
+          calls.push(["limit", table, count]);
+          return Promise.resolve({
+            data: table === "evaluation_runs" ? runRows : caseRows,
             error: null,
           });
         },

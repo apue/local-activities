@@ -7,9 +7,14 @@ import type {
   AdminExcludedArticleRecord,
   AdminEventDraftPatch,
   AdminEventDraftRecord,
+  AdminEvaluationCaseResultRecord,
+  AdminEvaluationRunRecord,
   AdminLlmUsageRange,
   AdminLlmUsageRecord,
   AdminLlmUsageSummary,
+  AdminProcessingLedgerMode,
+  AdminProcessingLedgerRecord,
+  AdminProcessingLedgerState,
   AdminReviewState,
   AdminStore,
   PublishedAdminEvent,
@@ -113,6 +118,64 @@ type ExcludedArticleRow = {
   created_at: string | null;
 };
 
+type ProcessingLedgerRow = {
+  ledger_id: string;
+  article_bundle_id: string | null;
+  source_url: string;
+  content_hash: string | null;
+  state: AdminProcessingLedgerState;
+  decision: string | null;
+  reason: string | null;
+  confidence: number | null;
+  provider: string | null;
+  model: string | null;
+  prompt_version: string | null;
+  schema_version: string | null;
+  usage_id: string | null;
+  draft_id: string | null;
+  canonical_event_id: string | null;
+  excluded_article_id: string | null;
+  mode: AdminProcessingLedgerMode;
+  error_details: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+type EvaluationRunRow = {
+  run_id: string;
+  provider: string;
+  model: string;
+  prompt_version: string;
+  schema_version: string;
+  parameters: Record<string, unknown> | null;
+  corpus_version: string;
+  status: AdminEvaluationRunRecord["status"];
+  started_at: string;
+  completed_at: string | null;
+  case_count: number;
+  pass_count: number;
+  fail_count: number;
+  summary: Record<string, unknown> | null;
+  artifact_bucket: string | null;
+  artifact_path: string | null;
+  created_at: string;
+};
+
+type EvaluationCaseResultRow = {
+  result_id: string;
+  run_id: string;
+  case_id: string;
+  article_bundle_id: string | null;
+  expected_action: string | null;
+  actual_action: string | null;
+  passed: boolean;
+  scores: Record<string, unknown> | null;
+  errors: unknown[] | null;
+  usage_id: string | null;
+  artifact_path: string | null;
+  created_at: string;
+};
+
 type LlmUsageRow = {
   usage_id: string;
   recorded_at: string;
@@ -120,6 +183,7 @@ type LlmUsageRow = {
   provider: string;
   model: string;
   status: AdminLlmUsageRecord["status"];
+  mode: AdminLlmUsageRecord["mode"] | null;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
@@ -132,6 +196,7 @@ type LlmUsageRow = {
   article_snapshot_id: string | null;
   event_draft_id: string | null;
   excluded_article_id: string | null;
+  evaluation_run_id: string | null;
   metadata: Record<string, unknown> | null;
 };
 
@@ -142,6 +207,7 @@ const LLM_USAGE_COLUMNS = [
   "provider",
   "model",
   "status",
+  "mode",
   "input_tokens",
   "output_tokens",
   "total_tokens",
@@ -154,6 +220,7 @@ const LLM_USAGE_COLUMNS = [
   "article_snapshot_id",
   "event_draft_id",
   "excluded_article_id",
+  "evaluation_run_id",
   "metadata",
 ].join(",");
 
@@ -209,13 +276,22 @@ class SupabaseAdminStore implements AdminStore {
   async updateEventDraftReviewState(
     draftId: string,
     reviewState: AdminReviewState,
+    options?: { reason?: string },
   ): Promise<AdminEventDraftRecord | null> {
+    const updatePayload: Record<string, unknown> = {
+      review_state: reviewState,
+      updated_at: new Date().toISOString(),
+    };
+    if (reviewState === "rejected") {
+      updatePayload.processing_state = "rejected";
+    }
+    if (options?.reason) {
+      updatePayload.operator_override_reason = options.reason;
+    }
+
     const { data, error } = await this.client
       .from("event_drafts")
-      .update({
-        review_state: reviewState,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("draft_id", draftId)
       .select("*")
       .maybeSingle<EventDraftRow>();
@@ -277,6 +353,73 @@ class SupabaseAdminStore implements AdminStore {
 
     if (error) throw new Error("admin_excluded_article_promote_failed");
     return data ? toExcludedArticleRecord(data) : null;
+  }
+
+  async listProcessingLedger(input: {
+    state?: AdminProcessingLedgerState;
+    mode?: AdminProcessingLedgerMode;
+  }): Promise<AdminProcessingLedgerRecord[]> {
+    let query = this.client
+      .from("processing_ledger")
+      .select("*");
+
+    if (input.state) {
+      query = query.eq("state", input.state);
+    }
+    if (input.mode) {
+      query = query.eq("mode", input.mode);
+    }
+
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (error) throw new Error("admin_processing_ledger_list_failed");
+    return ((data ?? []) as ProcessingLedgerRow[]).map(
+      toProcessingLedgerRecord,
+    );
+  }
+
+  async listEvaluationRuns(input: {
+    status?: AdminEvaluationRunRecord["status"];
+  }): Promise<AdminEvaluationRunRecord[]> {
+    let runQuery = this.client
+      .from("evaluation_runs")
+      .select("*");
+
+    if (input.status) {
+      runQuery = runQuery.eq("status", input.status);
+    }
+
+    const { data: runData, error: runError } = await runQuery
+      .order("started_at", { ascending: false })
+      .limit(50);
+    if (runError) throw new Error("admin_evaluation_run_list_failed");
+
+    const runRows = (runData ?? []) as EvaluationRunRow[];
+    const runIds = runRows.map((run) => run.run_id);
+    if (runIds.length === 0) return [];
+
+    const { data: caseData, error: caseError } = await this.client
+      .from("evaluation_case_results")
+      .select("*")
+      .in("run_id", runIds)
+      .order("created_at", { ascending: true })
+      .limit(1_000);
+    if (caseError) throw new Error("admin_evaluation_case_list_failed");
+
+    const casesByRun = new Map<string, AdminEvaluationCaseResultRecord[]>();
+    for (const row of (caseData ?? []) as EvaluationCaseResultRow[]) {
+      const record = toEvaluationCaseResultRecord(row);
+      casesByRun.set(record.runId, [
+        ...(casesByRun.get(record.runId) ?? []),
+        record,
+      ]);
+    }
+
+    return runRows.map((row) =>
+      toEvaluationRunRecord(row, casesByRun.get(row.run_id) ?? []),
+    );
   }
 
   async getLlmUsageSummary(input: {
@@ -545,13 +688,21 @@ function llmUsageWorkload(record: AdminLlmUsageRecord) {
 
 function llmUsageEnvironment(record: AdminLlmUsageRecord) {
   const environment = record.metadata.environment;
-  return typeof environment === "string" && environment
-    ? environment
-    : "unknown";
+  if (typeof environment === "string" && environment) return environment;
+  if (record.mode === "eval") {
+    return `eval:${record.evaluationRunId ?? "unknown"}`;
+  }
+  if (record.mode === "production") return "production";
+  return "unknown";
 }
 
 function llmUsageRunId(record: AdminLlmUsageRecord) {
-  return record.sourceRunId ?? record.collectorJobId ?? "unknown";
+  return (
+    record.evaluationRunId ??
+    record.sourceRunId ??
+    record.collectorJobId ??
+    "unknown"
+  );
 }
 
 function toLlmUsageRecord(row: LlmUsageRow): AdminLlmUsageRecord {
@@ -562,6 +713,7 @@ function toLlmUsageRecord(row: LlmUsageRow): AdminLlmUsageRecord {
     provider: row.provider,
     model: row.model,
     status: row.status,
+    mode: row.mode ?? undefined,
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
     totalTokens: row.total_tokens,
@@ -574,6 +726,7 @@ function toLlmUsageRecord(row: LlmUsageRow): AdminLlmUsageRecord {
     articleSnapshotId: row.article_snapshot_id ?? undefined,
     eventDraftId: row.event_draft_id ?? undefined,
     excludedArticleId: row.excluded_article_id ?? undefined,
+    evaluationRunId: row.evaluation_run_id ?? undefined,
     metadata: sanitizeLlmMetadata(row.metadata ?? {}),
   };
 }
@@ -584,9 +737,22 @@ function sanitizeLlmMetadata(
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(metadata)) {
     if (isSensitiveMetadataKey(key)) continue;
-    sanitized[key] = value;
+    sanitized[key] = sanitizeJsonValue(value);
   }
   return sanitized;
+}
+
+function sanitizeJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeJsonValue);
+  }
+  if (value && typeof value === "object") {
+    return sanitizeLlmMetadata(value as Record<string, unknown>);
+  }
+  if (typeof value === "string") {
+    return redactSensitiveUrlParams(value);
+  }
+  return value;
 }
 
 function isSensitiveMetadataKey(key: string) {
@@ -603,6 +769,24 @@ function isSensitiveMetadataKey(key: string) {
     "token",
     "secret",
   ].some((fragment) => normalized.includes(fragment));
+}
+
+function redactSensitiveUrlParams(value: string) {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return value.replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]");
+  }
+
+  let redacted = false;
+  for (const key of parsed.searchParams.keys()) {
+    if (isSensitiveMetadataKey(key)) {
+      parsed.searchParams.set(key, "[redacted]");
+      redacted = true;
+    }
+  }
+  return redacted ? parsed.toString() : value;
 }
 
 function withoutOptionalPosterColumns(payload: Record<string, unknown>) {
@@ -670,6 +854,88 @@ function toExcludedArticleRecord(
     promotedAt: row.promoted_at ?? undefined,
     createdAt: row.created_at ?? undefined,
   };
+}
+
+function toProcessingLedgerRecord(
+  row: ProcessingLedgerRow,
+): AdminProcessingLedgerRecord {
+  return {
+    id: row.ledger_id,
+    articleBundleId: row.article_bundle_id ?? undefined,
+    sourceUrl: row.source_url,
+    contentHash: row.content_hash ?? undefined,
+    state: row.state,
+    decision: row.decision ?? undefined,
+    reason: row.reason ?? undefined,
+    confidence: row.confidence ?? undefined,
+    provider: row.provider ?? undefined,
+    model: row.model ?? undefined,
+    promptVersion: row.prompt_version ?? undefined,
+    schemaVersion: row.schema_version ?? undefined,
+    usageId: row.usage_id ?? undefined,
+    draftId: row.draft_id ?? undefined,
+    canonicalEventId: row.canonical_event_id ?? undefined,
+    excludedArticleId: row.excluded_article_id ?? undefined,
+    mode: row.mode,
+    errorDetails: row.error_details
+      ? sanitizeJsonObject(row.error_details)
+      : undefined,
+    metadata: sanitizeJsonObject(row.metadata ?? {}),
+    createdAt: row.created_at,
+  };
+}
+
+function toEvaluationRunRecord(
+  row: EvaluationRunRow,
+  caseResults: AdminEvaluationCaseResultRecord[],
+): AdminEvaluationRunRecord {
+  return {
+    runId: row.run_id,
+    provider: row.provider,
+    model: row.model,
+    promptVersion: row.prompt_version,
+    schemaVersion: row.schema_version,
+    parameters: sanitizeJsonObject(row.parameters ?? {}),
+    corpusVersion: row.corpus_version,
+    status: row.status,
+    startedAt: row.started_at,
+    completedAt: row.completed_at ?? undefined,
+    caseCount: row.case_count,
+    passCount: row.pass_count,
+    failCount: row.fail_count,
+    summary: sanitizeJsonObject(row.summary ?? {}),
+    artifactBucket: row.artifact_bucket ?? undefined,
+    artifactPath: row.artifact_path ?? undefined,
+    caseResults,
+    createdAt: row.created_at,
+  };
+}
+
+function toEvaluationCaseResultRecord(
+  row: EvaluationCaseResultRow,
+): AdminEvaluationCaseResultRecord {
+  return {
+    id: row.result_id,
+    runId: row.run_id,
+    caseId: row.case_id,
+    articleBundleId: row.article_bundle_id ?? undefined,
+    expectedAction: row.expected_action ?? undefined,
+    actualAction: row.actual_action ?? undefined,
+    passed: row.passed,
+    scores: sanitizeJsonObject(row.scores ?? {}),
+    errors: Array.isArray(row.errors)
+      ? row.errors.map(sanitizeJsonValue)
+      : [],
+    usageId: row.usage_id ?? undefined,
+    artifactPath: row.artifact_path ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+function sanitizeJsonObject(
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  return sanitizeLlmMetadata(input);
 }
 
 function toJobRecord(row: CollectorJobRow): AdminCollectorJobRecord {

@@ -20,7 +20,14 @@ export async function loadAdminState({
 }: AdminPortalApiOptions & { reviewFilter?: string; usageRange?: string }) {
   const query = reviewFilter ? `?reviewState=${reviewFilter}` : "";
   const usageQuery = usageRange ? `?range=${encodeURIComponent(usageRange)}` : "";
-  const [jobsResponse, draftsResponse, usageResponse] = await Promise.all([
+  const [
+    jobsResponse,
+    draftsResponse,
+    usageResponse,
+    excludedArticlesResponse,
+    ledgerResponse,
+    evaluationRunsResponse,
+  ] = await Promise.all([
     adminApiRequest<{ jobs: unknown[] }>("/api/admin/collector-jobs", {
       fetchImpl,
     }),
@@ -30,12 +37,33 @@ export async function loadAdminState({
     adminApiRequest<{ usage: unknown }>(`/api/admin/llm-usage${usageQuery}`, {
       fetchImpl,
     }),
+    adminApiRequest<{ excludedArticles: unknown[] }>(
+      "/api/admin/excluded-articles",
+      {
+        fetchImpl,
+      },
+    ),
+    adminApiRequest<{ ledger: unknown[] }>(
+      "/api/admin/processing-ledger?mode=production",
+      {
+        fetchImpl,
+      },
+    ),
+    adminApiRequest<{ evaluationRuns: unknown[] }>(
+      "/api/admin/evaluation-runs",
+      {
+        fetchImpl,
+      },
+    ),
   ]);
 
   return {
     jobs: jobsResponse.jobs,
     drafts: draftsResponse.drafts,
     usage: usageResponse.usage,
+    excludedArticles: excludedArticlesResponse.excludedArticles,
+    ledger: ledgerResponse.ledger,
+    evaluationRuns: evaluationRunsResponse.evaluationRuns,
   };
 }
 
