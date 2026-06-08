@@ -8,9 +8,13 @@ export type AdminCollectorJobState =
   | "cancelled"
   | "expired";
 
-export type AdminCollectorJobRunner = "local_collector";
+export type AdminCollectorJobRunner =
+  | "external_capture_worker"
+  | "local_collector";
 
 export type AdminCollectorJobRunnerState =
+  | "external_pending"
+  | "external_running"
   | "local_pending"
   | "local_claimed"
   | "local_running"

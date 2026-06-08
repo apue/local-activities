@@ -11,83 +11,95 @@ import {
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 
 const defaultLimit = 1_000;
+const resetStorageBuckets = [
+  "article-bundles",
+  "event-evidence-assets",
+  "eval-artifacts",
+];
+const resetTableSpecs = [
+  ["evaluation_case_results", "id", "id,result_id,run_id,case_id,created_at"],
+  ["evaluation_runs", "id", "id,run_id,provider,model,status,created_at"],
+  ["dedupe_decisions", "id", "id,dedupe_id,draft_id,canonical_event_id,decision,created_at"],
+  ["processing_ledger", "id", "id,ledger_id,article_bundle_id,source_url,state,decision,created_at"],
+  ["llm_usage_ledger", "id", "id,usage_id,operation,provider,model,status,recorded_at,created_at"],
+  ["canonical_events", "id", "id,event_id,title,summary,source_url,status,created_at"],
+  [
+    "event_drafts",
+    "id",
+    "id,draft_id,article_url,title,summary,review_state,processing_state,triage_decision,triage_action,public_eligibility,confidence,created_at,poster_asset_id,qr_asset_id,registration_qr_asset_id",
+  ],
+  [
+    "excluded_articles",
+    "id",
+    "id,article_url,triage_decision,exclusion_reason,confidence,processing_state,created_at",
+  ],
+  ["evidence_assets", "id", "id,article_url,role,media_type,source_url,storage_path,created_at"],
+  [
+    "article_snapshots",
+    "id",
+    "id,canonical_url,title,author_name,capture_mode,created_at",
+  ],
+  [
+    "article_bundles",
+    "id",
+    "id,bundle_id,source_url,canonical_url,content_hash,storage_bucket,storage_prefix,mode,status,created_at",
+  ],
+  ["collector_failures", "id", "id,failure_id,article_url,stage,reason,created_at"],
+  ["source_runs", "id", "id,run_id,status,seed_url,started_at,finished_at,created_at"],
+  ["collector_jobs", "id", "id,job_id,seed_url,state,requested_at,finished_at,created_at"],
+  ["source_channels", "id", "id,source_id,source_provider,source_name,source_url,status,created_at"],
+];
 
 const likelyTestPattern =
   /\/s\/(example|local|job|text|activity|agent-smoke|e2e-fixture|[^/?#]*fixture)|example\.com|activities\.example|fixture case|fixture-assets\/|fixture-/i;
 const likelyNegativeDraftPattern =
   /部长|访问|会见|声明|认可|无口蹄疫|食品展|回顾|新闻|president|minister|official visit|statement|trade/i;
 
-export async function fetchDataAuditRows({ client, limit = defaultLimit }) {
-  const [
-    eventDrafts,
-    excludedArticles,
-    articleSnapshots,
-    evidenceAssets,
-    canonicalEvents,
-    sourceRuns,
-    collectorFailures,
-    collectorJobs,
-  ] = await Promise.all([
-    selectRows(
-      client,
-      "event_drafts",
-      "id,draft_id,article_url,title,summary,review_state,processing_state,triage_decision,triage_action,public_eligibility,confidence,created_at,poster_asset_id,qr_asset_id,registration_qr_asset_id",
-      limit,
-    ),
-    selectRows(
-      client,
-      "excluded_articles",
-      "id,article_url,triage_decision,exclusion_reason,confidence,processing_state,created_at",
-      limit,
-    ),
-    selectRows(
-      client,
-      "article_snapshots",
-      "id,canonical_url,title,author_name,capture_mode,created_at",
-      limit,
-    ),
-    selectRows(
-      client,
-      "evidence_assets",
-      "id,article_url,role,media_type,source_url,storage_path,created_at",
-      limit,
-    ),
-    selectRows(
-      client,
-      "canonical_events",
-      "id,event_id,title,summary,source_url,status,created_at",
-      limit,
-    ),
-    selectRows(
-      client,
-      "source_runs",
-      "id,run_id,status,seed_url,started_at,finished_at,created_at",
-      limit,
-    ),
-    selectRows(
-      client,
-      "collector_failures",
-      "id,failure_id,article_url,stage,reason,created_at",
-      limit,
-    ),
-    selectRows(
-      client,
-      "collector_jobs",
-      "id,job_id,seed_url,state,requested_at,finished_at,created_at",
-      limit,
-    ),
-  ]);
+export async function fetchDataAuditRows({
+  client,
+  limit = defaultLimit,
+  fetchAll = false,
+}) {
+  const selected = await Promise.all(
+    resetTableSpecs.map(async ([table, , columns]) => [
+      table,
+      await selectRows(client, table, columns, limit, { fetchAll }),
+    ]),
+  );
+  const byTable = Object.fromEntries(selected);
 
   return {
-    eventDrafts,
-    excludedArticles,
-    articleSnapshots,
-    evidenceAssets,
-    canonicalEvents,
-    sourceRuns,
-    collectorFailures,
-    collectorJobs,
+    eventDrafts: byTable.event_drafts,
+    excludedArticles: byTable.excluded_articles,
+    articleSnapshots: byTable.article_snapshots,
+    evidenceAssets: byTable.evidence_assets,
+    canonicalEvents: byTable.canonical_events,
+    sourceRuns: byTable.source_runs,
+    collectorFailures: byTable.collector_failures,
+    collectorJobs: byTable.collector_jobs,
+    articleBundles: byTable.article_bundles,
+    processingLedger: byTable.processing_ledger,
+    dedupeDecisions: byTable.dedupe_decisions,
+    llmUsageLedger: byTable.llm_usage_ledger,
+    evaluationRuns: byTable.evaluation_runs,
+    evaluationCaseResults: byTable.evaluation_case_results,
+    sourceChannels: byTable.source_channels,
   };
+}
+
+export async function fetchStorageAuditObjects({
+  client,
+  buckets = resetStorageBuckets,
+  limit = defaultLimit,
+}) {
+  if (!client.storage?.from) return {};
+  const entries = await Promise.all(
+    buckets.map(async (bucket) => [
+      bucket,
+      await listStorageObjects({ client, bucket, limit }),
+    ]),
+  );
+  return Object.fromEntries(entries);
 }
 
 export function summarizeDataAudit(rows) {
@@ -99,6 +111,13 @@ export function summarizeDataAudit(rows) {
   const sourceRuns = rows.sourceRuns ?? [];
   const collectorFailures = rows.collectorFailures ?? [];
   const collectorJobs = rows.collectorJobs ?? [];
+  const articleBundles = rows.articleBundles ?? [];
+  const processingLedger = rows.processingLedger ?? [];
+  const dedupeDecisions = rows.dedupeDecisions ?? [];
+  const llmUsageLedger = rows.llmUsageLedger ?? [];
+  const evaluationRuns = rows.evaluationRuns ?? [];
+  const evaluationCaseResults = rows.evaluationCaseResults ?? [];
+  const sourceChannels = rows.sourceChannels ?? [];
 
   const duplicateDraftGroups = duplicateGroups(eventDrafts, (draft) =>
     `${draft.article_url ?? ""}\n${normalizeTitle(draft.title)}`,
@@ -175,6 +194,13 @@ export function summarizeDataAudit(rows) {
       articleSnapshots: articleSnapshots.length,
       evidenceAssets: evidenceAssets.length,
       canonicalEvents: canonicalEvents.length,
+      articleBundles: articleBundles.length,
+      processingLedger: processingLedger.length,
+      dedupeDecisions: dedupeDecisions.length,
+      llmUsageLedger: llmUsageLedger.length,
+      evaluationRuns: evaluationRuns.length,
+      evaluationCaseResults: evaluationCaseResults.length,
+      sourceChannels: sourceChannels.length,
       sourceRuns: sourceRuns.length,
       collectorFailures: collectorFailures.length,
       collectorJobs: collectorJobs.length,
@@ -207,6 +233,13 @@ export function summarizeDataAudit(rows) {
       brokenEvidenceUrlCount: brokenEvidenceUrls.length,
       localProxyEvidenceUrlCount: localProxyEvidenceUrls.length,
       excludedArticleCount: excludedArticles.length,
+      articleBundleCount: articleBundles.length,
+      processingLedgerCount: processingLedger.length,
+      dedupeDecisionCount: dedupeDecisions.length,
+      llmUsageLedgerCount: llmUsageLedger.length,
+      evaluationRunCount: evaluationRuns.length,
+      evaluationCaseResultCount: evaluationCaseResults.length,
+      sourceChannelCount: sourceChannels.length,
       sourceRunCount: sourceRuns.length,
       collectorFailureCount: collectorFailures.length,
       collectorJobCount: collectorJobs.length,
@@ -312,6 +345,16 @@ export function formatDataAuditMarkdown(audit) {
     `| article_snapshots | ${audit.tableCounts.articleSnapshots} |`,
     `| evidence_assets | ${audit.tableCounts.evidenceAssets} |`,
     `| canonical_events | ${audit.tableCounts.canonicalEvents} |`,
+    `| article_bundles | ${audit.tableCounts.articleBundles} |`,
+    `| processing_ledger | ${audit.tableCounts.processingLedger} |`,
+    `| dedupe_decisions | ${audit.tableCounts.dedupeDecisions} |`,
+    `| llm_usage_ledger | ${audit.tableCounts.llmUsageLedger} |`,
+    `| evaluation_runs | ${audit.tableCounts.evaluationRuns} |`,
+    `| evaluation_case_results | ${audit.tableCounts.evaluationCaseResults} |`,
+    `| source_channels | ${audit.tableCounts.sourceChannels} |`,
+    `| source_runs | ${audit.tableCounts.sourceRuns} |`,
+    `| collector_failures | ${audit.tableCounts.collectorFailures} |`,
+    `| collector_jobs | ${audit.tableCounts.collectorJobs} |`,
     "",
     "## Dirty Signals",
     "",
@@ -364,20 +407,36 @@ export function formatDataHygieneMarkdown(actions) {
 }
 
 export function planDataReset(rows) {
-  const tables = [
-    ["canonical_events", rows.canonicalEvents ?? []],
-    ["event_drafts", rows.eventDrafts ?? []],
-    ["excluded_articles", rows.excludedArticles ?? []],
-    ["evidence_assets", rows.evidenceAssets ?? []],
-    ["article_snapshots", rows.articleSnapshots ?? []],
-    ["collector_failures", rows.collectorFailures ?? []],
-    ["source_runs", rows.sourceRuns ?? []],
-    ["collector_jobs", rows.collectorJobs ?? []],
-  ];
-  return tables.map(([table, tableRows]) => ({
+  const rowByTable = {
+    evaluation_case_results: rows.evaluationCaseResults ?? [],
+    evaluation_runs: rows.evaluationRuns ?? [],
+    dedupe_decisions: rows.dedupeDecisions ?? [],
+    processing_ledger: rows.processingLedger ?? [],
+    llm_usage_ledger: rows.llmUsageLedger ?? [],
+    canonical_events: rows.canonicalEvents ?? [],
+    event_drafts: rows.eventDrafts ?? [],
+    excluded_articles: rows.excludedArticles ?? [],
+    evidence_assets: rows.evidenceAssets ?? [],
+    article_snapshots: rows.articleSnapshots ?? [],
+    article_bundles: rows.articleBundles ?? [],
+    collector_failures: rows.collectorFailures ?? [],
+    source_runs: rows.sourceRuns ?? [],
+    collector_jobs: rows.collectorJobs ?? [],
+    source_channels: rows.sourceChannels ?? [],
+  };
+  return resetTableSpecs.map(([table, idColumn]) => ({
     table,
-    idColumn: "id",
-    ids: tableRows.map((row) => row.id).filter((id) => id !== undefined && id !== null),
+    idColumn,
+    ids: (rowByTable[table] ?? [])
+      .map((row) => row[idColumn])
+      .filter((id) => id !== undefined && id !== null),
+  }));
+}
+
+export function planStorageReset(storageObjects = {}) {
+  return resetStorageBuckets.map((bucket) => ({
+    bucket,
+    paths: (storageObjects[bucket] ?? []).map((object) => object.path),
   }));
 }
 
@@ -409,15 +468,51 @@ export async function applyDataReset({ client, plan, runId }) {
   return results;
 }
 
-export function formatDataResetMarkdown({ targetSummary, audit, plan, results }) {
+export async function applyStorageReset({ client, plan, runId }) {
+  const results = [];
+  for (const action of plan) {
+    if (action.paths.length === 0) {
+      results.push({ ...action, deletedCount: 0, deletedPaths: [], runId });
+      continue;
+    }
+    const deletedPaths = [];
+    for (const chunk of chunks(action.paths, 100)) {
+      const { data, error } = await client.storage.from(action.bucket).remove(chunk);
+      if (error) {
+        throw new Error(`storage_reset_delete_failed:${action.bucket}:${error.message}`);
+      }
+      const removed = Array.isArray(data)
+        ? data.map((item) => item.name ?? item.path ?? item).filter(Boolean)
+        : chunk;
+      deletedPaths.push(...removed);
+    }
+    results.push({
+      ...action,
+      deletedCount: deletedPaths.length,
+      deletedPaths,
+      runId,
+    });
+  }
+  return results;
+}
+
+export function formatDataResetMarkdown({
+  targetSummary,
+  audit,
+  plan,
+  storagePlan = [],
+  results,
+  storageResults,
+}) {
   const applied = Array.isArray(results);
   const rows = applied ? results : plan;
+  const storageRows = Array.isArray(storageResults) ? storageResults : storagePlan;
   return [
     applied ? "# Data Reset Applied" : "# Data Reset Dry Run",
     "",
     targetSummary,
     "",
-    "Usage ledger rows are preserved by this command.",
+    "This command resets event pipeline product, ledger, usage, evaluation, and storage data.",
     "",
     "## Table Counts Before Reset",
     "",
@@ -428,6 +523,13 @@ export function formatDataResetMarkdown({ targetSummary, audit, plan, results })
     `| article_snapshots | ${audit.tableCounts.articleSnapshots} |`,
     `| evidence_assets | ${audit.tableCounts.evidenceAssets} |`,
     `| canonical_events | ${audit.tableCounts.canonicalEvents} |`,
+    `| article_bundles | ${audit.tableCounts.articleBundles} |`,
+    `| processing_ledger | ${audit.tableCounts.processingLedger} |`,
+    `| dedupe_decisions | ${audit.tableCounts.dedupeDecisions} |`,
+    `| llm_usage_ledger | ${audit.tableCounts.llmUsageLedger} |`,
+    `| evaluation_runs | ${audit.tableCounts.evaluationRuns} |`,
+    `| evaluation_case_results | ${audit.tableCounts.evaluationCaseResults} |`,
+    `| source_channels | ${audit.tableCounts.sourceChannels} |`,
     `| source_runs | ${audit.tableCounts.sourceRuns} |`,
     `| collector_failures | ${audit.tableCounts.collectorFailures} |`,
     `| collector_jobs | ${audit.tableCounts.collectorJobs} |`,
@@ -440,6 +542,16 @@ export function formatDataResetMarkdown({ targetSummary, audit, plan, results })
       const ids = applied ? row.deletedIds : row.ids;
       const count = applied ? row.deletedCount : row.ids.length;
       return `| ${row.table} | ${count} | ${ids.slice(0, 50).join(", ")}${ids.length > 50 ? `, ... ${ids.length - 50} more` : ""} |`;
+    }),
+    "",
+    "## Storage Reset Plan",
+    "",
+    "| Bucket | Count | Paths |",
+    "| --- | ---: | --- |",
+    ...storageRows.map((row) => {
+      const paths = Array.isArray(storageResults) ? row.deletedPaths : row.paths;
+      const count = Array.isArray(storageResults) ? row.deletedCount : row.paths.length;
+      return `| ${row.bucket} | ${count} | ${paths.slice(0, 50).join(", ")}${paths.length > 50 ? `, ... ${paths.length - 50} more` : ""} |`;
     }),
     "",
     "## Preservation Candidates",
@@ -469,14 +581,23 @@ export async function runDataAuditCli({
     ...args.envFiles.map((envFile) => loadEnvFile(envFile)),
   );
   const runtimeClient = client ?? createSupabaseClientFromEnv(mergedEnv);
-  const rows = await fetchDataAuditRows({ client: runtimeClient, limit: args.limit });
+  const resetRequested = args.apply || args.resetAll;
+  const rows = await fetchDataAuditRows({
+    client: runtimeClient,
+    limit: args.limit,
+    fetchAll: resetRequested,
+  });
   const audit = summarizeDataAudit(rows);
 
   if (mode === "audit") {
     printResult(audit, args.format, formatDataAuditMarkdown);
   } else {
     const actions = planDataHygieneActions(rows, audit);
-    if (args.apply || args.resetAll) {
+    if (resetRequested) {
+      const storageObjects = await fetchStorageAuditObjects({
+        client: runtimeClient,
+        limit: args.limit,
+      });
       const runId = args.runId ?? createDataResetRunId(new Date());
       const target = assertHostedWriteAllowed({
         command: "data_hygiene",
@@ -493,11 +614,15 @@ export async function runDataAuditCli({
         writeMode: args.apply ? "apply_reset" : "dry_run_reset",
       });
       const plan = planDataReset(rows);
+      const storagePlan = planStorageReset(storageObjects);
       const results = args.apply
         ? await applyDataReset({ client: runtimeClient, plan, runId })
         : undefined;
+      const storageResults = args.apply
+        ? await applyStorageReset({ client: runtimeClient, plan: storagePlan, runId })
+        : undefined;
       printResult(
-        { audit, plan, results, targetSummary },
+        { audit, plan, storagePlan, results, storageResults, targetSummary },
         args.format,
         (result) => formatDataResetMarkdown(result),
       );
@@ -511,14 +636,98 @@ export async function runDataAuditCli({
   return 0;
 }
 
-async function selectRows(client, table, columns, limit) {
-  const { data, error } = await client
-    .from(table)
-    .select(columns)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) throw new Error(`supabase_select_failed:${table}:${error.message}`);
-  return data ?? [];
+async function selectRows(client, table, columns, limit, { fetchAll = false } = {}) {
+  if (!fetchAll) {
+    const { data, error } = await client
+      .from(table)
+      .select(columns)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error && isMissingTableError(error)) return [];
+    if (error) throw new Error(`supabase_select_failed:${table}:${error.message}`);
+    return data ?? [];
+  }
+
+  const rows = [];
+  const pageSize = limit;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await client
+      .from(table)
+      .select(columns)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error && isMissingTableError(error)) return [];
+    if (error) throw new Error(`supabase_select_failed:${table}:${error.message}`);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+async function listStorageObjects({ client, bucket, prefix = "", limit, depth = 0 }) {
+  const bucketClient = client.storage?.from?.(bucket);
+  if (!bucketClient?.list) return [];
+
+  const objects = [];
+  const pageSize = limit;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await bucketClient.list(prefix || undefined, {
+      limit: pageSize,
+      offset,
+      sortBy: { column: "name", order: "asc" },
+    });
+    if (error && isMissingStorageBucketError(error)) return [];
+    if (error) throw new Error(`storage_list_failed:${bucket}:${error.message}`);
+
+    const page = data ?? [];
+    for (const item of page) {
+      const path = prefix ? `${prefix}/${item.name}` : item.name;
+      if (!path) continue;
+      if (isStorageFolder(item) && depth < 8) {
+        objects.push(
+          ...(await listStorageObjects({
+            client,
+            bucket,
+            prefix: path,
+            limit,
+            depth: depth + 1,
+          })),
+        );
+      } else {
+        objects.push({
+          bucket,
+          path,
+          id: item.id,
+          updatedAt: item.updated_at,
+          createdAt: item.created_at,
+          metadata: item.metadata ?? {},
+        });
+      }
+    }
+
+    if (page.length < pageSize) break;
+  }
+  return objects;
+}
+
+function isStorageFolder(item) {
+  return !item.id && !item.metadata && !item.created_at && !item.updated_at;
+}
+
+function isMissingTableError(error) {
+  const message = String(error?.message ?? error ?? "").toLowerCase();
+  return (
+    message.includes("does not exist") ||
+    message.includes("not found") ||
+    message.includes("could not find the table") ||
+    message.includes("schema cache")
+  );
+}
+
+function isMissingStorageBucketError(error) {
+  const message = String(error?.message ?? error ?? "").toLowerCase();
+  return message.includes("not found") || message.includes("does not exist");
 }
 
 function createSupabaseClientFromEnv(env) {
@@ -806,6 +1015,14 @@ function formatCounts(counts) {
   ].join("\n");
 }
 
+function chunks(values, size) {
+  const result = [];
+  for (let index = 0; index < values.length; index += size) {
+    result.push(values.slice(index, index + size));
+  }
+  return result;
+}
+
 function formatDuplicateGroups(groups) {
   if (groups.length === 0) return ["_None_"];
   return groups
@@ -825,8 +1042,14 @@ function requiredValue(argv, index, arg) {
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMain) {
   const [modeArg, ...rest] = process.argv.slice(2);
-  const mode = modeArg === "hygiene" ? "hygiene" : "audit";
-  const argv = modeArg === "audit" || modeArg === "hygiene" ? rest : process.argv.slice(2);
+  const mode =
+    modeArg === "hygiene" || modeArg === "reset" ? "hygiene" : "audit";
+  const argv =
+    modeArg === "audit" || modeArg === "hygiene"
+      ? rest
+      : modeArg === "reset"
+        ? ["--reset-all-event-data", ...rest]
+        : process.argv.slice(2);
   runDataAuditCli({ argv, mode }).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 2;

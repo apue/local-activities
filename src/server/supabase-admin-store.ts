@@ -707,7 +707,9 @@ function toJobRecord(row: CollectorJobRow): AdminCollectorJobRecord {
 function normalizeJobRunner(
   value: string,
 ): AdminCollectorJobRecord["preferredRunner"] {
-  return value === "local_collector" ? "local_collector" : "local_collector";
+  return value === "local_collector"
+    ? "local_collector"
+    : "external_capture_worker";
 }
 
 function normalizeJobRunnerState(
@@ -715,6 +717,8 @@ function normalizeJobRunnerState(
   state: AdminCollectorJobRecord["state"],
 ): AdminCollectorJobRecord["runnerState"] {
   if (
+    value === "external_pending" ||
+    value === "external_running" ||
     value === "local_pending" ||
     value === "local_claimed" ||
     value === "local_running" ||
@@ -723,9 +727,8 @@ function normalizeJobRunnerState(
   ) {
     return value;
   }
-  if (state === "queued") return "local_pending";
-  if (state === "claimed") return "local_claimed";
-  if (state === "running") return "local_running";
+  if (state === "queued") return "external_pending";
+  if (state === "claimed" || state === "running") return "external_running";
   if (state === "completed" || state === "partial") return "completed";
   return "failed";
 }
