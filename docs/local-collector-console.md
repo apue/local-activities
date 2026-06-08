@@ -1,6 +1,6 @@
 # Local Collector Console And Job Queue Spec
 
-> Historical V2 design. Event Pipeline V3 uses the Mac-local Wechat2RSS
+> Historical V2 design. The active event pipeline uses the Mac-local Wechat2RSS
 > collector path and the module boundaries in
 > [Event Pipeline Architecture](event-pipeline-architecture.md). Do not treat
 > this document as the current collector execution contract.
@@ -128,7 +128,7 @@ access.
 
 The V2 design stored collector jobs created by the admin portal or backend
 workflows. That design allowed a hosted runner or a local collector runner. It
-is not the Event Pipeline V3 execution contract.
+is not the active Event Pipeline execution contract.
 
 ### Runner State
 

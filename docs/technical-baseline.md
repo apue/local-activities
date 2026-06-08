@@ -26,7 +26,7 @@ transitions, or retryable provider calls that do not require WeChat login state.
 Vercel Queue remains a planning-level candidate.
 
 Do not run ordinary long-lived browser automation or unbounded collector jobs
-inside request/response Vercel functions. Event Pipeline V3 uses the Mac-local
+inside request/response Vercel functions. The active event pipeline uses the Mac-local
 Wechat2RSS collector as the current production WeChat official-account source
 path.
 

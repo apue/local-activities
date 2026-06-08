@@ -176,7 +176,7 @@ app backed by production Supabase.
 The collector must report structured failures such as `captcha_required`,
 `login_required`, or `fetch_blocked` instead of bypassing platform protections.
 
-For Event Pipeline V3 architecture and module boundaries, see
+For Event Pipeline V4 architecture and module boundaries, see
 [Event Pipeline Architecture](event-pipeline-architecture.md).
 
 Current project skills:

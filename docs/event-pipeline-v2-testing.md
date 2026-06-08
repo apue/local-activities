@@ -1,7 +1,7 @@
 # Event Pipeline V2 Testing And Environment Isolation
 
 > Superseded for current implementation planning by
-> [Event Pipeline V3 Goal Pack](event-pipeline-v3-goal.md),
+> [Event Pipeline V4 Goal Pack](event-pipeline-v4-goal.md),
 > [Event Pipeline Architecture](event-pipeline-architecture.md), and
 > [Testing Strategy](testing-strategy.md). Keep this file for historical context
 > only.

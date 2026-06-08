@@ -25,7 +25,7 @@ data:audit` and `pnpm data:hygiene -- --dry-run` are read-only or non-mutating.
 Do not run cleanup or publish commands against hosted data without explicit
 operator approval in the current conversation.
 
-The active extraction policy is a single model call that extracts event details
+The active V4 extraction policy is a single model call that extracts event details
 and judges public eligibility; `VISION_ESCALATION_MODEL` is reserved for
 difficult cases, not a mandatory prefilter stage.
 
@@ -56,7 +56,9 @@ quarantining, or recapturing it.
 Use `supabase_snapshot` when the article has already been captured in hosted
 Supabase and the snapshot contains enough text and evidence to replay the case.
 This avoids committing full article mirrors and is usually the preferred source
-for known failures.
+for known failures during eval. For CI regression, important cases should be
+promoted into the self-contained corpus described in
+[Regression Corpus](regression-corpus.md).
 
 Use `live_url` when the article has not been captured yet, or when the live page
 itself is the behavior under test. Live URLs can 404, change, or become blocked,

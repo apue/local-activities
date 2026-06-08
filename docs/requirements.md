@@ -76,7 +76,7 @@ Detailed admin portal behavior is defined in [Admin Portal Requirements](admin-p
 
 - The current MVP collector runner is the Mac-local Wechat2RSS collector.
 - Vercel hosts the app and ingest APIs, but does not run the production WeChat
-  crawler in Event Pipeline V3.
+  crawler in the active event pipeline.
 - Future tracked-source polling should check supported sources at a low cadence, initially every 4 hours.
 - The collector uploads normalized results to the backend instead of writing directly to the database.
 - The backend receives:

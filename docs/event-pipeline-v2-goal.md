@@ -1,7 +1,7 @@
 # Event Pipeline V2 Goal Pack
 
 > Superseded for current implementation planning by
-> [Event Pipeline V3 Goal Pack](event-pipeline-v3-goal.md). Keep this file for
+> [Event Pipeline V4 Goal Pack](event-pipeline-v4-goal.md). Keep this file for
 > historical context only.
 
 This document is the execution contract for a future Codex goal-mode session.

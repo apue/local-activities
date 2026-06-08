@@ -87,7 +87,7 @@ Notes:
 
 - Playwright is an implementation of the collector abstraction, not a backend dependency.
 - Playwright is not the current production WeChat official-account collector
-  path for Event Pipeline V3.
+  path for the active event pipeline.
 - The collector should report failures instead of bypassing captchas, login requirements, or platform protections.
 
 ## LLM Provider
