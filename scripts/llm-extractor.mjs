@@ -6,20 +6,32 @@ import { fileURLToPath } from "node:url";
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 import {
   buildExtractorPromptInput,
+  buildLlmExtractionRequest,
+  createMockLlmProviderAdapter,
   extractionSchemaVersion,
   formatLlmExtractionSummary,
+  llmExtractionRequestVersion,
+  llmRawModelResponseVersion,
   promptVersion,
   readLlmExtractorConfig,
+  runLlmExtractionFromBundle,
   runLlmExtractionOnce,
+  validateLlmExtractionRequest,
 } from "../src/extraction/llm-extractor.mjs";
 
 export {
   buildExtractorPromptInput,
+  buildLlmExtractionRequest,
+  createMockLlmProviderAdapter,
   extractionSchemaVersion,
   formatLlmExtractionSummary,
+  llmExtractionRequestVersion,
+  llmRawModelResponseVersion,
   promptVersion,
   readLlmExtractorConfig,
+  runLlmExtractionFromBundle,
   runLlmExtractionOnce,
+  validateLlmExtractionRequest,
 } from "../src/extraction/llm-extractor.mjs";
 
 function readJsonFile(path) {
@@ -28,21 +40,17 @@ function readJsonFile(path) {
 }
 
 function usage() {
-  return `Usage: pnpm extractor:llm --article-file article.json [--env-file .env.collector] [--response-file fixture.json] [--upload]
+  return `Usage: pnpm extractor:llm --article-file article.json [--env-file .env.collector] [--response-file fixture.json]
 
 Runs lightweight LLM information extraction over one normalized article snapshot.
 
-Default behavior is dry-run and does not upload collector payloads.
+Extractor behavior is dry-run and does not upload collector payloads.
 
 Required env for live provider calls:
   COLLECTOR_ID
   AGENT_PROVIDER
   OPENAI_API_KEY
-  OPENAI_MODEL
-
-Required env only when --upload is set:
-  COLLECTOR_BASE_URL or APP_BASE_URL
-  COLLECTOR_API_KEY`;
+  OPENAI_MODEL`;
 }
 
 async function main(argv) {
@@ -60,20 +68,21 @@ async function main(argv) {
     providerResponse: options.responseFile
       ? readJsonFile(options.responseFile)
       : undefined,
-    upload: options.upload,
   });
   console.log(formatLlmExtractionSummary(result));
 }
 
 function parseArgs(argv) {
-  const options = { upload: false };
+  const options = {};
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--env-file") options.envFile = argv[(index += 1)];
     else if (arg === "--article-file") options.articleFile = argv[(index += 1)];
     else if (arg === "--evidence-file") options.evidenceFile = argv[(index += 1)];
     else if (arg === "--response-file") options.responseFile = argv[(index += 1)];
-    else if (arg === "--upload") options.upload = true;
+    else if (arg === "--upload") {
+      throw new Error("llm_extractor_upload_removed_use_collector_upload_client");
+    }
   }
   return options;
 }

@@ -7,7 +7,9 @@ import {
   eventDraftUploadSchema,
 } from "../contracts/collector";
 import {
+  rawModelResponseRecordToProviderResponse,
   recordedExtractionToProviderResponse,
+  runRawModelResponseReplay,
   runRecordedExtractionReplay,
 } from "./replay.mjs";
 
@@ -121,6 +123,75 @@ describe("recorded extraction replay", () => {
       scheduleText:
         "即日起至2026年8月30日，周二至周日 10:00-18:00，周一闭馆",
     });
+  });
+
+  it("replays persisted raw model response records without provider calls", async () => {
+    const rawRecord = {
+      contractVersion: "llm-raw-model-response-v1",
+      provider: "recorded",
+      model: "fixture-model",
+      promptVersion: "event-extraction-2026-06-02",
+      schemaVersion: "event-extraction-schema-v1",
+      maxOutputTokens: 900,
+      request: {
+        captureId: "capture-raw",
+        contentHash: "content-raw",
+        articleUrl: "https://mp.weixin.qq.com/s/raw",
+      },
+      rawResponse: {
+        output_text: JSON.stringify({
+          classification: {
+            kind: "activity",
+            confidence: 0.86,
+            signals: [],
+            missingFields: [],
+          },
+          events: [
+            {
+              title: "Replay lecture",
+              organizer: "Embassy Cultural Office",
+              startsAt: "2026-06-08T19:00",
+              venueName: "Beijing Culture Center",
+              reservationStatus: "not_required",
+              summary: "A replayed public lecture.",
+              signals: ["ready_for_review"],
+              fieldEvidence: {
+                title: ["raw-response"],
+              },
+              confidence: 0.86,
+              publicEligibility: "public",
+              eventKind: "single",
+              scheduleKind: "single",
+            },
+          ],
+        }),
+      },
+    };
+
+    expect(rawModelResponseRecordToProviderResponse(rawRecord)).toBe(
+      rawRecord.rawResponse,
+    );
+
+    const result = await runRawModelResponseReplay({
+      env: replayEnv(),
+      articleSnapshot: {
+        ...fixtureArticle("qr-registration-poster"),
+        canonicalUrl: "https://mp.weixin.qq.com/s/raw",
+        finalUrl: "https://mp.weixin.qq.com/s/raw",
+        contentHash: "content-raw",
+      },
+      rawModelResponseRecord: rawRecord,
+      now: new Date("2026-06-08T08:00:00.000Z"),
+      runId: "raw-replay",
+    });
+
+    expect(result.kind).toBe("drafts");
+    expect(result.eventDrafts[0].payload).toMatchObject({
+      title: "Replay lecture",
+      startsAt: "2026-06-08T19:00:00+08:00",
+      publicEligibility: "public",
+    });
+    expect(result.rawModelResponse).toEqual(rawRecord);
   });
 });
 

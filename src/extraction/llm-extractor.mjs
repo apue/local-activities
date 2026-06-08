@@ -3,6 +3,11 @@
 import { createHash } from "node:crypto";
 
 import {
+  articleBundleToArticleSnapshot,
+  validateCapturedArticleBundle,
+} from "../capture/article-bundle.mjs";
+import { evidenceSetVersion } from "../collector/evidence/extractor.mjs";
+import {
   buildLlmUsageEnvelope as buildSharedLlmUsageEnvelope,
   readUsageEnvironment,
 } from "../../scripts/llm-usage-ledger.mjs";
@@ -10,6 +15,8 @@ import { readVisionModelPolicy } from "../../scripts/vision-model-policy.mjs";
 
 export const promptVersion = "event-extraction-2026-06-02";
 export const extractionSchemaVersion = "event-extraction-schema-v1";
+export const llmExtractionRequestVersion = "llm-extraction-request-v1";
+export const llmRawModelResponseVersion = "llm-raw-model-response-v1";
 
 const payloadVersion = "2026-05-collector-v1";
 const failureReasons = new Set([
@@ -120,6 +127,172 @@ export function buildExtractorPromptInput({
   };
 }
 
+export function buildLlmExtractionRequest({
+  bundle,
+  evidenceSet,
+  collectorId,
+  runId,
+}) {
+  validateCapturedArticleBundle(bundle);
+  validateEvidenceSetForBundle(evidenceSet, bundle);
+  const articleSnapshot = articleBundleToArticleSnapshot(bundle);
+  const evidenceAssets = Array.isArray(evidenceSet.evidenceAssets)
+    ? evidenceSet.evidenceAssets
+    : [];
+  const request = {
+    contractVersion: llmExtractionRequestVersion,
+    promptVersion,
+    schemaVersion: extractionSchemaVersion,
+    collector: {
+      collectorId: clean(collectorId),
+      runId: clean(runId),
+    },
+    capture: {
+      bundleVersion: bundle.version,
+      evidenceSetVersion: evidenceSet.version,
+      captureId: bundle.captureId,
+      sourceUrl: bundle.sourceUrl,
+      canonicalUrl: bundle.canonicalUrl,
+      contentHash: bundle.contentHash,
+    },
+    bundle,
+    evidenceSet,
+    articleSnapshot,
+    evidenceAssets,
+    promptInput: buildExtractorPromptInput({
+      articleSnapshot,
+      evidenceAssets,
+      collectorId,
+      runId,
+    }),
+  };
+  validateLlmExtractionRequest(request);
+  return request;
+}
+
+export function validateLlmExtractionRequest(request) {
+  if (request?.contractVersion !== llmExtractionRequestVersion) {
+    throw new Error("llm_extraction_request_version_invalid");
+  }
+  if (request.promptVersion !== promptVersion) {
+    throw new Error("llm_extraction_prompt_version_invalid");
+  }
+  if (request.schemaVersion !== extractionSchemaVersion) {
+    throw new Error("llm_extraction_schema_version_invalid");
+  }
+  if (!clean(request.collector?.collectorId)) {
+    throw new Error("llm_extraction_collector_id_required");
+  }
+  if (!clean(request.collector?.runId)) {
+    throw new Error("llm_extraction_run_id_required");
+  }
+  validateCapturedArticleBundle(request.bundle);
+  validateEvidenceSetForBundle(request.evidenceSet, request.bundle);
+  if (request.capture?.captureId !== request.bundle.captureId) {
+    throw new Error("llm_extraction_capture_id_mismatch");
+  }
+  if (request.capture?.contentHash !== request.bundle.contentHash) {
+    throw new Error("llm_extraction_content_hash_mismatch");
+  }
+  if (request.articleSnapshot?.canonicalUrl !== request.bundle.canonicalUrl) {
+    throw new Error("llm_extraction_article_snapshot_mismatch");
+  }
+  if (!Array.isArray(request.evidenceAssets)) {
+    throw new Error("llm_extraction_evidence_assets_invalid");
+  }
+  return true;
+}
+
+export function createMockLlmProviderAdapter({ rawResponse, latencyMs = 0 } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async generate(request) {
+      calls.push({ request });
+      return {
+        rawResponse,
+        latencyMs,
+      };
+    },
+  };
+}
+
+export async function runLlmExtractionFromBundle({
+  env = process.env,
+  bundle,
+  evidenceSet,
+  provider,
+  now = new Date(),
+  runId = createRunId(now),
+  fetchImpl = fetch,
+}) {
+  const config = readLlmExtractorConfig(env, { requireApiKey: false });
+  if (!config.ok) {
+    return failureResult({
+      collectorId: clean(env.COLLECTOR_ID) ?? "unknown-collector",
+      runId,
+      articleUrl: bundle?.canonicalUrl ?? bundle?.sourceUrl,
+      reason: "agent_config_missing",
+      message: `Missing LLM extractor env: ${config.missing.join(",")}`,
+      now,
+    });
+  }
+
+  const request = buildLlmExtractionRequest({
+    bundle,
+    evidenceSet,
+    collectorId: config.collectorId,
+    runId,
+  });
+  const observedAt = now.toISOString();
+  const adapter =
+    provider ??
+    createFetchLlmProviderAdapter({
+      config,
+      fetchImpl,
+      articleSnapshot: request.articleSnapshot,
+      evidenceAssets: request.evidenceAssets,
+      runId,
+    });
+  const providerResult = await adapter.generate(request);
+  const rawResponse = providerResult?.rawResponse ?? providerResult?.data;
+  const rawModelResponse = buildRawModelResponseRecord({
+    config,
+    request,
+    rawResponse,
+    latencyMs: providerResult?.latencyMs,
+  });
+  const parsed = await runLlmExtractionOnce({
+    env,
+    articleSnapshot: request.articleSnapshot,
+    evidenceAssets: request.evidenceAssets,
+    providerResponse: rawResponse,
+    now,
+    runId,
+    upload: false,
+  });
+  const parsedOk = parsed.kind !== "failed";
+  const llmUsage = [
+    buildLlmUsageEnvelope({
+      config,
+      articleSnapshot: request.articleSnapshot,
+      runId,
+      observedAt,
+      status: parsedOk ? "succeeded" : "failed",
+      providerResponse: rawResponse,
+      latencyMs: providerResult?.latencyMs,
+      failureReason: parsedOk ? undefined : "agent_response_invalid_schema",
+      attemptNumber: 1,
+    }),
+  ];
+
+  return {
+    ...parsed,
+    llmUsage,
+    rawModelResponse,
+  };
+}
+
 export async function runLlmExtractionOnce({
   env = process.env,
   articleSnapshot,
@@ -128,7 +301,6 @@ export async function runLlmExtractionOnce({
   now = new Date(),
   runId = createRunId(now),
   providerResponse,
-  upload = false,
 }) {
   const config = readLlmExtractorConfig(env, {
     requireApiKey: providerResponse === undefined,
@@ -207,7 +379,7 @@ export async function runLlmExtractionOnce({
     });
     result.evidenceAssets = [metadata];
     result.llmUsage = providerResult.llmUsage;
-    return maybeUploadExtractionResult(result, { config, fetchImpl, upload });
+    return result;
   }
 
   const eventDrafts = providerResult.data.events.map((event, index) =>
@@ -245,7 +417,7 @@ export async function runLlmExtractionOnce({
     );
   }
 
-  return maybeUploadExtractionResult(result, { config, fetchImpl, upload });
+  return result;
 }
 
 export function formatLlmExtractionSummary(result) {
@@ -301,6 +473,30 @@ async function requestProvider({
   return {
     data,
     latencyMs,
+  };
+}
+
+function createFetchLlmProviderAdapter({
+  config,
+  fetchImpl,
+  articleSnapshot,
+  evidenceAssets,
+  runId,
+}) {
+  return {
+    async generate() {
+      const raw = await requestProvider({
+        config,
+        articleSnapshot,
+        evidenceAssets,
+        fetchImpl,
+        runId,
+      });
+      return {
+        rawResponse: raw.data,
+        latencyMs: raw.latencyMs,
+      };
+    },
   };
 }
 
@@ -406,6 +602,11 @@ function buildLlmUsageEnvelope({
     statusCode,
     attemptNumber,
     usageSource: providerResponse?.usage ? "provider_usage" : "missing_usage",
+    maxOutputTokens: config.maxOutputTokens,
+    evalOnly: isEvalUsageEnvironment(config.usageEnvironment) ? true : undefined,
+    publishAllowed: isEvalUsageEnvironment(config.usageEnvironment)
+      ? false
+      : undefined,
   });
 
   return buildSharedLlmUsageEnvelope({
@@ -425,6 +626,50 @@ function buildLlmUsageEnvelope({
       String(attemptNumber ?? 1),
     ],
   });
+}
+
+function buildRawModelResponseRecord({
+  config,
+  request,
+  rawResponse,
+  latencyMs,
+}) {
+  return {
+    contractVersion: llmRawModelResponseVersion,
+    provider: config.provider,
+    model: config.openaiModel,
+    promptVersion,
+    schemaVersion: extractionSchemaVersion,
+    maxOutputTokens: config.maxOutputTokens,
+    request: {
+      contractVersion: request.contractVersion,
+      captureId: request.capture.captureId,
+      contentHash: request.capture.contentHash,
+      articleUrl: request.capture.canonicalUrl,
+      evidenceSummary: request.evidenceSet.summary,
+    },
+    rawResponse,
+    latencyMs,
+  };
+}
+
+function validateEvidenceSetForBundle(evidenceSet, bundle) {
+  if (evidenceSet?.version !== evidenceSetVersion) {
+    throw new Error("llm_extraction_evidence_set_version_invalid");
+  }
+  if (evidenceSet.captureId !== bundle.captureId) {
+    throw new Error("llm_extraction_evidence_capture_mismatch");
+  }
+  if (evidenceSet.contentHash !== bundle.contentHash) {
+    throw new Error("llm_extraction_evidence_content_hash_mismatch");
+  }
+  if (evidenceSet.canonicalUrl !== bundle.canonicalUrl) {
+    throw new Error("llm_extraction_evidence_article_mismatch");
+  }
+  if (!Array.isArray(evidenceSet.evidenceAssets)) {
+    throw new Error("llm_extraction_evidence_assets_invalid");
+  }
+  return true;
 }
 
 function providerRequest({ config, articleSnapshot, evidenceAssets, runId }) {
@@ -849,83 +1094,6 @@ function failureEnvelope({
   });
 }
 
-async function maybeUploadExtractionResult(result, { config, fetchImpl, upload }) {
-  if (!upload) return result;
-  if (!config.collectorBaseUrl || !config.collectorApiKey) {
-    throw new Error("collector_upload_config_missing");
-  }
-
-  const headers = {
-    authorization: `Bearer ${config.collectorApiKey}`,
-    "content-type": "application/json",
-    "x-collector-id": config.collectorId,
-  };
-  const uploadedEvidenceAssetIds = [];
-  for (const evidence of result.evidenceAssets ?? []) {
-    const response = await postJson({
-      baseUrl: config.collectorBaseUrl,
-      path: "/api/collector/evidence-asset",
-      headers,
-      fetchImpl,
-      body: evidence,
-    });
-    uploadedEvidenceAssetIds.push(response.id);
-  }
-  const uploadedEventDraftIds = [];
-  for (const draft of result.eventDrafts ?? []) {
-    const response = await postJson({
-      baseUrl: config.collectorBaseUrl,
-      path: "/api/collector/event-draft",
-      headers,
-      fetchImpl,
-      body: draft,
-    });
-    uploadedEventDraftIds.push(response.id);
-  }
-  const uploadedFailureIds = [];
-  for (const failure of result.failures ?? []) {
-    const response = await postJson({
-      baseUrl: config.collectorBaseUrl,
-      path: "/api/collector/failure",
-      headers,
-      fetchImpl,
-      body: failure,
-    });
-    uploadedFailureIds.push(response.id);
-  }
-  const uploadedLlmUsageIds = [];
-  for (const usageRecord of result.llmUsage ?? []) {
-    const response = await postJson({
-      baseUrl: config.collectorBaseUrl,
-      path: "/api/collector/llm-usage",
-      headers,
-      fetchImpl,
-      body: usageRecord,
-    });
-    uploadedLlmUsageIds.push(response.id);
-  }
-  return {
-    ...result,
-    uploadedEvidenceAssetIds,
-    uploadedEventDraftIds,
-    uploadedFailureIds,
-    uploadedLlmUsageIds,
-  };
-}
-
-async function postJson({ baseUrl, path, headers, fetchImpl, body }) {
-  const response = await fetchImpl(`${baseUrl}${path}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(`collector_upload_failed:${path}:${response.status}`);
-  }
-  return data;
-}
-
 function envelope({ collectorId, runId, observedAt, payload }) {
   return {
     collectorId,
@@ -1070,6 +1238,10 @@ function normalizeBaseUrl(value) {
 function normalizeOpenAIApiStyle(value) {
   if (value === "chat_completions") return "chat_completions";
   return "responses";
+}
+
+function isEvalUsageEnvironment(value) {
+  return String(value ?? "").trim().toLowerCase().startsWith("eval:");
 }
 
 function readPositiveInteger(value, fallback) {
