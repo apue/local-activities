@@ -8,11 +8,18 @@ import {
   llmUsageEventSchema,
 } from "../src/contracts/collector";
 import {
+  buildLlmExtractionRequest,
   buildExtractorPromptInput,
+  createMockLlmProviderAdapter,
   formatLlmExtractionSummary,
   readLlmExtractorConfig,
+  runLlmExtractionFromBundle,
   runLlmExtractionOnce,
+  validateLlmExtractionRequest,
 } from "../src/extraction/llm-extractor.mjs";
+import { createCapturedArticleBundle } from "../src/capture/article-bundle.mjs";
+import { extractEvidenceFromArticleBundle } from "../src/collector/evidence/extractor.mjs";
+import { computePublishDecision } from "../src/server/publish-policy";
 
 describe("lightweight LLM extractor", () => {
   it("reports missing provider configuration without leaking provided secrets", () => {
@@ -198,8 +205,8 @@ describe("lightweight LLM extractor", () => {
     expect(JSON.stringify(calls)).not.toContain("openai-secret");
   });
 
-  it("uploads provider usage records without raw prompt or response payloads", async () => {
-    const uploads = [];
+  it("returns provider usage records without raw prompt or response payloads", async () => {
+    const calls = [];
     const result = await runLlmExtractionOnce({
       env: {
         ...validEnv(),
@@ -210,6 +217,7 @@ describe("lightweight LLM extractor", () => {
       },
       articleSnapshot: textArticle(),
       fetchImpl: async (url, init) => {
+        calls.push({ url, body: init?.body ? JSON.parse(init.body) : undefined });
         if (url === "https://api.openai.com/v1/responses") {
           return jsonResponse(
             openaiResponse(activityResponse(), {
@@ -225,31 +233,26 @@ describe("lightweight LLM extractor", () => {
             }),
           );
         }
-        uploads.push({
-          url,
-          body: JSON.parse(init.body),
-        });
-        return jsonResponse({ ok: true, id: `upload-${uploads.length}` });
+        throw new Error("extractor_must_not_upload");
       },
       now: new Date("2026-06-02T08:00:00.000Z"),
       runId: "extract-usage",
-      upload: true,
     });
 
-    expect(result.uploadedLlmUsageIds).toEqual(["upload-3"]);
-    const usageUpload = uploads.find((entry) =>
-      entry.url.endsWith("/api/collector/llm-usage"),
-    );
+    expect(calls.map((entry) => entry.url)).toEqual([
+      "https://api.openai.com/v1/responses",
+    ]);
+    const usageEnvelope = result.llmUsage[0];
     const parsedUsageUpload = collectorEnvelopeSchema(
       llmUsageEventSchema,
-    ).safeParse(usageUpload?.body);
+    ).safeParse(usageEnvelope);
     expect(
       parsedUsageUpload.success,
       JSON.stringify(
         parsedUsageUpload.success ? [] : parsedUsageUpload.error.issues,
       ),
     ).toBe(true);
-    expect(usageUpload?.body.payload).toMatchObject({
+    expect(usageEnvelope.payload).toMatchObject({
       operation: "event_extraction",
       provider: "openai",
       model: "qwen3-vl-plus",
@@ -272,12 +275,13 @@ describe("lightweight LLM extractor", () => {
         workload: "event_extraction",
         articleUrl: "https://mp.weixin.qq.com/s/activity",
         attemptNumber: 1,
+        maxOutputTokens: 2400,
       },
     });
-    expect(usageUpload?.body.payload.usageId).toMatch(/^usage-/);
-    expect(JSON.stringify(usageUpload)).not.toContain("openai-secret");
-    expect(JSON.stringify(usageUpload)).not.toContain("collector-secret");
-    expect(JSON.stringify(usageUpload)).not.toContain("Weekend concert");
+    expect(usageEnvelope.payload.usageId).toMatch(/^usage-/);
+    expect(JSON.stringify(usageEnvelope)).not.toContain("openai-secret");
+    expect(JSON.stringify(usageEnvelope)).not.toContain("collector-secret");
+    expect(JSON.stringify(usageEnvelope)).not.toContain("Weekend concert");
   });
 
   it("normalizes string classifications from loose chat providers", async () => {
@@ -323,6 +327,263 @@ describe("lightweight LLM extractor", () => {
       "provider:fixture",
       "model:fixture-model",
     ]);
+  });
+
+  it("defines a validated extraction request over captured bundle plus evidence set", () => {
+    const bundle = capturedBundle();
+    const evidenceSet = extractEvidenceFromArticleBundle(bundle);
+    const request = buildLlmExtractionRequest({
+      bundle,
+      evidenceSet,
+      collectorId: "collector-1",
+      runId: "contract-run",
+    });
+
+    expect(validateLlmExtractionRequest(request)).toBe(true);
+    expect(request).toMatchObject({
+      contractVersion: "llm-extraction-request-v1",
+      promptVersion: "event-extraction-2026-06-02",
+      schemaVersion: "event-extraction-schema-v1",
+      capture: {
+        bundleVersion: "captured-article-bundle-v1",
+        evidenceSetVersion: "evidence-set-v1",
+        captureId: bundle.captureId,
+        contentHash: bundle.contentHash,
+      },
+      bundle,
+      evidenceSet,
+    });
+    expect(request.articleSnapshot.canonicalUrl).toBe(bundle.canonicalUrl);
+    expect(request.evidenceAssets.map((asset) => asset.assetId)).toEqual(
+      evidenceSet.evidenceAssets.map((asset) => asset.assetId),
+    );
+    expect(request.promptInput.sourceEvidence).toMatchObject({
+      registrationUrls: [
+        {
+          kind: "registration_url",
+          url: "https://mp.weixin.qq.com/s/activity",
+          text: "Register",
+          registrationLikely: true,
+        },
+      ],
+      miniProgramActions: [
+        {
+          kind: "mini_program_action",
+          appId: "wx123",
+          path: "/register",
+          text: "Reserve seat",
+          actionType: "registration",
+          registrationLikely: true,
+        },
+      ],
+    });
+  });
+
+  it("rejects extraction requests whose evidence set does not match the captured bundle", () => {
+    const bundle = capturedBundle();
+    const evidenceSet = {
+      ...extractEvidenceFromArticleBundle(bundle),
+      captureId: "other-capture",
+    };
+
+    expect(() =>
+      buildLlmExtractionRequest({
+        bundle,
+        evidenceSet,
+        collectorId: "collector-1",
+        runId: "bad-contract-run",
+      }),
+    ).toThrow("llm_extraction_evidence_capture_mismatch");
+  });
+
+  it("replays raw provider responses through a mockable adapter without live calls", async () => {
+    const bundle = capturedBundle();
+    const evidenceSet = extractEvidenceFromArticleBundle(bundle);
+    const provider = createMockLlmProviderAdapter({
+      rawResponse: openaiResponse(activityResponse(), {
+        input_tokens: 11,
+        output_tokens: 7,
+        total_tokens: 18,
+      }),
+      latencyMs: 12,
+    });
+
+    const result = await runLlmExtractionFromBundle({
+      env: {
+        COLLECTOR_ID: "collector-1",
+        AGENT_PROVIDER: "mock",
+        OPENAI_MODEL: "fixture-model",
+        LLM_EXTRACTOR_MAX_OUTPUT_TOKENS: "1234",
+      },
+      bundle,
+      evidenceSet,
+      provider,
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "adapter-replay",
+    });
+
+    expect(provider.calls).toHaveLength(1);
+    expect(provider.calls[0].request.bundle).toEqual(bundle);
+    expect(result.kind).toBe("drafts");
+    expect(result.rawModelResponse).toMatchObject({
+      contractVersion: "llm-raw-model-response-v1",
+      provider: "mock",
+      model: "fixture-model",
+      promptVersion: "event-extraction-2026-06-02",
+      schemaVersion: "event-extraction-schema-v1",
+      maxOutputTokens: 1234,
+      rawResponse: expect.objectContaining({ usage: expect.any(Object) }),
+    });
+    expect(result.llmUsage[0].payload.metadata).toMatchObject({
+      environment: "local",
+      maxOutputTokens: 1234,
+      usageSource: "provider_usage",
+    });
+  });
+
+  it("passes full source evidence into the live provider prompt", async () => {
+    const bundle = capturedBundle();
+    const evidenceSet = extractEvidenceFromArticleBundle(bundle);
+    const calls = [];
+
+    const result = await runLlmExtractionFromBundle({
+      env: validEnv(),
+      bundle,
+      evidenceSet,
+      fetchImpl: async (url, init) => {
+        calls.push({ url, body: JSON.parse(init.body) });
+        return jsonResponse(openaiResponse(activityResponse()));
+      },
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "live-bundle-prompt",
+    });
+
+    expect(result.kind).toBe("drafts");
+    expect(calls).toHaveLength(1);
+    const promptInput = JSON.parse(calls[0].body.input[1].content);
+    expect(promptInput.sourceEvidence).toMatchObject({
+      registrationUrls: [
+        {
+          url: "https://mp.weixin.qq.com/s/activity",
+          registrationLikely: true,
+        },
+      ],
+      miniProgramActions: [
+        {
+          appId: "wx123",
+          path: "/register",
+          actionType: "registration",
+        },
+      ],
+    });
+  });
+
+  it("validates mocked output before downstream publish policy can consume drafts", async () => {
+    const bundle = capturedBundle();
+    const evidenceSet = extractEvidenceFromArticleBundle(bundle);
+    const result = await runLlmExtractionFromBundle({
+      env: {
+        COLLECTOR_ID: "collector-1",
+        AGENT_PROVIDER: "mock",
+        OPENAI_MODEL: "fixture-model",
+      },
+      bundle,
+      evidenceSet,
+      provider: createMockLlmProviderAdapter({
+        rawResponse: activityResponse(),
+      }),
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "downstream-replay",
+    });
+
+    expect(() =>
+      collectorEnvelopeSchema(eventDraftUploadSchema).parse(result.eventDrafts[0]),
+    ).not.toThrow();
+
+    const payload = result.eventDrafts[0].payload;
+    const publishDecision = computePublishDecision({
+      id: "draft-1",
+      articleUrl: payload.articleUrl,
+      title: payload.title,
+      organizer: payload.organizer,
+      startsAt: payload.startsAt,
+      endsAt: payload.endsAt,
+      timezone: payload.timezone,
+      city: payload.city,
+      venueName: payload.venueName,
+      venueAddress: payload.venueAddress,
+      reservationStatus: payload.reservationStatus,
+      registrationAction: payload.registrationAction,
+      registrationUrl: payload.registrationUrl,
+      registrationQrAssetId: payload.registrationQrAssetId,
+      summary: payload.summary,
+      confidence: payload.confidence,
+      reviewState: "ready_for_review",
+      evidenceAssetIds: payload.evidenceAssetIds,
+      fieldEvidence: payload.fieldEvidence,
+      publicEligibility: payload.publicEligibility,
+      scheduleKind: payload.scheduleKind,
+      resolutionDecision: payload.resolutionDecision ?? "new_event",
+      hardBlockers: payload.hardBlockers,
+      softBlockers: payload.softBlockers,
+    });
+    expect(publishDecision.canPublish).toBe(true);
+  });
+
+  it("keeps eval usage labelled and does not upload from eval bundle extraction", async () => {
+    const bundle = capturedBundle();
+    const evidenceSet = extractEvidenceFromArticleBundle(bundle);
+    const result = await runLlmExtractionFromBundle({
+      env: {
+        COLLECTOR_ID: "collector-1",
+        AGENT_PROVIDER: "mock",
+        OPENAI_MODEL: "fixture-model",
+        USAGE_ENVIRONMENT: "eval:model benchmark",
+        COLLECTOR_BASE_URL: "https://local-activities.example",
+        COLLECTOR_API_KEY: "collector-secret",
+      },
+      bundle,
+      evidenceSet,
+      provider: createMockLlmProviderAdapter({
+        rawResponse: activityResponse(),
+      }),
+      fetchImpl: async () => {
+        throw new Error("extractor_must_not_upload");
+      },
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "eval-replay",
+    });
+
+    expect(result.kind).toBe("drafts");
+    expect(result.uploadedEventDraftIds).toBeUndefined();
+    expect(result.llmUsage[0].payload.metadata).toMatchObject({
+      environment: "eval:model_benchmark",
+      evalOnly: true,
+      publishAllowed: false,
+    });
+  });
+
+  it("rejects upload attempts at the extractor boundary", async () => {
+    await expect(
+      runLlmExtractionOnce({
+        env: validEnv(),
+        articleSnapshot: textArticle(),
+        providerResponse: activityResponse(),
+        upload: true,
+      }),
+    ).rejects.toThrow("llm_extractor_upload_removed_use_collector_upload_client");
+
+    await expect(
+      runLlmExtractionFromBundle({
+        env: validEnv(),
+        bundle: capturedBundle(),
+        evidenceSet: extractEvidenceFromArticleBundle(capturedBundle()),
+        provider: createMockLlmProviderAdapter({
+          rawResponse: activityResponse(),
+        }),
+        upload: true,
+      }),
+    ).rejects.toThrow("llm_extractor_upload_removed_use_collector_upload_client");
   });
 
   it("creates article-unique metadata evidence ids within the same run", async () => {
@@ -684,6 +945,67 @@ function textArticle() {
     evidenceAssetIds: [],
     contentHash: "article-hash",
   };
+}
+
+function capturedBundle() {
+  return createCapturedArticleBundle({
+    captureId: "capture-activity",
+    sourceId: "source-1",
+    sourceName: "Embassy Cultural Office",
+    provider: "fixture",
+    sourceUrl: "https://mp.weixin.qq.com/s/activity",
+    canonicalUrl: "https://mp.weixin.qq.com/s/activity",
+    finalUrl: "https://mp.weixin.qq.com/s/activity",
+    title: "Weekend concert",
+    authorName: "Embassy Cultural Office",
+    publishedAt: "2026-06-01T04:00:00.000Z",
+    capturedAt: "2026-06-02T08:00:00.000Z",
+    languageHints: ["en", "zh"],
+    captureMode: "image_with_qr_registration",
+    text:
+      "Weekend concert, June 6 14:00-16:00, Beijing Culture Center. Registration required.",
+    images: [
+      {
+        id: "poster",
+        role: "poster",
+        sourceUrl: "https://mmbiz.qpic.cn/poster.jpg",
+        storagePath: "https://blob.example.com/posters/poster.jpg",
+        width: 900,
+        height: 1200,
+        contentHash: "poster-hash",
+        textContent: "Weekend concert poster",
+        extractedBy: "vision",
+        confidence: 0.82,
+      },
+      {
+        id: "qr",
+        role: "registration",
+        sourceUrl: "https://mmbiz.qpic.cn/qr.jpg",
+        width: 500,
+        height: 500,
+        contentHash: "qr-hash",
+        textContent: "Scan to register",
+        extractedBy: "vision",
+        confidence: 0.8,
+      },
+    ],
+    links: [
+      {
+        url: "https://mp.weixin.qq.com/s/activity",
+        text: "Register",
+        role: "registration",
+      },
+    ],
+    miniPrograms: [
+      {
+        appId: "wx123",
+        path: "/register",
+        text: "Reserve seat",
+        actionType: "registration",
+      },
+    ],
+    contentHash: "article-hash",
+  });
 }
 
 function posterEvidence() {

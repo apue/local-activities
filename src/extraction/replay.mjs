@@ -19,6 +19,41 @@ export async function runRecordedExtractionReplay({
   });
 }
 
+export async function runRawModelResponseReplay({
+  env,
+  articleSnapshot,
+  evidenceAssets = [],
+  rawModelResponseRecord,
+  now,
+  runId,
+}) {
+  const result = await runLlmExtractionOnce({
+    env,
+    articleSnapshot,
+    evidenceAssets,
+    providerResponse: rawModelResponseRecordToProviderResponse(
+      rawModelResponseRecord,
+    ),
+    now,
+    runId,
+    upload: false,
+  });
+  return {
+    ...result,
+    rawModelResponse: rawModelResponseRecord,
+  };
+}
+
+export function rawModelResponseRecordToProviderResponse(record) {
+  if (record?.contractVersion !== "llm-raw-model-response-v1") {
+    throw new Error("raw_model_response_record_version_invalid");
+  }
+  if (!record.rawResponse || typeof record.rawResponse !== "object") {
+    throw new Error("raw_model_response_record_response_invalid");
+  }
+  return record.rawResponse;
+}
+
 export function recordedExtractionToProviderResponse(recordedResponse) {
   const events = Array.isArray(recordedResponse?.events)
     ? recordedResponse.events

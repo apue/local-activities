@@ -356,6 +356,7 @@ export type LlmUsageEventUpload = z.infer<typeof llmUsageEventSchema>;
 
 function isSensitiveLlmUsageMetadataKey(key: string) {
   const normalized = key.toLowerCase();
+  if (normalized === "maxoutputtokens") return false;
   return [
     "prompt",
     "response",
