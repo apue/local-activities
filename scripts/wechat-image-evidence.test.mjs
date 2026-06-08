@@ -60,6 +60,17 @@ describe("WeChat image evidence helpers", () => {
     ).toBe("article_image");
   });
 
+  it("does not classify QR from random URL substrings alone", () => {
+    expect(
+      classifyImageCandidate({
+        url: "https://mmbiz.qpic.cn/random-qr-token-photo.jpg",
+        alt: "Embassy article photo",
+        width: 640,
+        height: 360,
+      }),
+    ).toBe("article_image");
+  });
+
   it("builds evidence asset envelopes accepted by collector contracts", () => {
     const envelopes = buildImageEvidenceAssetEnvelopes({
       collectorId: "collector-1",

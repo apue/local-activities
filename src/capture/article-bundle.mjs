@@ -255,6 +255,7 @@ export function articleBundleToEvidenceAssets(bundle) {
             image.path ?? "",
           ].join("\n"),
         ),
+      textContent: clean(image.textContent) ?? clean(image.alt),
       extractedBy: image.extractedBy ?? "dom",
       confidence: boundedNumber(image.confidence),
     }),
@@ -272,6 +273,8 @@ function normalizeBundleImage(image, index) {
     height: positiveInteger(image.height),
     contentHash: clean(image.contentHash),
     assetId: clean(image.assetId),
+    alt: clean(image.alt),
+    textContent: clean(image.textContent),
     extractedBy: image.extractedBy,
     confidence: boundedNumber(image.confidence),
   });
