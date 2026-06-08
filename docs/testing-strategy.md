@@ -71,11 +71,22 @@ providers, hosted Supabase, or production write paths.
 
 ## Evaluation
 
-Evaluation tests compare extractor variants:
+Evaluation tests compare extractor variants through the reusable evaluation
+runner:
 
 ```text
 provider + model + promptVersion + schemaVersion + parameters
 ```
+
+CI-safe validation uses mocked variants and memory storage:
+
+```bash
+pnpm eval:run -- --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
+```
+
+Local artifact runs write to `tmp/evaluation-runs` by default. Hosted writes are
+explicit with `--store supabase` and are limited to `evaluation_runs`,
+`evaluation_case_results`, `llm_usage_ledger`, and the `eval-artifacts` bucket.
 
 Expected checks:
 
@@ -85,7 +96,9 @@ Expected checks:
 - usage/cost aggregation tests
 - optional live model comparison with budget guard
 
-Evaluation must never write production drafts or canonical events.
+Evaluation must never write production drafts or canonical events. The default
+evaluation path must not call live LLM providers; live variants require
+`--variant live-configured --allow-live --max-cost-cny <n>`.
 
 ## Admin/Public UI
 

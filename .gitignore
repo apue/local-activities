@@ -6,6 +6,7 @@ node_modules/
 out/
 dist/
 coverage/
+tmp/
 *.tsbuildinfo
 
 # env
