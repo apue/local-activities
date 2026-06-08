@@ -12,6 +12,8 @@ import {
 import {
   articleBundleToArticleSnapshot,
   articleBundleToExtractionInput,
+  createCaptureFailureResult,
+  createCaptureSuccessResult,
 } from "../src/capture/article-bundle.mjs";
 import { storeImageEvidenceAssets } from "../src/collector/evidence/wechat-images.mjs";
 import { createUrlBrowserArticleBundle } from "../src/capture/source-adapters.mjs";
@@ -26,6 +28,7 @@ export function parseWechatUrlExtractionArgs(argv) {
     envFile: undefined,
     upload: false,
     session: "wechat-url-extract",
+    keepOpen: false,
     help: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -35,6 +38,7 @@ export function parseWechatUrlExtractionArgs(argv) {
     else if (arg === "--env-file") args.envFile = argv[(index += 1)];
     else if (arg === "--upload") args.upload = true;
     else if (arg === "--session") args.session = argv[(index += 1)];
+    else if (arg === "--keep-open") args.keepOpen = true;
     else throw new Error(`unknown_arg:${arg}`);
   }
   return args;
@@ -52,9 +56,17 @@ export function buildWechatArticleBundleFromText({ url, text, now = new Date() }
 
 export function buildWechatArticleBundleFromPage({
   url,
+  canonicalUrl,
   finalUrl,
   text,
   html,
+  title,
+  authorName,
+  publishedAt,
+  links,
+  miniPrograms,
+  diagnostics,
+  captureWarnings,
   now = new Date(),
 }) {
   const visibleText = cleanText(text).slice(0, maxVisibleTextLength);
@@ -62,19 +74,25 @@ export function buildWechatArticleBundleFromPage({
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  const title = lines[0] ?? "Untitled WeChat article";
-  const authorName = inferAuthorName(lines, title);
-  const publishedAt = inferPublishedAt(lines);
+  const inferredTitle = clean(title) ?? lines[0] ?? "Untitled WeChat article";
+  const inferredAuthorName =
+    clean(authorName) ?? inferAuthorName(lines, inferredTitle);
+  const inferredPublishedAt = clean(publishedAt) ?? inferPublishedAt(lines);
   return createUrlBrowserArticleBundle({
     sourceUrl: url,
+    canonicalUrl,
     finalUrl: finalUrl ?? url,
-    title,
-    authorName,
-    publishedAt,
+    title: inferredTitle,
+    authorName: inferredAuthorName,
+    publishedAt: inferredPublishedAt,
     capturedAt: now.toISOString(),
     languageHints: inferLanguageHints(visibleText),
     text: visibleText,
     html,
+    links,
+    miniPrograms,
+    diagnostics,
+    captureWarnings,
   });
 }
 
@@ -83,6 +101,7 @@ export async function runWechatUrlExtractionOnce({
   url,
   upload = false,
   session = "wechat-url-extract",
+  keepOpen = false,
   now = new Date(),
   fetchImpl = fetch,
   readArticlePage = readWechatArticlePageWithAgentBrowser,
@@ -93,9 +112,29 @@ export async function runWechatUrlExtractionOnce({
 }) {
   if (!url) throw new Error("missing_url");
   const runId = `wechat-url-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}`;
-  const page = readArticleText
-    ? { text: await readArticleText({ url, session }) }
-    : await readArticlePage({ url, session });
+  let page;
+  try {
+    page = readArticleText
+      ? { text: await readArticleText({ url, session, keepOpen }) }
+      : await readArticlePage({ url, session, keepOpen });
+  } catch (error) {
+    const captureResult = createCaptureFailureResult({
+      stage: error?.stage ?? "page_fetch",
+      reason: error?.reason ?? mapCaptureErrorToFailureReason(error),
+      message: error instanceof Error ? error.message : String(error),
+      retryable: error?.retryable ?? true,
+      sourceUrl: url,
+      diagnostics: error?.diagnostics ?? [],
+    });
+    const extraction = captureFailureExtractionResult({
+      env,
+      url,
+      runId,
+      now,
+      failure: captureResult.failure,
+    });
+    return failedCaptureRunResult({ url, runId, extraction, captureResult });
+  }
   const captureFailure = detectWechatArticleCaptureFailure({
     url,
     finalUrl: page.finalUrl,
@@ -110,23 +149,46 @@ export async function runWechatUrlExtractionOnce({
       now,
       failure: captureFailure,
     });
-    return {
-      url,
-      runId,
-      articleTitle: undefined,
-      articleBundle: undefined,
-      articleSnapshot: undefined,
-      extraction,
-      draftSummaries: [],
-      failureSummaries: extraction.failures.map((failure) => failure.payload),
-    };
+    const captureResult = createCaptureFailureResult({
+      stage: "page_fetch",
+      reason: captureFailure.reason,
+      message: captureFailure.message,
+      retryable: true,
+      sourceUrl: url,
+      diagnostics: [
+        {
+          key: "capture_failure_marker",
+          value: captureFailure.marker,
+        },
+        captureFailure.finalUrl
+          ? {
+              key: "final_url",
+              value: captureFailure.finalUrl,
+            }
+          : undefined,
+      ].filter(Boolean),
+    });
+    return failedCaptureRunResult({ url, runId, extraction, captureResult });
   }
   const articleBundle = buildWechatArticleBundleFromPage({
     url,
+    canonicalUrl: page.canonicalUrl,
     finalUrl: page.finalUrl,
     text: page.text,
     html: page.html,
+    title: page.title,
+    authorName: page.authorName,
+    publishedAt: page.publishedAt,
+    links: page.links,
+    miniPrograms: page.miniPrograms,
+    diagnostics: page.diagnostics,
+    captureWarnings: page.captureWarnings,
     now,
+  });
+  const captureResult = createCaptureSuccessResult({
+    bundle: articleBundle,
+    diagnostics: page.diagnostics ?? [],
+    captureWarnings: page.captureWarnings ?? [],
   });
   const extractionInput = articleBundleToExtractionInput(articleBundle);
   const shouldStoreImages =
@@ -157,6 +219,7 @@ export async function runWechatUrlExtractionOnce({
     runId,
     articleTitle: articleSnapshot.title,
     articleBundle,
+    captureResult,
     articleSnapshot,
     extraction,
     draftSummaries: summarizeDrafts(extraction.eventDrafts ?? []),
@@ -206,25 +269,50 @@ export function formatWechatUrlExtractionSummary(result) {
   ].join(" ");
 }
 
-export async function readWechatArticleTextWithAgentBrowser({ url, session }) {
-  return (await readWechatArticlePageWithAgentBrowser({ url, session })).text;
+export async function readWechatArticleTextWithAgentBrowser({
+  url,
+  session,
+  keepOpen = false,
+}) {
+  return (await readWechatArticlePageWithAgentBrowser({ url, session, keepOpen }))
+    .text;
 }
 
-export async function readWechatArticlePageWithAgentBrowser({ url, session }) {
-  await execAgentBrowser(["--session", session, "open", url]);
-  await execAgentBrowser(["--session", session, "wait", "--load", "networkidle"]);
-  const [text, html, finalUrl] = await Promise.all([
-    execAgentBrowser(["--session", session, "get", "text", "body"]),
-    execAgentBrowser(["--session", session, "get", "html", "body"]).catch(
-      () => undefined,
-    ),
-    execAgentBrowser(["--session", session, "get", "url"]).catch(() => url),
-  ]);
-  return {
-    text,
-    html,
-    finalUrl,
-  };
+export async function readWechatArticlePageWithAgentBrowser({
+  url,
+  session,
+  keepOpen = false,
+  execAgentBrowser: run = execAgentBrowser,
+}) {
+  try {
+    await run(["--session", session, "open", url]);
+    await run(["--session", session, "wait", "--load", "networkidle"]);
+    const extracted = await run([
+      "--session",
+      session,
+      "eval",
+      pageExtractionScript(),
+      "--json",
+    ]);
+    const raw = extracted?.data?.result ?? extracted?.result ?? extracted ?? {};
+    return normalizeDomPageCapture(raw, { url });
+  } catch (error) {
+    throw Object.assign(
+      new Error(
+        `agent_browser_failed:${error instanceof Error ? error.message : String(error)}`,
+      ),
+      {
+        reason: error?.reason ?? mapCaptureErrorToFailureReason(error),
+        stage: error?.stage ?? "page_fetch",
+        retryable: error?.retryable ?? true,
+        diagnostics: error?.diagnostics ?? [],
+      },
+    );
+  } finally {
+    if (!keepOpen) {
+      await run(["--session", session, "close"]).catch(() => undefined);
+    }
+  }
 }
 
 async function execAgentBrowser(args) {
@@ -232,7 +320,138 @@ async function execAgentBrowser(args) {
     encoding: "utf8",
     maxBuffer: 2_000_000,
   });
-  return stdout.trim();
+  const trimmed = stdout.trim();
+  if (args.includes("--json")) {
+    return trimmed ? JSON.parse(trimmed) : {};
+  }
+  return trimmed;
+}
+
+function normalizeDomPageCapture(raw, { url }) {
+  const page = raw && typeof raw === "object" ? raw : {};
+  return {
+    finalUrl: clean(page.finalUrl) ?? url,
+    canonicalUrl: clean(page.canonicalUrl),
+    title: clean(page.title),
+    authorName: clean(page.authorName),
+    publishedAt: clean(page.publishedAt),
+    text: cleanText(page.text),
+    html: page.html == null ? undefined : String(page.html),
+    links: Array.isArray(page.links) ? page.links : [],
+    miniPrograms: Array.isArray(page.miniPrograms) ? page.miniPrograms : [],
+    diagnostics: uniqueDiagnostics([
+      { key: "dom_eval", value: "ok" },
+      ...(Array.isArray(page.diagnostics) ? page.diagnostics : []),
+    ]),
+    captureWarnings: Array.isArray(page.captureWarnings)
+      ? page.captureWarnings
+      : [],
+  };
+}
+
+function pageExtractionScript() {
+  return `(() => {
+  const textOf = (selector) => document.querySelector(selector)?.textContent?.trim() || "";
+  const attr = (selector, name) => document.querySelector(selector)?.getAttribute(name)?.trim() || "";
+  const meta = (name) =>
+    document.querySelector(\`meta[property="\${name}"]\`)?.getAttribute("content")?.trim() ||
+    document.querySelector(\`meta[name="\${name}"]\`)?.getAttribute("content")?.trim() ||
+    "";
+  const normalizeUrl = (value) => {
+    if (!value) return "";
+    try {
+      return new URL(value, location.href).toString();
+    } catch {
+      return "";
+    }
+  };
+  const links = Array.from(document.querySelectorAll("a[href]"))
+    .map((node) => ({
+      url: normalizeUrl(node.getAttribute("href")),
+      text: node.textContent?.trim() || node.getAttribute("aria-label") || "",
+      role: /报名|预约|注册|register|sign\\s*up|rsvp/i.test(
+        [node.textContent, node.getAttribute("href")].filter(Boolean).join(" "),
+      )
+        ? "registration"
+        : "article_link",
+    }))
+    .filter((link) => link.url);
+  const miniPrograms = Array.from(
+    document.querySelectorAll("[data-miniprogram-appid], [data-weapp-appid], [data-appid], weapp, mp-miniprogram"),
+  )
+    .map((node) => ({
+      appId:
+        node.getAttribute("data-miniprogram-appid") ||
+        node.getAttribute("data-weapp-appid") ||
+        node.getAttribute("data-appid") ||
+        node.getAttribute("appid") ||
+        "",
+      path:
+        node.getAttribute("data-miniprogram-path") ||
+        node.getAttribute("data-weapp-path") ||
+        node.getAttribute("data-path") ||
+        node.getAttribute("path") ||
+        "",
+      text: node.textContent?.trim() || node.getAttribute("aria-label") || "",
+      actionType: /报名|预约|注册|register|sign\\s*up|rsvp/i.test(
+        [node.textContent, node.getAttribute("data-miniprogram-path"), node.getAttribute("data-weapp-path")]
+          .filter(Boolean)
+          .join(" "),
+      )
+        ? "registration"
+        : "mini_program",
+      source: "dom",
+    }))
+    .filter((entry) => entry.appId || entry.path || entry.text);
+  return {
+    finalUrl: location.href,
+    canonicalUrl: attr('link[rel="canonical"]', "href") || meta("og:url") || location.href,
+    title: meta("og:title") || textOf("#activity-name") || document.title,
+    authorName: meta("author") || textOf("#js_name"),
+    publishedAt: meta("article:published_time") || textOf("#publish_time"),
+    text: document.body?.innerText || "",
+    html: document.body?.outerHTML || document.documentElement?.outerHTML || "",
+    links,
+    miniPrograms,
+  };
+})()`;
+}
+
+function uniqueDiagnostics(entries) {
+  const seen = new Set();
+  return entries.filter((entry) => {
+    const key = `${entry?.key ?? ""}\u001f${entry?.value ?? ""}`;
+    if (!entry?.key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function failedCaptureRunResult({ url, runId, extraction, captureResult }) {
+  return {
+    url,
+    runId,
+    articleTitle: undefined,
+    articleBundle: undefined,
+    captureResult,
+    articleSnapshot: undefined,
+    extraction,
+    draftSummaries: [],
+    failureSummaries: extraction.failures.map((failure) => failure.payload),
+  };
+}
+
+function mapCaptureErrorToFailureReason(error) {
+  const message = String(error?.message ?? error ?? "").toLowerCase();
+  if (message.includes("captcha") || message.includes("verify")) {
+    return "captcha_required";
+  }
+  if (message.includes("login") || message.includes("401") || message.includes("403")) {
+    return "login_required";
+  }
+  if (message.includes("404") || message.includes("not_found")) return "not_found";
+  if (message.includes("blocked") || message.includes("429")) return "fetch_blocked";
+  return "browser_error";
 }
 
 function inferAuthorName(lines, title) {
@@ -309,19 +528,24 @@ function captureFailureExtractionResult({ env, url, runId, now, failure }) {
           stage: "page_fetch",
           reason: failure.reason,
           message: failure.message,
-          retryable: true,
-          diagnostics: [
-            {
-              key: "capture_failure_marker",
-              value: failure.marker,
-            },
-            failure.finalUrl
-              ? {
-                  key: "final_url",
-                  value: failure.finalUrl,
-                }
-              : undefined,
-          ].filter(Boolean),
+          retryable: failure.retryable ?? true,
+          diagnostics:
+            failure.diagnostics?.length
+              ? failure.diagnostics
+              : [
+                  failure.marker
+                    ? {
+                        key: "capture_failure_marker",
+                        value: failure.marker,
+                      }
+                    : undefined,
+                  failure.finalUrl
+                    ? {
+                        key: "final_url",
+                        value: failure.finalUrl,
+                      }
+                    : undefined,
+                ].filter(Boolean),
         }),
       },
     ],
@@ -353,10 +577,11 @@ function clean(value) {
 }
 
 function usage() {
-  return `Usage: pnpm extractor:wechat-url --url <mp.weixin.qq.com/s/...> [--env-file .env.collector] [--upload] [--session name]
+  return `Usage: pnpm extractor:wechat-url --url <mp.weixin.qq.com/s/...> [--env-file .env.collector] [--upload] [--session name] [--keep-open]
 
 Runs one WeChat article URL through agent-browser text capture and the lightweight LLM extractor.
 Default behavior is dry-run and does not upload collector payloads.
+Default behavior closes the agent-browser session opened for capture. Use --keep-open only for operator debugging.
 
 Required env:
   COLLECTOR_ID
@@ -378,6 +603,7 @@ async function main() {
     url: args.url,
     upload: args.upload,
     session: args.session,
+    keepOpen: args.keepOpen,
   });
   console.log(formatWechatUrlExtractionSummary(result));
   console.log(

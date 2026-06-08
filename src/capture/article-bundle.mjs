@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
 
 export const capturedArticleBundleVersion = "captured-article-bundle-v1";
+export const captureResultVersion = "capture-result-v1";
+export const captureFailureReasons = new Set([
+  "login_required",
+  "captcha_required",
+  "fetch_blocked",
+  "not_found",
+  "browser_error",
+  "source_unhealthy",
+]);
 
 export function createCapturedArticleBundle({
   captureId,
@@ -8,6 +17,7 @@ export function createCapturedArticleBundle({
   sourceName,
   provider,
   sourceUrl,
+  canonicalUrl,
   finalUrl,
   title,
   authorName,
@@ -18,28 +28,65 @@ export function createCapturedArticleBundle({
   text = "",
   html,
   images = [],
+  links = [],
+  miniPrograms = [],
   diagnostics = [],
+  captureWarnings = [],
+  contentHash,
 }) {
+  const requiredSourceUrl = requireUrl(sourceUrl, "sourceUrl");
+  const requiredFinalUrl = requireUrl(finalUrl ?? sourceUrl, "finalUrl");
+  const normalizedCanonicalUrl = canonicalUrl
+    ? requireUrl(canonicalUrl, "canonicalUrl")
+    : requiredSourceUrl;
+  const normalizedText = String(text ?? "");
+  const normalizedHtml = html == null ? undefined : String(html);
+  const normalizedImages = images.map(normalizeBundleImage);
+  const normalizedLinks = links
+    .map((link) => normalizeBundleLink(link, normalizedCanonicalUrl))
+    .filter(Boolean);
+  const normalizedMiniPrograms = miniPrograms
+    .map(normalizeMiniProgram)
+    .filter(Boolean);
   const bundle = removeUndefined({
     version: capturedArticleBundleVersion,
     captureId:
       clean(captureId) ??
-      createStableId("capture", [sourceUrl, finalUrl, capturedAt, text]),
+      createStableId("capture", [requiredSourceUrl, requiredFinalUrl, capturedAt, normalizedText]),
     sourceId: clean(sourceId),
     sourceName: clean(sourceName),
     provider: clean(provider) ?? "unknown",
-    sourceUrl: requireUrl(sourceUrl, "sourceUrl"),
-    finalUrl: requireUrl(finalUrl ?? sourceUrl, "finalUrl"),
+    sourceUrl: requiredSourceUrl,
+    canonicalUrl: normalizedCanonicalUrl,
+    finalUrl: requiredFinalUrl,
     title: clean(title),
     authorName: clean(authorName),
     publishedAt: clean(publishedAt),
     capturedAt,
     languageHints: uniqueStrings(languageHints),
     captureMode,
-    text: String(text ?? ""),
-    html: html == null ? undefined : String(html),
-    images: images.map(normalizeBundleImage),
+    text: normalizedText,
+    html: normalizedHtml,
+    images: normalizedImages,
+    links: normalizedLinks,
+    miniPrograms: normalizedMiniPrograms,
+    contentHash:
+      clean(contentHash) ??
+      hashBundleContent({
+        sourceUrl: requiredSourceUrl,
+        canonicalUrl: normalizedCanonicalUrl,
+        finalUrl: requiredFinalUrl,
+        title,
+        authorName,
+        publishedAt,
+        text: normalizedText,
+        html: normalizedHtml,
+        images: normalizedImages,
+        links: normalizedLinks,
+        miniPrograms: normalizedMiniPrograms,
+      }),
     diagnostics,
+    captureWarnings: captureWarnings.map(normalizeCaptureWarning).filter(Boolean),
   });
   validateCapturedArticleBundle(bundle);
   return bundle;
@@ -52,6 +99,7 @@ export function validateCapturedArticleBundle(bundle) {
   if (!clean(bundle.captureId)) throw new Error("captured_bundle_id_required");
   if (!clean(bundle.provider)) throw new Error("captured_bundle_provider_required");
   requireUrl(bundle.sourceUrl, "sourceUrl");
+  requireUrl(bundle.canonicalUrl ?? bundle.sourceUrl, "canonicalUrl");
   requireUrl(bundle.finalUrl, "finalUrl");
   if (!clean(bundle.capturedAt)) throw new Error("captured_bundle_captured_at_required");
   if (!String(bundle.text ?? "").trim()) {
@@ -66,6 +114,88 @@ export function validateCapturedArticleBundle(bundle) {
     if (!clean(image.path) && !clean(image.sourceUrl) && !clean(image.storagePath)) {
       throw new Error("captured_bundle_image_location_required");
     }
+  }
+  if (!Array.isArray(bundle.links)) throw new Error("captured_bundle_links_invalid");
+  for (const link of bundle.links) {
+    requireUrl(link.url, "linkUrl");
+  }
+  if (!Array.isArray(bundle.miniPrograms)) {
+    throw new Error("captured_bundle_mini_programs_invalid");
+  }
+  if (!Array.isArray(bundle.diagnostics)) {
+    throw new Error("captured_bundle_diagnostics_invalid");
+  }
+  if (!Array.isArray(bundle.captureWarnings)) {
+    throw new Error("captured_bundle_capture_warnings_invalid");
+  }
+  if (!clean(bundle.contentHash)) throw new Error("captured_bundle_content_hash_required");
+  return true;
+}
+
+export function createCaptureSuccessResult({
+  bundle,
+  diagnostics = [],
+  captureWarnings = [],
+}) {
+  validateCapturedArticleBundle(bundle);
+  const result = removeUndefined({
+    version: captureResultVersion,
+    ok: true,
+    bundle,
+    diagnostics,
+    captureWarnings: captureWarnings.map(normalizeCaptureWarning).filter(Boolean),
+  });
+  validateCaptureResult(result);
+  return result;
+}
+
+export function createCaptureFailureResult({
+  stage = "page_fetch",
+  reason,
+  message,
+  retryable = true,
+  sourceUrl,
+  diagnostics = [],
+}) {
+  const result = {
+    version: captureResultVersion,
+    ok: false,
+    failure: removeUndefined({
+      stage: clean(stage) ?? "page_fetch",
+      reason: normalizeFailureReason(reason),
+      message: clean(message) ?? "Capture failed.",
+      retryable: Boolean(retryable),
+      sourceUrl: sourceUrl ? requireUrl(sourceUrl, "sourceUrl") : undefined,
+      diagnostics,
+    }),
+  };
+  validateCaptureResult(result);
+  return result;
+}
+
+export function validateCaptureResult(result) {
+  if (result?.version !== captureResultVersion) {
+    throw new Error("capture_result_version_invalid");
+  }
+  if (result.ok === true) {
+    validateCapturedArticleBundle(result.bundle);
+    if (!Array.isArray(result.diagnostics)) {
+      throw new Error("capture_result_diagnostics_invalid");
+    }
+    return true;
+  }
+  if (result.ok !== false) throw new Error("capture_result_ok_invalid");
+  const failure = result.failure;
+  if (!clean(failure?.stage)) throw new Error("capture_result_failure_stage_required");
+  if (!captureFailureReasons.has(failure?.reason)) {
+    throw new Error("capture_result_failure_reason_invalid");
+  }
+  if (!clean(failure?.message)) {
+    throw new Error("capture_result_failure_message_required");
+  }
+  if (failure.sourceUrl) requireUrl(failure.sourceUrl, "sourceUrl");
+  if (!Array.isArray(failure.diagnostics)) {
+    throw new Error("capture_result_failure_diagnostics_invalid");
   }
   return true;
 }
@@ -87,7 +217,7 @@ export function articleBundleToArticleSnapshot(bundle) {
   return removeUndefined({
     sourceId: bundle.sourceId,
     sourceName: bundle.sourceName,
-    canonicalUrl: bundle.sourceUrl,
+    canonicalUrl: bundle.canonicalUrl ?? bundle.sourceUrl,
     finalUrl: bundle.finalUrl,
     title: bundle.title,
     authorName: bundle.authorName,
@@ -98,21 +228,7 @@ export function articleBundleToArticleSnapshot(bundle) {
     visibleText: text,
     textHash: hashText(text),
     evidenceAssetIds: imageEvidenceAssetIds,
-    contentHash: hashText(
-      JSON.stringify({
-        sourceUrl: bundle.sourceUrl,
-        text,
-    images: bundle.images.map((image) => ({
-      id: image.id,
-      assetId: image.assetId,
-      role: image.role,
-      contentHash: image.contentHash,
-      sourceUrl: image.sourceUrl,
-      storagePath: image.storagePath,
-      path: image.path,
-    })),
-  }),
-    ),
+    contentHash: bundle.contentHash,
   });
 }
 
@@ -161,6 +277,50 @@ function normalizeBundleImage(image, index) {
   });
 }
 
+function normalizeBundleLink(link, baseUrl) {
+  if (!link) return undefined;
+  const url = normalizeUrl(link.url ?? link.href, baseUrl);
+  if (!url) return undefined;
+  return removeUndefined({
+    url,
+    text: clean(link.text) ?? clean(link.label),
+    role: clean(link.role),
+    source: clean(link.source),
+  });
+}
+
+function normalizeMiniProgram(entry) {
+  if (!entry) return undefined;
+  const appId = clean(entry.appId) ?? clean(entry.appid);
+  const path = clean(entry.path);
+  const url = clean(entry.url);
+  if (!appId && !path && !url) return undefined;
+  return removeUndefined({
+    appId,
+    path,
+    url,
+    text: clean(entry.text) ?? clean(entry.label),
+    actionType: clean(entry.actionType) ?? clean(entry.role),
+    source: clean(entry.source),
+  });
+}
+
+function normalizeCaptureWarning(warning) {
+  if (!warning) return undefined;
+  const code = clean(warning.code) ?? clean(warning.key);
+  if (!code) return undefined;
+  return removeUndefined({
+    code,
+    message: clean(warning.message) ?? code,
+    severity: clean(warning.severity),
+  });
+}
+
+function normalizeFailureReason(reason) {
+  const value = clean(reason);
+  return captureFailureReasons.has(value) ? value : "browser_error";
+}
+
 function evidenceAssetIdFor(bundle, image) {
   return (
     image.assetId ??
@@ -195,8 +355,22 @@ function createStableId(prefix, parts) {
   return `${prefix}-${hashText(parts.map((part) => String(part ?? "")).join("\u001f")).slice(0, 24)}`;
 }
 
+function hashBundleContent(value) {
+  return hashText(JSON.stringify(value));
+}
+
 function hashText(value) {
   return createHash("sha256").update(String(value ?? "")).digest("hex");
+}
+
+function normalizeUrl(value, baseUrl) {
+  const text = clean(value);
+  if (!text) return undefined;
+  try {
+    return new URL(text, baseUrl).toString();
+  } catch {
+    return undefined;
+  }
 }
 
 function requireUrl(value, field) {
