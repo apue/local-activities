@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
@@ -24,6 +25,7 @@ export function parsePublicCatalogSmokeArgs(argv) {
   const args = {
     envFiles: [],
     maxDetails: 10,
+    proxyUrl: undefined,
     help: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -38,6 +40,9 @@ export function parsePublicCatalogSmokeArgs(argv) {
         min: 0,
         max: 50,
       });
+      index += 1;
+    } else if (arg === "--proxy-url") {
+      args.proxyUrl = readRequiredValue(argv, index, arg);
       index += 1;
     } else if (arg === "--help" || arg === "-h") {
       args.help = true;
@@ -60,6 +65,7 @@ export async function runPublicCatalogSmoke({
     baseUrl: config.baseUrl,
     path: "/",
     method: "GET",
+    proxyUrl: config.proxyUrl,
   });
   expectStatus(home, 200);
   scanPublicHtml({
@@ -76,6 +82,7 @@ export async function runPublicCatalogSmoke({
       baseUrl: config.baseUrl,
       path,
       method: "GET",
+      proxyUrl: config.proxyUrl,
     });
     expectStatus(detail, 200);
     scanPublicHtml({
@@ -89,6 +96,7 @@ export async function runPublicCatalogSmoke({
   return {
     kind: "passed",
     baseUrl: config.baseUrl,
+    proxyEnabled: Boolean(config.proxyUrl),
     checked,
     detailCount: detailPaths.length,
   };
@@ -125,6 +133,7 @@ export function formatPublicCatalogSmokeSummary(result) {
     `baseUrl=${result.baseUrl}`,
     `details=${result.detailCount}`,
     `checked=${result.checked.join(",")}`,
+    `proxy=${result.proxyEnabled ? "enabled" : "disabled"}`,
   ].join(" ");
 }
 
@@ -167,10 +176,17 @@ function readPublicCatalogSmokeConfig(env) {
     env.APP_BASE_URL ?? env.NEXT_PUBLIC_APP_URL ?? "",
   );
   if (!baseUrl) throw new Error("missing_app_base_url");
-  return { baseUrl };
+  return {
+    baseUrl,
+    proxyUrl:
+      env.LOCAL_TEST_HTTPS_PROXY?.trim() ||
+      env.LOCAL_TEST_HTTP_PROXY?.trim() ||
+      undefined,
+  };
 }
 
 async function requestHttp(request) {
+  if (request.proxyUrl) return requestWithCurl(request);
   const response = await fetch(`${request.baseUrl}${request.path}`, {
     method: request.method,
   });
@@ -178,6 +194,65 @@ async function requestHttp(request) {
     status: response.status,
     text: await response.text(),
   };
+}
+
+async function requestWithCurl(request) {
+  const args = ["--silent", "--show-error", "--location", "--config", "-"];
+  const config = [
+    curlConfigLine("max-time", "30"),
+    curlConfigLine("proxy", request.proxyUrl),
+    curlConfigLine("request", request.method),
+    curlConfigLine("write-out", "\n__HTTP_STATUS__:%{http_code}"),
+    curlConfigLine("url", `${request.baseUrl}${request.path}`),
+  ];
+
+  try {
+    const { stdout } = await runCurl(args, `${config.join("\n")}\n`);
+    return parseCurlResponse(request, stdout);
+  } catch (error) {
+    throw new Error(`public_catalog_network_failed:${request.path}:${error.message}`);
+  }
+}
+
+function parseCurlResponse(request, stdout) {
+  const [text, statusText] = stdout.split("\n__HTTP_STATUS__:");
+  const status = Number.parseInt(statusText, 10);
+  if (!Number.isInteger(status)) {
+    throw new Error(`public_catalog_status_missing:${request.path}`);
+  }
+  return { status, text };
+}
+
+function runCurl(args, input) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("curl", args, { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code) => {
+      const output = Buffer.concat(stdout).toString("utf8");
+      const errorOutput = Buffer.concat(stderr).toString("utf8").trim();
+      if (code === 0) {
+        resolve({ stdout: output });
+      } else {
+        reject(new Error(errorOutput || `curl_exit_${code}`));
+      }
+    });
+    child.stdin.end(input);
+  });
+}
+
+function curlConfigLine(name, value) {
+  return `${name} = "${escapeCurlConfigValue(value)}"`;
+}
+
+function escapeCurlConfigValue(value) {
+  return String(value)
+    .replaceAll("\\", "\\\\")
+    .replaceAll('"', '\\"')
+    .replaceAll("\n", "\\n");
 }
 
 function expectStatus(response, status) {
@@ -222,6 +297,7 @@ Read-only checks:
 Options:
   --env-file <path>       Load env file. Repeatable.
   --max-details <number>  Max detail pages to inspect. Default: 10.
+  --proxy-url <url>       Override LOCAL_TEST_*_PROXY for this run.
 `);
 }
 
@@ -232,6 +308,10 @@ async function main() {
     return;
   }
   const env = mergeEnvs(process.env, ...args.envFiles.map(loadEnvFile));
+  if (args.proxyUrl) {
+    env.LOCAL_TEST_HTTP_PROXY = args.proxyUrl;
+    env.LOCAL_TEST_HTTPS_PROXY = args.proxyUrl;
+  }
   const result = await runPublicCatalogSmoke({
     env,
     maxDetails: args.maxDetails,

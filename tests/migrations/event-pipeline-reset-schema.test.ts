@@ -14,8 +14,15 @@ const residueMigrationPath = fileURLToPath(
     import.meta.url,
   ),
 );
+const snapshotResidueMigrationPath = fileURLToPath(
+  new URL(
+    "../../supabase/migrations/20260608130000_remove_article_snapshot_residue.sql",
+    import.meta.url,
+  ),
+);
 const sql = readFileSync(migrationPath, "utf8");
 const residueSql = readFileSync(residueMigrationPath, "utf8");
+const snapshotResidueSql = readFileSync(snapshotResidueMigrationPath, "utf8");
 
 describe("event pipeline reset migration", () => {
   it("creates the reset database tables required by the pipeline", () => {
@@ -55,6 +62,13 @@ describe("event pipeline reset migration", () => {
     expect(sql).not.toContain(["BLOB", "READ", "WRITE", "TOKEN"].join("_"));
     expect(sql).not.toContain(["collector", "api", "key"].join("_"));
     expect(sql).not.toContain(["event", "pipeline", "v2"].join("_"));
+    expect(sql).not.toContain("create table public.article_snapshots");
+    expect(sql).not.toContain("article_snapshot_id text");
+    expect(sql).not.toContain("article_snapshot_ids text");
+    expect(sql).not.toContain("local_run_id text");
+    expect(sql).toContain("article_bundle_ids text[]");
+    expect(sql).toContain("article_bundle_id text references public.article_bundles");
+    expect(sql).toContain("capture_run_id text");
   });
 
   it("drops public schema residue from the pre-reset pipeline", () => {
@@ -68,5 +82,23 @@ describe("event pipeline reset migration", () => {
     }
     expect(residueSql).toContain("llm_usage_ledger_no_delete");
     expect(residueSql).toContain("llm_usage_ledger_no_update");
+  });
+
+  it("cleans up article snapshot residue without making it an active contract", () => {
+    expect(snapshotResidueSql).toContain(
+      "rename column article_snapshot_ids to article_bundle_ids",
+    );
+    expect(snapshotResidueSql).toContain(
+      "rename column local_run_id to capture_run_id",
+    );
+    expect(snapshotResidueSql).toContain(
+      "drop column if exists article_snapshot_id",
+    );
+    expect(snapshotResidueSql).toContain(
+      "drop table if exists public.article_snapshots cascade",
+    );
+    expect(snapshotResidueSql).not.toContain(
+      "create table public.article_snapshots",
+    );
   });
 });

@@ -101,7 +101,7 @@ must not expose the old production paths after implementation.
 Remove or replace:
 
 - local collector path that reads Wechat2RSS and directly calls LLM providers
-- local collector path that uploads article snapshots, evidence assets, event
+- local collector path that uploads article bundles, evidence assets, event
   drafts, or extraction failures to Vercel collector APIs
 - Vercel collector ingest APIs as a production collector entrypoint
 - Vercel Blob runtime asset storage for posters and QR images

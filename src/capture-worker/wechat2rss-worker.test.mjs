@@ -86,6 +86,107 @@ describe("Wechat2RSS capture worker", () => {
     expect(uploaded[0].files.map((file) => file.path)).toContain("manifest.json");
   });
 
+  it("hydrates WeChat image bytes before uploading analysis bundles", async () => {
+    const uploaded = [];
+    const fetched = [];
+    const result = await runWechat2RssCaptureOnce({
+      now: new Date("2026-06-08T12:00:00.000Z"),
+      dryRun: false,
+      wechat2rss: fakeWechat2Rss({
+        accounts: [{ status: "healthy", name: "account" }],
+        articles: [
+          {
+            ...sampleArticle("image-bytes"),
+            contentHtml:
+              '<p>Scan the QR to register</p><img data-src="https://mmbiz.qpic.cn/poster.jpg" alt="活动海报" width="900" height="1200" />',
+          },
+        ],
+      }),
+      idempotency: fakeIdempotency(),
+      fetchImpl: async (url, init) => {
+        fetched.push({ url, referer: init?.headers?.referer });
+        return new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+        });
+      },
+      supabase: {
+        async uploadAndAnalyzeBundle(input) {
+          uploaded.push(input);
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ ok: true, failureCount: 0 });
+    expect(fetched).toEqual([
+      {
+        url: "https://mmbiz.qpic.cn/poster.jpg",
+        referer: "https://mp.weixin.qq.com/s/image-bytes",
+      },
+    ]);
+    expect(uploaded[0].files.map((file) => file.path)).toContain(
+      "images/image-001.jpg",
+    );
+    expect(uploaded[0].files.map((file) => file.path)).not.toContain(
+      "images/image-001.reference.json",
+    );
+    expect(uploaded[0].manifest.images[0]).toMatchObject({
+      id: "image-001",
+      path: "images/image-001.jpg",
+      hasBytes: true,
+      contentType: "image/jpeg",
+    });
+  });
+
+  it("queries the full lookback but processes only the limited article subset", async () => {
+    const uploaded = [];
+    const idempotencyChecks = [];
+    const result = await runWechat2RssCaptureOnce({
+      now: new Date("2026-06-08T12:00:00.000Z"),
+      dryRun: false,
+      limit: 2,
+      wechat2rss: fakeWechat2Rss({
+        accounts: [{ status: "healthy", name: "account" }],
+        articles: [
+          sampleArticle("first"),
+          sampleArticle("second"),
+          sampleArticle("third"),
+        ],
+      }),
+      idempotency: {
+        async findExistingBundle(input) {
+          idempotencyChecks.push(input.sourceUrl);
+          return null;
+        },
+      },
+      supabase: {
+        async uploadAndAnalyzeBundle(input) {
+          uploaded.push(input.manifest.sourceUrl);
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      checkedCount: 3,
+      consideredCount: 2,
+      limit: 2,
+      bundledCount: 2,
+      uploadedCount: 2,
+      triggeredCount: 2,
+      skippedCount: 0,
+      failureCount: 0,
+    });
+    expect(idempotencyChecks).toEqual([
+      "https://mp.weixin.qq.com/s/first",
+      "https://mp.weixin.qq.com/s/second",
+    ]);
+    expect(uploaded).toEqual([
+      "https://mp.weixin.qq.com/s/first",
+      "https://mp.weixin.qq.com/s/second",
+    ]);
+  });
+
   it("skips articles that already have an article bundle row", async () => {
     const result = await runWechat2RssCaptureOnce({
       now: new Date("2026-06-08T12:00:00.000Z"),

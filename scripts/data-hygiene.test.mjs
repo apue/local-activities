@@ -65,15 +65,6 @@ function fixtureRows() {
         created_at: "2026-06-04T03:00:00.000Z",
       },
     ],
-    articleSnapshots: [
-      {
-        id: 20,
-        canonical_url: "https://activities.example/e2e-fixture",
-        title: "Fixture snapshot",
-        capture_mode: "fixture",
-        created_at: "2026-06-04T04:00:00.000Z",
-      },
-    ],
     evidenceAssets: [
       {
         id: 30,
@@ -236,7 +227,7 @@ describe("data hygiene audit", () => {
       missingTriageDraftCount: 1,
       duplicateDraftGroupCount: 1,
       likelyNegativeDraftCount: 1,
-      likelyTestRowCount: 4,
+      likelyTestRowCount: 3,
       brokenEvidenceUrlCount: 1,
       localProxyEvidenceUrlCount: 1,
       excludedArticleCount: 1,
@@ -411,7 +402,6 @@ describe("data hygiene audit", () => {
         "event_drafts",
         "excluded_articles",
         "evidence_assets",
-        "article_snapshots",
         "article_bundles",
         "collector_failures",
         "source_runs",
@@ -508,7 +498,6 @@ function supabaseClientForReset(rows, calls, storageObjects = {}) {
     llm_usage_ledger: rows.llmUsageLedger,
     event_drafts: rows.eventDrafts,
     excluded_articles: rows.excludedArticles,
-    article_snapshots: rows.articleSnapshots,
     evidence_assets: rows.evidenceAssets,
     canonical_events: rows.canonicalEvents,
     article_bundles: rows.articleBundles,

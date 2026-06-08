@@ -51,6 +51,12 @@ describe("capture worker bundle files", () => {
       "links.json",
       "manifest.json",
     ]);
+    expect(result.files.find((file) => file.path === "article.html")).toMatchObject({
+      contentType: "text/html",
+    });
+    expect(result.files.find((file) => file.path === "article.txt")).toMatchObject({
+      contentType: "text/plain",
+    });
 
     const manifest = JSON.parse(
       result.files.find((file) => file.path === "manifest.json").body,
@@ -98,7 +104,7 @@ describe("capture worker bundle files", () => {
   it("writes image bytes as bundle image files when capture provides bytes", () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const bundle = createCapturedArticleBundle({
-      provider: "url_browser",
+      provider: "local_fixture",
       sourceUrl: "https://mp.weixin.qq.com/s/bundle-image-bytes",
       text: "Poster event",
       images: [

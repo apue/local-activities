@@ -40,6 +40,42 @@ Deno.test("runAnalysisPipeline writes article bundle status through protected st
   assertEquals(db.table("article_bundles")[0].status, "processed");
 });
 
+Deno.test("runAnalysisPipeline does not downgrade committed output when final bundle status update fails", async () => {
+  const db = createRecordingDb({
+    failArticleBundleStatuses: {
+      processed: {
+        code: "status_update_failed",
+        message: "status update failed",
+      },
+    },
+  });
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider({
+      outputOverrides: {
+        decision: "excluded",
+        reason: "Not a public event.",
+        events: [],
+        excludedArticle: {
+          triageDecision: "non_public_news",
+          exclusionReason: "News article.",
+        },
+        dedupe: { decision: "insufficient_info", confidence: 0.9 },
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "excluded");
+  assertEquals(db.table("excluded_articles").length, 1);
+  assertEquals(db.table("processing_ledger").length, 1);
+  assertEquals(db.table("processing_ledger")[0].state, "excluded");
+  assertEquals(db.table("llm_usage_ledger").length, 1);
+  assertEquals(db.table("llm_usage_ledger")[0].status, "succeeded");
+});
+
 Deno.test("runAnalysisPipeline does not create a canonical event when dedupe candidates exist", async () => {
   const db = createRecordingDb({
     canonicalCandidates: [
@@ -63,6 +99,115 @@ Deno.test("runAnalysisPipeline does not create a canonical event when dedupe can
   assertEquals(db.table("canonical_events").length, 0);
   assertEquals(db.table("event_drafts")[0].review_state, "possible_duplicate");
   assertEquals(db.table("dedupe_decisions")[0].decision, "same_event");
+});
+
+Deno.test("runAnalysisPipeline does not publish non-Beijing events to canonical catalog", async () => {
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        city: "成都",
+        venueName: "成都富力丽思卡尔顿酒店",
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "needs_review");
+  assertEquals(db.table("event_drafts").length, 1);
+  assertEquals(db.table("event_drafts")[0].city, "成都");
+  assertEquals(db.table("canonical_events").length, 0);
+  assertEquals(db.table("processing_ledger")[0].state, "needs_review");
+});
+
+Deno.test("runAnalysisPipeline auto-publishes high-confidence public activities even when model leaves eligibility unclear", async () => {
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        publicEligibility: "unclear",
+        confidence: 0.99,
+        publish: { createCanonicalEvent: false, confidence: 0.2 },
+      },
+      outputOverrides: {
+        confidence: 0.99,
+        dedupe: { decision: "new_event", confidence: 0.98 },
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "published");
+  assertEquals(db.table("event_drafts").length, 1);
+  assertEquals(db.table("event_drafts")[0].review_state, "approved");
+  assertEquals(db.table("canonical_events").length, 1);
+  assertEquals(db.table("canonical_events")[0].public_eligibility, "unclear");
+  assertEquals(db.table("processing_ledger")[0].state, "published");
+});
+
+Deno.test("runAnalysisPipeline auto-publishes explicit single-session Beijing events when provider marks schedule unsupported", async () => {
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        title: "RELO Beijing English Teaching Seminar",
+        startsAt: "2026-06-13T09:00:00+00:00",
+        endsAt: "2026-06-13T17:00:00+00:00",
+        timezone: "Asia/Shanghai",
+        publicEligibility: "unclear",
+        eventKind: "single",
+        scheduleKind: "unsupported",
+        confidence: 0.95,
+        publish: { createCanonicalEvent: false, confidence: 0.2 },
+      },
+      outputOverrides: {
+        confidence: 0.95,
+        dedupe: { decision: "new_event", confidence: 0.95 },
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "published");
+  assertEquals(db.table("event_drafts")[0].schedule_kind, "single");
+  assertEquals(db.table("event_drafts")[0].starts_at, "2026-06-13T09:00:00+08:00");
+  assertEquals(db.table("canonical_events").length, 1);
+});
+
+Deno.test("runAnalysisPipeline does not auto-publish high-confidence activities marked not public", async () => {
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        publicEligibility: "not_public",
+        confidence: 0.99,
+        publish: { createCanonicalEvent: false, confidence: 0.2 },
+      },
+      outputOverrides: {
+        confidence: 0.99,
+        dedupe: { decision: "new_event", confidence: 0.98 },
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "needs_review");
+  assertEquals(db.table("event_drafts").length, 1);
+  assertEquals(db.table("event_drafts")[0].review_state, "needs_review");
+  assertEquals(db.table("canonical_events").length, 0);
+  assertEquals(db.table("processing_ledger")[0].state, "needs_review");
 });
 
 Deno.test("runAnalysisPipeline in eval mode does not write production draft or canonical tables", async () => {
@@ -106,6 +251,34 @@ Deno.test("runAnalysisPipeline writes failed ledger and failed usage when provid
     error_details: { message: string };
   };
   assertEquals(ledger.error_details.message, "provider_timeout");
+});
+
+Deno.test("runAnalysisPipeline serializes object errors into readable failed ledger details", async () => {
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: {
+      name: "mock",
+      model: "mock-vision",
+      async analyze() {
+        throw { code: "provider_object_error", message: "object error" };
+      },
+    },
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "failed");
+  assertEquals(
+    db.table("processing_ledger")[0].reason,
+    '{"code":"provider_object_error","message":"object error"}',
+  );
+  const ledger = db.table("processing_ledger")[0] as {
+    error_details: { message: string; code?: string };
+  };
+  assertEquals(ledger.error_details.message, "object error");
+  assertEquals(ledger.error_details.code, "provider_object_error");
 });
 
 Deno.test("runAnalysisPipeline keeps failed ledger writable when production write fails after usage", async () => {
@@ -297,7 +470,7 @@ Deno.test("runAnalysisPipeline creates storage-backed evidence rows instead of s
     env: { provider: "mock", model: "mock-vision" },
   });
 
-  const evidence = db.table("evidence_assets")[0];
+  const evidence = db.table("evidence_assets")[0] as Record<string, unknown>;
   assertEquals(evidence.storage_bucket, "event-evidence-assets");
   assertEquals(
     evidence.storage_path,
@@ -314,6 +487,79 @@ Deno.test("runAnalysisPipeline creates storage-backed evidence rows instead of s
   assertEquals(
     storage.uploaded[0].path,
     "articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
+  );
+});
+
+Deno.test("runAnalysisPipeline falls back to bundle image roles when provider omits evidence", async () => {
+  const storage = bundleStorage({ imageKind: "stable", roleHint: "poster" });
+  const db = createRecordingDb();
+  await runAnalysisPipeline({
+    request: validRequest(),
+    storage,
+    db,
+    provider: successfulProvider({ eventOverrides: { evidence: [] } }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  const evidence = db.table("evidence_assets")[0] as {
+    role: string;
+    metadata: { imageId: string };
+  };
+  assertEquals(evidence.role, "poster");
+  assertEquals(
+    db.table("canonical_events")[0].poster_image_url,
+    "https://supabase.test/storage/v1/object/public/event-evidence-assets/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
+  );
+});
+
+Deno.test("runAnalysisPipeline falls back to bundle image roles when provider evidence image ids do not match", async () => {
+  const storage = bundleStorage({ imageKind: "stable", roleHint: "poster" });
+  const db = createRecordingDb();
+  await runAnalysisPipeline({
+    request: validRequest(),
+    storage,
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        evidence: [{ imageId: "image-1", role: "poster", confidence: 0.8 }],
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  const evidence = db.table("evidence_assets")[0] as {
+    role: string;
+    metadata: { imageId: string };
+  };
+  assertEquals(evidence.role, "poster");
+  assertEquals(evidence.metadata.imageId, "poster-1");
+  assertEquals(
+    db.table("event_drafts")[0].poster_image_url,
+    "https://supabase.test/storage/v1/object/public/event-evidence-assets/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
+  );
+});
+
+Deno.test("runAnalysisPipeline records QR evidence when registration URL points at a bundle image", async () => {
+  const storage = bundleStorage({ imageKind: "stable" });
+  const db = createRecordingDb();
+  await runAnalysisPipeline({
+    request: validRequest(),
+    storage,
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        evidence: [],
+        registrationUrl: "https://mmbiz.qpic.cn/remote-poster",
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  const evidence = db.table("evidence_assets")[0] as { role: string };
+  assertEquals(evidence.role, "qr");
+  assertEquals(
+    db.table("event_drafts")[0].registration_qr_image_url,
+    "https://supabase.test/storage/v1/object/public/event-evidence-assets/articles/bundle-1/evidence-1-qr-poster-1-bundle-1.jpg",
   );
 });
 
@@ -415,7 +661,10 @@ function validRequest() {
 }
 
 function bundleStorage(
-  { imageKind = "stable" }: { imageKind?: "stable" | "reference" } = {},
+  {
+    imageKind = "stable",
+    roleHint,
+  }: { imageKind?: "stable" | "reference"; roleHint?: string } = {},
 ) {
   const image = imageKind === "stable"
     ? {
@@ -428,6 +677,7 @@ function bundleStorage(
       width: 1080,
       height: 1440,
       altText: "Poster",
+      roleHint,
     }
     : {
       imageId: "poster-1",
@@ -439,6 +689,7 @@ function bundleStorage(
       width: 1080,
       height: 1440,
       altText: "Poster",
+      roleHint,
     };
   const files: Record<string, string> = {
     "bundle-1/manifest.json": JSON.stringify({
@@ -496,7 +747,13 @@ function bundleStorage(
   };
 }
 
-function successfulProvider() {
+function successfulProvider({
+  eventOverrides = {},
+  outputOverrides = {},
+}: {
+  eventOverrides?: Record<string, unknown>;
+  outputOverrides?: Record<string, unknown>;
+} = {}) {
   return {
     name: "mock",
     model: "mock-vision",
@@ -531,10 +788,12 @@ function successfulProvider() {
               evidence: [
                 { imageId: "poster-1", role: "poster", confidence: 0.91 },
               ],
+              ...eventOverrides,
             },
           ],
           dedupe: { decision: "new_event", confidence: 0.74 },
           usage: { inputTokens: 120, outputTokens: 80, totalTokens: 200 },
+          ...outputOverrides,
         }),
         usage: { inputTokens: 120, outputTokens: 80, totalTokens: 200 },
       };
@@ -549,7 +808,10 @@ function multiEventProvider() {
     async analyze() {
       const event = {
         title: "Example Public Lecture",
+        organizer: "Example Embassy",
         startsAt: "2026-06-10T11:00:00+08:00",
+        city: "Beijing",
+        venueName: "Cultural Center",
         publicEligibility: "public",
         triageDecision: "public_activity",
         triageAction: "extract",
@@ -583,12 +845,16 @@ function multiEventProvider() {
 function createRecordingDb({
   canonicalCandidates = [],
   failInserts = {},
+  failArticleBundleStatuses = {},
   enforceUniqueIds = false,
   staleArticleBundleLookup = false,
   initialArticleBundles = [],
 }: {
   canonicalCandidates?: Record<string, unknown>[];
   failInserts?: Record<string, string>;
+  failArticleBundleStatuses?: Partial<
+    Record<"analysis_started" | "processed" | "failed", unknown>
+  >;
   enforceUniqueIds?: boolean;
   staleArticleBundleLookup?: boolean;
   initialArticleBundles?: Record<string, unknown>[];
@@ -649,6 +915,8 @@ function createRecordingDb({
       payload: Record<string, unknown>,
       status: "analysis_started" | "processed" | "failed",
     ) {
+      const statusFailure = failArticleBundleStatuses[status];
+      if (statusFailure) throw statusFailure;
       this.articleBundleWrites.push({ status, payload });
       rows.article_bundles ??= [];
       const existingIndex = rows.article_bundles.findIndex((row) =>

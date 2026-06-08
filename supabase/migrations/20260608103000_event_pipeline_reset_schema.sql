@@ -14,7 +14,6 @@ drop table if exists public.event_drafts cascade;
 drop table if exists public.canonical_events cascade;
 drop table if exists public.evidence_assets cascade;
 drop table if exists public.article_bundles cascade;
-drop table if exists public.article_snapshots cascade;
 drop table if exists public.collector_failures cascade;
 drop table if exists public.source_runs cascade;
 drop table if exists public.collector_jobs cascade;
@@ -49,14 +48,14 @@ create table public.collector_jobs (
   claimed_at timestamptz,
   lease_expires_at timestamptz,
   collector_id text,
-  local_run_id text,
+  capture_run_id text,
   attempt_number integer not null default 0,
   last_heartbeat_at timestamptz,
   last_heartbeat_stage text check (last_heartbeat_stage in ('capturing', 'extracting', 'uploading')),
   suggested_disposition text
     check (suggested_disposition in ('ready_for_review', 'needs_review', 'needs_info', 'failed', 'not_activity')),
   source_run_id text,
-  article_snapshot_ids text[] not null default '{}'::text[],
+  article_bundle_ids text[] not null default '{}'::text[],
   event_draft_ids text[] not null default '{}'::text[],
   evidence_asset_ids text[] not null default '{}'::text[],
   failure_ids text[] not null default '{}'::text[],
@@ -131,29 +130,6 @@ create table public.article_bundles (
   updated_at timestamptz not null default now(),
   unique (bundle_id),
   unique (source_url, content_hash, mode)
-);
-
-create table public.article_snapshots (
-  id bigint generated always as identity primary key,
-  snapshot_id text not null default ('snapshot-' || gen_random_uuid()::text),
-  source_id text,
-  source_name text,
-  canonical_url text not null,
-  final_url text,
-  title text,
-  author_name text,
-  published_at timestamptz,
-  captured_at timestamptz not null default now(),
-  language_hints text[] not null default '{}'::text[],
-  capture_mode text,
-  visible_text text,
-  text_hash text,
-  screenshot_asset_id text,
-  evidence_asset_ids text[] not null default '{}'::text[],
-  content_hash text,
-  bundle_id text references public.article_bundles(bundle_id) on delete set null,
-  created_at timestamptz not null default now(),
-  unique (snapshot_id)
 );
 
 create table public.evidence_assets (
@@ -331,7 +307,6 @@ create table public.llm_usage_ledger (
   latency_ms integer,
   source_run_id text,
   collector_job_id text,
-  article_snapshot_id text,
   event_draft_id text,
   excluded_article_id text,
   article_bundle_id text references public.article_bundles(bundle_id) on delete set null,
@@ -492,7 +467,6 @@ alter table public.collector_jobs enable row level security;
 alter table public.source_runs enable row level security;
 alter table public.collector_failures enable row level security;
 alter table public.article_bundles enable row level security;
-alter table public.article_snapshots enable row level security;
 alter table public.evidence_assets enable row level security;
 alter table public.event_drafts enable row level security;
 alter table public.canonical_events enable row level security;

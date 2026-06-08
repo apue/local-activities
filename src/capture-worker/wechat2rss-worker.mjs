@@ -5,6 +5,7 @@ import {
   buildArticleBundleFiles,
   edgePayloadFromManifest,
 } from "./bundle-files.mjs";
+import { hydrateArticleBundleImages } from "./image-hydration.mjs";
 
 const defaultMode = "production";
 const defaultLookbackDays = 7;
@@ -17,10 +18,17 @@ export async function runWechat2RssCaptureOnce({
   mode = defaultMode,
   dryRun = true,
   lookbackDays = defaultLookbackDays,
+  limit,
+  fetchImpl = fetch,
+  hydrateImages = !dryRun,
+  maxHydratedImages,
 } = {}) {
   if (!wechat2rss) throw new Error("wechat2rss_client_required");
   if (!idempotency) throw new Error("idempotency_adapter_required");
   if (!dryRun && !supabase) throw new Error("supabase_adapter_required");
+  if (limit !== undefined && !isPositiveInteger(limit)) {
+    throw new Error(`invalid_limit:${limit}`);
+  }
 
   let logins;
   try {
@@ -71,7 +79,9 @@ export async function runWechat2RssCaptureOnce({
     mode,
     dryRun,
     after,
+    ...(limit !== undefined ? { limit } : {}),
     checkedCount: articles.length,
+    consideredCount: limit === undefined ? articles.length : Math.min(limit, articles.length),
     bundledCount: 0,
     uploadedCount: 0,
     triggeredCount: 0,
@@ -82,7 +92,9 @@ export async function runWechat2RssCaptureOnce({
     failures: [],
   };
 
-  for (const article of articles) {
+  const consideredArticles = limit === undefined ? articles : articles.slice(0, limit);
+
+  for (const article of consideredArticles) {
     try {
       const bundle = createWechat2RssArticleBundle({
         article,
@@ -104,7 +116,17 @@ export async function runWechat2RssCaptureOnce({
         continue;
       }
 
-      const bundleFiles = buildArticleBundleFiles({ bundle, mode });
+      const analysisBundle = hydrateImages
+        ? await hydrateArticleBundleImages({
+          bundle,
+          fetchImpl,
+          maxImages: maxHydratedImages,
+        })
+        : bundle;
+      const bundleFiles = buildArticleBundleFiles({
+        bundle: analysisBundle,
+        mode,
+      });
       const edgePayload = edgePayloadFromManifest({
         manifest: bundleFiles.manifest,
         storagePrefix: bundleFiles.storagePrefix,
@@ -185,6 +207,10 @@ function formatWechat2RssDate(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}${month}${day}`;
+}
+
+function isPositiveInteger(value) {
+  return Number.isInteger(value) && value > 0;
 }
 
 function errorMessage(error) {

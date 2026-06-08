@@ -40,7 +40,7 @@ describe("event pipeline regression corpus replay", () => {
     });
   });
 
-  it("runs all committed cases through CI-safe mock E2E replay", async () => {
+  it("runs all committed cases through CI-safe reset replay", async () => {
     const result = await runRegressionReplay({ all: true });
 
     expect(result).toMatchObject({
@@ -85,14 +85,15 @@ describe("event pipeline regression corpus replay", () => {
     );
   });
 
-  it("replays capture failure cases through the orchestrator failure path", async () => {
+  it("replays capture failure cases through the reset capture-contract path", async () => {
     const result = await replayRegressionCase({ caseId: "capture-fetch-blocked" });
 
     expect(result).toMatchObject({
       caseId: "capture-fetch-blocked",
       status: "failed",
       stageStatuses: {
-        capture: "failed",
+        capture_contract: "failed",
+        offline_sink: "skipped",
         cleanup: "success",
       },
       sourceHealth: {
@@ -126,7 +127,7 @@ describe("event pipeline regression corpus replay", () => {
       caseId: "beiping-beer-festival",
       eventCount: 1,
       stageStatuses: {
-        ingest: "skipped",
+        offline_sink: "skipped",
       },
       dedupeDecisions: [expect.objectContaining({ decision: "same_event" })],
     });

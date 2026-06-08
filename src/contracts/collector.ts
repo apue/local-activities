@@ -78,26 +78,6 @@ export const captureModeSchema = z.enum([
   "unsupported",
 ]);
 
-export const articleSnapshotSchema = z
-  .object({
-    sourceId: z.string().min(1).optional(),
-    sourceName: z.string().min(1).optional(),
-    canonicalUrl: z.string().url(),
-    finalUrl: z.string().url(),
-    title: z.string().min(1).optional(),
-    authorName: z.string().min(1).optional(),
-    publishedAt: z.string().datetime({ offset: true }).optional(),
-    capturedAt: z.string().datetime({ offset: true }),
-    languageHints: z.array(z.string().min(1)),
-    captureMode: captureModeSchema,
-    visibleText: z.string().max(40_000).optional(),
-    textHash: z.string().min(1).optional(),
-    screenshotAssetId: z.string().min(1).optional(),
-    evidenceAssetIds: z.array(z.string().min(1)),
-    contentHash: z.string().min(1),
-  })
-  .strict();
-
 export const evidenceRoleSchema = z.enum([
   "cover",
   "poster",
@@ -151,6 +131,5 @@ export type CollectorEnvelope<T> = z.infer<
 >;
 export type SourceCandidate = z.infer<typeof sourceCandidateSchema>;
 export type SourceRunReport = z.infer<typeof sourceRunReportSchema>;
-export type ArticleSnapshot = z.infer<typeof articleSnapshotSchema>;
 export type EvidenceAsset = z.infer<typeof evidenceAssetSchema>;
 export type CollectorFailure = z.infer<typeof collectorFailureSchema>;

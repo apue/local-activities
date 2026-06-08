@@ -105,7 +105,7 @@ Do not rely on `docs/superpowers` as the current source of truth unless the user
 - The collector checks tracked sources on a low-frequency schedule, initially every 4 hours.
 - The collector may use Playwright, browser automation, or an agent editor, but all implementations should emit the same normalized objects.
 - Do not bypass captchas or aggressive platform protections. Report `captcha_required`, `login_required`, `fetch_blocked`, or related failure reasons.
-- Upload structured article snapshots, event drafts, evidence, and source run reports to the backend.
+- Upload structured article bundles, event drafts, evidence, and source run reports to the backend.
 - Avoid storing full article mirrors as a long-term product feature.
 
 ## Git Hygiene

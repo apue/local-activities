@@ -1,73 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { articleBundleToExtractionInput } from "./article-bundle.mjs";
+import { articleBundleToEvidenceAssets } from "./article-bundle.mjs";
 import {
   createLocalFixtureArticleBundle,
-  createUrlBrowserArticleBundle,
   createWechat2RssArticleBundle,
 } from "./source-adapters.mjs";
 
 describe("capture source adapters", () => {
-  it("creates a captured article bundle from URL browser text and HTML images", () => {
-    const bundle = createUrlBrowserArticleBundle({
-      sourceUrl: "https://mp.weixin.qq.com/s/url-browser",
-      finalUrl: "https://mp.weixin.qq.com/s/url-browser",
-      title: "周末活动",
-      authorName: "Embassy Culture",
-      publishedAt: "2026-06-01T10:00:00.000Z",
-      capturedAt: "2026-06-05T03:00:00.000Z",
-      text: "周末活动\n扫码报名\n6月8日 19:00 北京文化中心",
-      html: `
-        <section>
-          <a href="https://example.com/register">Register now</a>
-          <mp-miniprogram data-miniprogram-appid="wx123" data-miniprogram-path="pages/register">预约报名</mp-miniprogram>
-          <img data-src="https://mmbiz.qpic.cn/poster.jpg" alt="活动海报" width="900" height="1200" />
-          <img data-src="https://mmbiz.qpic.cn/register-qr.jpg" alt="报名二维码" />
-        </section>
-      `,
-    });
-
-    expect(bundle).toMatchObject({
-      version: "captured-article-bundle-v1",
-      provider: "url_browser",
-      sourceUrl: "https://mp.weixin.qq.com/s/url-browser",
-      title: "周末活动",
-      authorName: "Embassy Culture",
-      captureMode: "image_with_qr_registration",
-    });
-    expect(bundle.images.map((image) => image.role)).toEqual(["poster", "qr"]);
-    expect(bundle.links).toEqual([
-      {
-        url: "https://example.com/register",
-        text: "Register now",
-        role: "registration",
-        source: "html",
-      },
-    ]);
-    expect(bundle.miniPrograms).toEqual([
-      {
-        appId: "wx123",
-        path: "pages/register",
-        text: "预约报名",
-        actionType: "registration",
-        source: "html",
-      },
-    ]);
-
-    const extractionInput = articleBundleToExtractionInput(bundle);
-    expect(extractionInput.articleSnapshot).toMatchObject({
-      canonicalUrl: "https://mp.weixin.qq.com/s/url-browser",
-      captureMode: "image_with_qr_registration",
-    });
-    expect(extractionInput.evidenceAssets.map((asset) => asset.role)).toEqual([
-      "poster",
-      "qr",
-    ]);
-    expect(extractionInput.articleSnapshot.evidenceAssetIds).toEqual(
-      extractionInput.evidenceAssets.map((asset) => asset.assetId),
-    );
-  });
-
   it("creates a captured article bundle from a normalized Wechat2RSS article", () => {
     const bundle = createWechat2RssArticleBundle({
       article: {
@@ -118,8 +57,8 @@ describe("capture source adapters", () => {
       },
     ]);
 
-    const { articleSnapshot, evidenceAssets } = articleBundleToExtractionInput(bundle);
-    expect(articleSnapshot).toMatchObject({
+    const evidenceAssets = articleBundleToEvidenceAssets(bundle);
+    expect(bundle).toMatchObject({
       sourceId: "goethe-798",
       sourceName: "Goethe-Institut Beijing",
       title: "每周六，来歌德798图书馆",
