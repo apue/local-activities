@@ -11,7 +11,7 @@ The production pipeline is:
 external capture worker
 -> Supabase Storage article bundle
 -> Supabase Edge Function analysis
--> Supabase DB ledger/drafts/events/evidence/usage/eval
+-> Supabase DB ledger/drafts/events/evidence/usage
 -> Vercel public catalog and admin portal
 ```
 
@@ -24,7 +24,8 @@ tables directly.
 | Runtime | Owns | Must Not Own |
 | --- | --- | --- |
 | Capture worker | Wechat2RSS health checks, article polling, bundle creation, Supabase Storage upload, Edge Function trigger | LLM calls, event publication decisions, direct event/draft/evidence DB writes |
-| Supabase Edge Functions | bundle analysis, provider calls, schema validation, dedupe, publish routing, ledger/evidence/draft/event/usage/eval writes | WeChat crawling, browser automation, eval writes into production event tables |
+| Supabase Edge Functions | bundle analysis, provider calls, schema validation, dedupe, publish routing, ledger/evidence/draft/event/usage writes | WeChat crawling, browser automation, production event table writes from eval runs |
+| Evaluation runner | extractor variant orchestration, scoring, local eval artifacts, explicit eval-scoped Supabase writes | production event publication, draft/evidence writes, live provider calls without an allow-live flag and budget |
 | Supabase Storage | raw bundles, event evidence assets, eval artifacts | mixed-purpose buckets that combine raw capture and published assets |
 | Supabase Postgres | sources, bundles, ledger, drafts, canonical events, evidence, usage, evaluations | unvalidated collector output as public state |
 | Vercel | public catalog, admin portal, read-only operational views, admin actions | production capture, production LLM analysis |
@@ -58,6 +59,24 @@ Wechat2RSS article
 
 Every article outcome writes ledger state, including `excluded`, `duplicate`,
 and `failed`.
+
+## Evaluation Harness
+
+The evaluation harness is separate from the production publication pipeline. Its
+CI-safe path uses mocked variants and memory storage:
+
+```bash
+pnpm eval:run -- --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
+```
+
+Local artifact runs write to `tmp/evaluation-runs` by default. The Supabase
+writer is explicit with `--store supabase` and may write only
+`evaluation_runs`, `evaluation_case_results`, `llm_usage_ledger`, and
+`eval-artifacts`. Live provider evaluation is opt-in:
+
+```bash
+pnpm eval:run -- --variant live-configured --allow-live --max-cost-cny <n>
+```
 
 ## Module Contracts
 

@@ -55,14 +55,26 @@ Configuration uses:
 
 ## Evaluation
 
-Evaluation compares extractor variants:
+Evaluation runs from the Node.js runner and compares extractor variants:
 
 ```text
 provider + model + promptVersion + schemaVersion + parameters
 ```
 
-Evaluation runs use the same bundle contracts as production analysis but write
-only eval-scoped results and artifacts.
+The default CI-safe command uses memory storage and mocked variants:
+
+```bash
+pnpm eval:run -- --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
+```
+
+Local artifact runs write to `tmp/evaluation-runs` by default. Supabase writes
+require `--store supabase` and are limited to `evaluation_runs`,
+`evaluation_case_results`, `llm_usage_ledger`, and `eval-artifacts`. Live
+provider runs are opt-in:
+
+```bash
+pnpm eval:run -- --variant live-configured --allow-live --max-cost-cny <n>
+```
 
 ## Map And Geocoding
 
