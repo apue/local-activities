@@ -12,7 +12,11 @@ import {
 import { runLlmExtractionFromBundle } from "../../extraction/llm-extractor.mjs";
 
 const collectorPayloadVersion = "2026-05-collector-v1";
-const duplicateActionsSkippedByDefault = new Set(["same", "reject"]);
+const duplicateActionsSkippedByDefault = new Set([
+  "same",
+  "same_event",
+  "reject",
+]);
 
 export async function runArticlePipelineOnce({
   env = process.env,
@@ -179,7 +183,7 @@ export async function runArticlePipelineOnce({
     });
 
     const shouldSkipIngest = report.dedupeDecisions.some((decision) =>
-      duplicateActionsSkippedByDefault.has(decision?.action),
+      duplicateActionsSkippedByDefault.has(dedupeDecisionKind(decision)),
     );
     if (shouldSkipIngest) {
       markStage(report, "ingest", "skipped", { reason: "duplicate_decision" });
@@ -378,10 +382,17 @@ function defaultResolveDedupe({ eventDraft }) {
 }
 
 function defaultDecidePublish({ dedupeDecision }) {
+  const kind = dedupeDecisionKind(dedupeDecision);
   return {
-    state: dedupeDecision?.action === "new" ? "needs_review" : "blocked",
-    reasons: [dedupeDecision?.action ?? "unknown"],
+    state: ["new", "new_event", "review"].includes(kind)
+      ? "needs_review"
+      : "blocked",
+    reasons: [kind],
   };
+}
+
+function dedupeDecisionKind(decision) {
+  return decision?.decision ?? decision?.action ?? "unknown";
 }
 
 async function runStage(report, stage, fn) {

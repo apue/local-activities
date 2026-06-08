@@ -265,6 +265,47 @@ describe("article pipeline orchestrator", () => {
     ]);
   });
 
+  it("skips ingest for V4 same_event dedupe decisions", async () => {
+    const ingestCalls = [];
+    const report = await runArticlePipelineOnce({
+      runId: "v4-duplicate",
+      sourceUrl: "https://mp.weixin.qq.com/s/v4-duplicate",
+      now,
+      capture: async () => ({ ok: true, bundle: articleBundle() }),
+      extractEvents: async () => ({
+        kind: "drafts",
+        runId: "v4-duplicate",
+        eventDrafts: [eventDraft("draft-v4-duplicate")],
+        evidenceAssets: [],
+        failures: [],
+      }),
+      resolveDedupe: async () => ({
+        decision: "same_event",
+        canonicalEventId: "event-1",
+        reviewState: "possible_duplicate",
+        publishBlockers: [],
+        productVisibleReasons: ["Same event"],
+      }),
+      ingest: async () => {
+        ingestCalls.push("ingest");
+        return {};
+      },
+    });
+
+    expect(ingestCalls).toEqual([]);
+    expect(report).toMatchObject({
+      kind: "duplicate",
+      status: "success",
+      stageStatuses: {
+        ingest: "skipped",
+        cleanup: "success",
+      },
+    });
+    expect(report.publishDecisions).toEqual([
+      { state: "blocked", reasons: ["same_event"] },
+    ]);
+  });
+
   it("runs cleanup in finally after extraction errors", async () => {
     const calls = [];
     const report = await runArticlePipelineOnce({
