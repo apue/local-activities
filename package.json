@@ -19,6 +19,7 @@
     "smoke:admin-readonly": "node scripts/admin-readonly-smoke.mjs",
     "smoke:wechat2rss": "node scripts/wechat2rss-smoke.mjs",
     "smoke:public-catalog": "node scripts/public-catalog-smoke.mjs",
+    "capture:wechat2rss:once": "node scripts/capture-worker.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

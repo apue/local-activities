@@ -87,6 +87,18 @@ pnpm smoke:wechat2rss --env-file .env.collector
 
 This smoke is read-only. It does not upload bundles or create events.
 
+## Capture Worker Dry Run
+
+After Wechat2RSS smoke passes, build article bundles without writing Storage or
+triggering analysis:
+
+```bash
+pnpm capture:wechat2rss:once -- --dry-run --env-file .env.collector
+```
+
+Use `--apply` only when the Supabase Edge Function is available and the target
+environment is approved for bundle uploads.
+
 ## Active Architecture
 
 The production path is:
