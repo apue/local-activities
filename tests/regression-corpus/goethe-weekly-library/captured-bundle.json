@@ -11,7 +11,10 @@
   "authorName": "Goethe-Institut Beijing",
   "publishedAt": "2026-06-01T00:00:00.000Z",
   "capturedAt": "2026-06-01T00:00:00.000Z",
-  "languageHints": ["en", "zh"],
+  "languageHints": [
+    "en",
+    "zh"
+  ],
   "captureMode": "text_complete",
   "text": "Weekly library reading hour at Goethe-Institut Beijing. Every Saturday in June from 10:30 to 12:00. Open to the public.",
   "html": "<article><p>Every Saturday in June from 10:30 to 12:00.</p></article>",
@@ -19,6 +22,6 @@
   "links": [],
   "miniPrograms": [],
   "contentHash": "regression-goethe-weekly-library",
-  "diagnostics": [{ "key": "promoted_from", "value": "fixtures/event-pipeline-v2/goethe-weekly-library" }],
+  "diagnostics": [],
   "captureWarnings": []
 }

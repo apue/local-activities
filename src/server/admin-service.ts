@@ -1,5 +1,4 @@
-import type { CollectorJobRecord } from "./collector-job-service";
-import { extractFirstHttpUrl } from "../shared/seed-url";
+import type { AdminCollectorJobRecord } from "./admin-collector-jobs";
 import { computePublishDecision, type PublishDecision } from "./publish-policy";
 
 export type AdminReviewState =
@@ -239,12 +238,7 @@ export type AdminLlmUsageSummary = {
 };
 
 export type AdminStore = {
-  createCollectorJob(input: {
-    seedUrl: string;
-    requestedAt: string;
-    preferredRunner: CollectorJobRecord["preferredRunner"];
-  }): Promise<CollectorJobRecord>;
-  listCollectorJobs(): Promise<CollectorJobRecord[]>;
+  listCollectorJobs(): Promise<AdminCollectorJobRecord[]>;
   listEventDrafts(input: {
     reviewState?: string;
   }): Promise<AdminEventDraftRecord[]>;
@@ -273,26 +267,6 @@ export type AdminStore = {
     publishedAt: string;
   }): Promise<PublishedAdminEvent>;
 };
-
-export async function createAdminCollectorJob(
-  input: {
-    seedUrl: string;
-    preferredRunner?: CollectorJobRecord["preferredRunner"];
-  },
-  store: AdminStore,
-  now = new Date(),
-) {
-  const extractedSeedUrl = extractFirstHttpUrl(input.seedUrl);
-  if (!extractedSeedUrl) {
-    throw new Error("invalid_seed_url");
-  }
-
-  return store.createCollectorJob({
-    seedUrl: extractedSeedUrl,
-    requestedAt: now.toISOString(),
-    preferredRunner: input.preferredRunner ?? "local_collector",
-  });
-}
 
 export function listAdminCollectorJobs(store: AdminStore) {
   return store.listCollectorJobs();

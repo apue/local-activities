@@ -4,7 +4,6 @@ import { adminSessionCookie } from "./admin-auth";
 import { authenticateAdminRequest } from "./admin-auth";
 import {
   AdminDraftPublishBlockedError,
-  createAdminCollectorJob,
   getAdminEventDraftDetail,
   listAdminCollectorJobs,
   listAdminExcludedArticles,
@@ -22,13 +21,6 @@ type AdminEnv = {
   [key: string]: string | undefined;
   ADMIN_ACCESS_TOKEN?: string;
 };
-
-const createCollectorJobSchema = z
-  .object({
-    seedUrl: z.string().min(1),
-    preferredRunner: z.enum(["local_collector"]).optional(),
-  })
-  .strict();
 
 const draftPublishActionSchema = z
   .object({
@@ -87,29 +79,6 @@ export async function handleAdminLogin(request: Request, env: AdminEnv) {
       },
     },
   );
-}
-
-export async function handleAdminCreateCollectorJob(
-  request: Request,
-  store: AdminStore,
-  env: AdminEnv,
-  now = new Date(),
-) {
-  const auth = authenticateAdminRequest(request, env);
-  if (!auth.ok) return authErrorResponse(auth);
-
-  const parsed = createCollectorJobSchema.safeParse(await parseJson(request));
-  if (!parsed.success) return invalidRequestResponse(parsed.error);
-
-  try {
-    const job = await createAdminCollectorJob(parsed.data, store, now);
-    return Response.json({
-      ok: true,
-      job,
-    });
-  } catch (error) {
-    return serviceErrorResponse(error);
-  }
 }
 
 export async function handleAdminListCollectorJobs(
@@ -381,6 +350,5 @@ function adminErrorStatus(message: string) {
   if (message === "draft_not_found") return 404;
   if (message === "excluded_article_not_found") return 404;
   if (message === "draft_not_publishable") return 400;
-  if (message === "invalid_seed_url") return 400;
   return 500;
 }

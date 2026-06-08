@@ -27,18 +27,19 @@ describe("env inventory", () => {
   it("reports missing and placeholder variables by target", () => {
     const result = evaluateTarget("collector", {
       APP_BASE_URL: "https://activities.example",
-      COLLECTOR_BASE_URL: "https://activities.example",
-      COLLECTOR_API_KEY: "replace-with-random-collector-api-key",
+      COLLECTOR_EDGE_TOKEN: "replace-with-random-collector-edge-token",
       COLLECTOR_ID: "home-192-168-0-16",
+      SUPABASE_URL: "https://project.supabase.co",
+      SUPABASE_SECRET_KEY: "sb_secret_value",
       COLLECTOR_INTERVAL_HOURS: "4",
-      AGENT_PROVIDER: "openai",
-      OPENAI_API_KEY: "sk-real-secret",
-      OPENAI_MODEL: "gpt-5-mini",
+      WECHAT2RSS_BASE_URL: "http://127.0.0.1:4000",
+      WECHAT2RSS_TOKEN: "wechat2rss-token",
+      ARTICLE_BUNDLES_BUCKET: "article-bundles",
     });
 
-    expect(result.present).toContain("OPENAI_API_KEY");
-    expect(result.placeholders).toContain("COLLECTOR_API_KEY");
-    expect(result.missing).not.toContain("COLLECTOR_API_KEY");
+    expect(result.present).toContain("WECHAT2RSS_TOKEN");
+    expect(result.placeholders).toContain("COLLECTOR_EDGE_TOKEN");
+    expect(result.missing).not.toContain("COLLECTOR_EDGE_TOKEN");
     expect(result.ok).toBe(false);
   });
 
@@ -46,8 +47,6 @@ describe("env inventory", () => {
     const vercelResult = evaluateTarget("vercel", {
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       ADMIN_ACCESS_TOKEN: "admin-secret",
-      COLLECTOR_API_KEY: "collector-secret",
-      COLLECTOR_SCOPED_TOKEN_SECRET: "scoped-secret",
       NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_value",
       SUPABASE_SECRET_KEY: "sb_secret_value",
@@ -55,7 +54,7 @@ describe("env inventory", () => {
     const localResult = evaluateTarget("local-app", {
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       ADMIN_ACCESS_TOKEN: "admin-secret",
-      COLLECTOR_API_KEY: "collector-secret",
+      COLLECTOR_EDGE_TOKEN: "collector-edge-secret",
       NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_value",
       SUPABASE_SECRET_KEY: "sb_secret_value",
@@ -69,12 +68,7 @@ describe("env inventory", () => {
     const result = evaluateTarget("vercel", {
       NEXT_PUBLIC_APP_URL: "https://local-activities.vercel.app",
       ADMIN_ACCESS_TOKEN: "admin-secret",
-      COLLECTOR_API_KEY: "collector-secret",
-      COLLECTOR_SCOPED_TOKEN_SECRET: "scoped-secret",
       INTERNAL_API_SECRET: "internal-secret",
-      AGENT_PROVIDER: "openai",
-      OPENAI_API_KEY: "openai-secret",
-      OPENAI_MODEL: "gpt-5-mini",
       NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_value",
       SUPABASE_SECRET_KEY: "sb_secret_value",
@@ -83,7 +77,6 @@ describe("env inventory", () => {
       OBSERVABILITY_PROVIDER: "vercel",
       VERCEL_WEB_ANALYTICS_ENABLED: "true",
       VERCEL_SPEED_INSIGHTS_ENABLED: "true",
-      VERCEL_SANDBOX_ENABLED: "true",
     });
 
     expect(result.ok).toBe(true);
@@ -93,20 +86,11 @@ describe("env inventory", () => {
     expect(result.optional).toContain("AMAP_WEB_SERVICE_API_KEY");
   });
 
-  it("does not advertise VISION_TRIAGE_MODEL as active MVP configuration", () => {
-    for (const targetName of targetNames) {
-      const result = evaluateTarget(targetName, {});
-
-      expect(result.required).not.toContain("VISION_TRIAGE_MODEL");
-      expect(result.optional).not.toContain("VISION_TRIAGE_MODEL");
-    }
-  });
-
   it("formats reports with variable names but without secret values", () => {
     const result = evaluateTarget("local-app", {
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       ADMIN_ACCESS_TOKEN: "admin-secret-value",
-      COLLECTOR_API_KEY: "collector-secret-value",
+      COLLECTOR_EDGE_TOKEN: "collector-secret-value",
       NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_value",
       SUPABASE_SECRET_KEY: "sb_secret_value",
@@ -128,6 +112,11 @@ describe("env inventory", () => {
   });
 
   it("exposes stable target names for documentation and CLI help", () => {
-    expect(targetNames).toEqual(["local-app", "vercel", "collector"]);
+    expect(targetNames).toEqual([
+      "local-app",
+      "vercel",
+      "collector",
+      "supabase-functions",
+    ]);
   });
 });

@@ -358,7 +358,7 @@ function normalizeImageRole(role) {
     "screenshot",
     "article_image",
     "ocr_text",
-    "vision_summary",
+    "visual_analysis_summary",
   ].includes(value)
     ? value
     : "article_image";

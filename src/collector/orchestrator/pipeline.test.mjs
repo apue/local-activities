@@ -160,7 +160,7 @@ describe("article pipeline orchestrator", () => {
             payload: {
               articleUrl: "https://mp.weixin.qq.com/s/e2e",
               stage: "llm_parse",
-              reason: "agent_response_invalid_schema",
+              reason: "analysis_response_invalid_schema",
               message: "missing events array",
               retryable: true,
             },
@@ -182,7 +182,7 @@ describe("article pipeline orchestrator", () => {
     expect(report.failures).toContainEqual(
       expect.objectContaining({
         stage: "llm_parse",
-        reason: "agent_response_invalid_schema",
+        reason: "analysis_response_invalid_schema",
       }),
     );
   });
@@ -265,17 +265,17 @@ describe("article pipeline orchestrator", () => {
     ]);
   });
 
-  it("skips ingest for V4 same_event dedupe decisions", async () => {
+  it("skips ingest for same_event dedupe decisions", async () => {
     const ingestCalls = [];
     const report = await runArticlePipelineOnce({
-      runId: "v4-duplicate",
-      sourceUrl: "https://mp.weixin.qq.com/s/v4-duplicate",
+      runId: "same-event-duplicate",
+      sourceUrl: "https://mp.weixin.qq.com/s/same-event-duplicate",
       now,
       capture: async () => ({ ok: true, bundle: articleBundle() }),
       extractEvents: async () => ({
         kind: "drafts",
-        runId: "v4-duplicate",
-        eventDrafts: [eventDraft("draft-v4-duplicate")],
+        runId: "same-event-duplicate",
+        eventDrafts: [eventDraft("draft-same-event-duplicate")],
         evidenceAssets: [],
         failures: [],
       }),
@@ -319,7 +319,7 @@ describe("article pipeline orchestrator", () => {
       extractEvents: async () => {
         calls.push("extract");
         throw Object.assign(new Error("provider exploded"), {
-          reason: "agent_request_failed",
+          reason: "analysis_request_failed",
           retryable: true,
         });
       },
@@ -340,7 +340,7 @@ describe("article pipeline orchestrator", () => {
     expect(report.failures).toContainEqual(
       expect.objectContaining({
         stage: "extraction",
-        reason: "agent_request_failed",
+        reason: "analysis_request_failed",
         message: "provider exploded",
       }),
     );

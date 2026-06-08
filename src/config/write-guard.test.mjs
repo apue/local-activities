@@ -76,7 +76,7 @@ describe("write guard", () => {
     );
     expect(
       normalizeEvalUsageEnvironment({
-        VISION_EVAL_USAGE_ENVIRONMENT: "eval:model-benchmark",
+        EVAL_USAGE_ENVIRONMENT: "eval:model-benchmark",
       }),
     ).toBe("eval:model-benchmark");
   });

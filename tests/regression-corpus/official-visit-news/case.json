@@ -1,9 +1,11 @@
 {
   "id": "official-visit-news",
   "title": "Official visit news",
-  "labels": ["official_visit_non_public_news"],
+  "labels": [
+    "official_visit_non_public_news"
+  ],
   "source": {
-    "type": "event_pipeline_v2_fixture",
+    "type": "historical_fixture",
     "fixtureId": "official-visit-news",
     "url": "https://mp.weixin.qq.com/s/official-visit-fixture"
   },

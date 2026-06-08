@@ -40,7 +40,7 @@ describe("event contracts", () => {
     expect(() => canonicalEventReviewStateSchema.parse("published")).toThrow();
   });
 
-  it("accepts public-safe Event Pipeline V2 canonical fields", () => {
+  it("accepts public-safe event analysis canonical fields", () => {
     const result = canonicalEventSchema.parse({
       id: "event-recurring",
       title: "Weekly Library Meetup",

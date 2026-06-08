@@ -1,7 +1,5 @@
 import { createHash } from "node:crypto";
 
-import { put as vercelBlobPut } from "@vercel/blob";
-
 const payloadVersion = "2026-05-collector-v1";
 
 export function extractImageCandidatesFromHtml(html, { articleUrl } = {}) {
@@ -82,7 +80,7 @@ export function buildImageEvidenceAssetEnvelopes({
   imageCandidates,
   storeImages = false,
   fetchImpl = fetch,
-  putPublicAsset = putPublicEvidenceAsset,
+  putPublicAsset,
 }) {
   const envelopes = imageCandidates.map((candidate) => {
     const role = classifyImageCandidate(candidate);
@@ -109,7 +107,7 @@ export function buildImageEvidenceAssetEnvelopes({
     };
   });
 
-  if (!storeImages) return envelopes;
+  if (!storeImages || typeof putPublicAsset !== "function") return envelopes;
   return Promise.all(
     envelopes.map((envelope) =>
       withStoredImageEvidence({ envelope, fetchImpl, putPublicAsset }),
@@ -120,8 +118,9 @@ export function buildImageEvidenceAssetEnvelopes({
 export async function storeImageEvidenceAssets({
   evidenceAssets,
   fetchImpl = fetch,
-  putPublicAsset = putPublicEvidenceAsset,
+  putPublicAsset,
 }) {
+  if (typeof putPublicAsset !== "function") return evidenceAssets;
   return Promise.all(
     evidenceAssets.map(async (payload) => {
       const envelope = await withStoredImageEvidence({
@@ -235,17 +234,6 @@ async function withStoredImageEvidence({ envelope, fetchImpl, putPublicAsset }) 
   }
 }
 
-async function putPublicEvidenceAsset(input) {
-  const extension = extensionForContentType(input.contentType);
-  const pathname = `${assetDirectory(input.role)}/${slugify(input.keyHint)}-${Date.now()}${extension}`;
-  const blob = await vercelBlobPut(pathname, input.bytes, {
-    access: "public",
-    contentType: input.contentType,
-    addRandomSuffix: true,
-  });
-  return { url: blob.url };
-}
-
 function storageRoleForEvidenceRole(role) {
   if (role === "qr" || role === "registration") return "registration_qr";
   if (role === "poster") return "poster";
@@ -260,29 +248,6 @@ function normalizeImageContentType(value) {
   )
     ? contentType
     : undefined;
-}
-
-function assetDirectory(role) {
-  if (role === "poster") return "event-posters";
-  return `event-assets/${role}`;
-}
-
-function slugify(value) {
-  const slug = value
-    .toLowerCase()
-    .replace(/\.[a-z0-9]+$/i, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-
-  return slug || "event-asset";
-}
-
-function extensionForContentType(contentType) {
-  if (contentType === "image/jpeg") return ".jpg";
-  if (contentType === "image/webp") return ".webp";
-  if (contentType === "image/gif") return ".gif";
-  return ".png";
 }
 
 function removeUndefined(value) {

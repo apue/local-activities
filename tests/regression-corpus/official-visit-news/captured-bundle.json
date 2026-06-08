@@ -11,7 +11,10 @@
   "authorName": "German Embassy",
   "publishedAt": "2026-06-01T00:00:00.000Z",
   "capturedAt": "2026-06-01T00:00:00.000Z",
-  "languageHints": ["en", "zh"],
+  "languageHints": [
+    "en",
+    "zh"
+  ],
   "captureMode": "text_complete",
   "text": "German minister visited China for official meetings. This is a recap of a diplomatic visit and not an event open to the public.",
   "html": "<article><p>Official meetings and delegation recap.</p></article>",
@@ -19,6 +22,6 @@
   "links": [],
   "miniPrograms": [],
   "contentHash": "regression-official-visit-news",
-  "diagnostics": [{ "key": "promoted_from", "value": "fixtures/event-pipeline-v2/official-visit-news" }],
+  "diagnostics": [],
   "captureWarnings": []
 }

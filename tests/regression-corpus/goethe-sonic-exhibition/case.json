@@ -1,11 +1,13 @@
 {
   "id": "goethe-sonic-exhibition",
   "title": "Goethe sonic exhibition",
-  "labels": ["long_running_exhibition"],
+  "labels": [
+    "long_running_exhibition"
+  ],
   "source": {
-    "type": "event_pipeline_v2_fixture",
+    "type": "historical_fixture",
     "fixtureId": "goethe-sonic-exhibition",
     "url": "https://mp.weixin.qq.com/s/goethe-sonic-exhibition-fixture"
   },
-  "rationale": "Long-running exhibition promoted from the V2 fixture inventory."
+  "rationale": "Long-running exhibition."
 }

@@ -13,11 +13,11 @@ import {
   runRegressionReplay,
 } from "./regression-corpus-replay.mjs";
 
-describe("Event Pipeline V4 regression corpus replay", () => {
+describe("event pipeline regression corpus replay", () => {
   it("loads the committed manifest and validates required coverage", async () => {
     const corpus = await loadRegressionCorpus();
 
-    expect(corpus.manifest.version).toBe("event-pipeline-v4-regression-corpus-v1");
+    expect(corpus.manifest.version).toBe("event-pipeline-regression-corpus-v1");
     expect(corpus.cases.length).toBeGreaterThan(0);
     for (const label of requiredCoverageLabels) {
       expect(corpus.coverageLabels).toContain(label);
@@ -127,7 +127,7 @@ async function createMinimalCorpus({ omitFile }) {
   await writeFile(
     path.join(corpusDir, "manifest.json"),
     JSON.stringify({
-      version: "event-pipeline-v4-regression-corpus-v1",
+      version: "event-pipeline-regression-corpus-v1",
       cases: [{ id: caseId, labels: ["ordinary_public_event"] }],
     }),
   );

@@ -11,7 +11,9 @@
   "authorName": "北平机器",
   "publishedAt": "2026-06-01T00:00:00.000Z",
   "capturedAt": "2026-06-01T00:00:00.000Z",
-  "languageHints": ["zh"],
+  "languageHints": [
+    "zh"
+  ],
   "captureMode": "text_complete",
   "text": "北平机器精酿啤酒节，北京线下活动。该夹具代表已知同一活动的重复/更新判断。",
   "html": "<article><p>北平机器精酿啤酒节，北京线下活动。</p></article>",
@@ -28,6 +30,11 @@
   "links": [],
   "miniPrograms": [],
   "contentHash": "regression-beiping-beer-festival",
-  "diagnostics": [{ "key": "promoted_from", "value": "fixtures/event-pipeline-v2/beiping-beer-festival" }],
-  "captureWarnings": [{ "reason": "missing_operator_sourced_pair", "message": "Second real Beiping duplicate/update source is not self-contained yet." }]
+  "diagnostics": [],
+  "captureWarnings": [
+    {
+      "reason": "missing_operator_sourced_pair",
+      "message": "Second real Beiping duplicate/update source is not self-contained yet."
+    }
+  ]
 }

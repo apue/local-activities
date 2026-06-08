@@ -3,13 +3,6 @@ import {
   validateCapturedArticleBundle,
 } from "../../capture/article-bundle.mjs";
 import { extractEvidenceFromArticleBundle } from "../evidence/extractor.mjs";
-import {
-  uploadArticleSnapshots,
-  uploadEvidenceAssets,
-  uploadExtractionResults,
-  uploadSourceRun,
-} from "../upload-client/index.mjs";
-import { runLlmExtractionFromBundle } from "../../extraction/llm-extractor.mjs";
 
 const collectorPayloadVersion = "2026-05-collector-v1";
 const duplicateActionsSkippedByDefault = new Set([
@@ -36,6 +29,7 @@ export async function runArticlePipelineOnce({
 }) {
   if (!sourceUrl) throw new Error("pipeline_source_url_required");
   if (typeof capture !== "function") throw new Error("pipeline_capture_required");
+  if (upload) throw new Error("pipeline_upload_removed_use_supabase_edge_analysis");
 
   const observedAt = now.toISOString();
   const report = {
@@ -193,7 +187,7 @@ export async function runArticlePipelineOnce({
       return report;
     }
 
-    if (ingest || upload) {
+    if (ingest) {
       const sourceRun = sourceRunEnvelope({
         collectorId: collectorIdFromEnv(env),
         runId,
@@ -224,7 +218,7 @@ export async function runArticlePipelineOnce({
         }),
       );
       const ingestResult = await runStage(report, "ingest", async () =>
-        (ingest ?? uploadWithCollectorClient)({
+        ingest({
           env,
           fetchImpl,
           sourceRun,
@@ -284,69 +278,6 @@ export async function runArticlePipelineOnce({
   }
 }
 
-export function readCollectorUploadConfig(env = process.env) {
-  const collectorBaseUrl = normalizeBaseUrl(
-    env.COLLECTOR_BASE_URL ?? env.APP_BASE_URL ?? "",
-  );
-  const collectorApiKey = env.COLLECTOR_API_KEY?.trim();
-  const collectorId = collectorIdFromEnv(env);
-  const missing = [];
-  if (!collectorBaseUrl) missing.push("COLLECTOR_BASE_URL");
-  if (!collectorApiKey) missing.push("COLLECTOR_API_KEY");
-  if (!collectorId) missing.push("COLLECTOR_ID");
-  if (missing.length) return { ok: false, missing };
-  return {
-    ok: true,
-    collectorBaseUrl,
-    collectorId,
-    collectorApiKey,
-    headers: createCollectorHeaders({ collectorId, collectorApiKey }),
-  };
-}
-
-export async function uploadWithCollectorClient({
-  env = process.env,
-  fetchImpl = fetch,
-  sourceRun,
-  articleSnapshots,
-  evidenceAssets,
-  extractionResults,
-}) {
-  const config = readCollectorUploadConfig(env);
-  if (!config.ok) {
-    throw Object.assign(
-      new Error(`missing_collector_upload_config:${config.missing.join(",")}`),
-      { reason: "collector_upload_config_missing", retryable: false },
-    );
-  }
-  const uploadedSourceRun = await uploadSourceRun({
-    config,
-    fetchImpl,
-    envelope: sourceRun,
-  });
-  const uploadedArticleSnapshotIds = await uploadArticleSnapshots({
-    config,
-    fetchImpl,
-    articleEnvelopes: articleSnapshots,
-  });
-  const uploadedSourceEvidence = await uploadEvidenceAssets({
-    config,
-    fetchImpl,
-    evidenceAssets,
-  });
-  const uploadedExtraction = await uploadExtractionResults({
-    config,
-    fetchImpl,
-    extractionResults,
-  });
-  return {
-    sourceRunId: uploadedSourceRun.id,
-    uploadedArticleSnapshotIds,
-    ...uploadedSourceEvidence,
-    ...uploadedExtraction,
-  };
-}
-
 export function sourceRunEnvelope({ collectorId, runId, observedAt, payload }) {
   return envelope({ collectorId, runId, observedAt, payload });
 }
@@ -355,23 +286,11 @@ function defaultExtractEvidence({ bundle }) {
   return extractEvidenceFromArticleBundle(bundle);
 }
 
-function defaultExtractEvents({
-  env,
-  bundle,
-  evidenceSet,
-  runId,
-  now,
-  fetchImpl,
-}) {
-  return runLlmExtractionFromBundle({
-    env,
-    bundle,
-    evidenceSet,
-    runId,
-    now,
-    fetchImpl,
-    upload: false,
-  });
+function defaultExtractEvents() {
+  throw Object.assign(
+    new Error("pipeline_extract_events_required"),
+    { reason: "analysis_adapter_missing", retryable: false },
+  );
 }
 
 function defaultResolveDedupe({ eventDraft }) {
@@ -516,37 +435,19 @@ function envelope({ collectorId, runId, observedAt, payload }) {
   };
 }
 
-function createCollectorHeaders({ collectorId, collectorApiKey }) {
-  return {
-    authorization: `Bearer ${collectorApiKey}`,
-    "content-type": "application/json",
-    "x-collector-id": collectorId,
-  };
-}
-
 function collectorIdFromEnv(env) {
   return clean(env.COLLECTOR_ID) ?? "unknown-collector";
 }
 
 function reasonForStage(stage) {
   if (stage === "storage") return "storage_failed";
-  if (stage === "extraction") return "agent_request_failed";
+  if (stage === "extraction") return "analysis_request_failed";
   if (stage === "ingest") return "collector_upload_failed";
   return "pipeline_stage_failed";
 }
 
 function createRunId(now) {
   return `pipeline-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}`;
-}
-
-function normalizeBaseUrl(value) {
-  const trimmed = String(value ?? "").trim();
-  if (!trimmed) return "";
-  try {
-    return new URL(trimmed).toString().replace(/\/+$/, "");
-  } catch {
-    return "";
-  }
 }
 
 function clean(value) {

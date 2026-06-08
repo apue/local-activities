@@ -1,27 +1,27 @@
 # Regression Corpus
 
-This document defines the Event Pipeline V4 regression corpus strategy. The goal
-is to preserve product failures as deterministic replay cases without depending
-on live WeChat, live LLM calls, or hosted production data during CI.
+This document defines the regression corpus strategy for the reset event
+pipeline. The goal is to preserve product failures as deterministic replay cases
+without depending on live WeChat, live LLM calls, or hosted production data
+during CI.
 
 ## Current State
 
-The project currently has useful cases in four layers:
+The project currently has useful cases in three layers:
 
 | Layer | Location | Strength | Weakness |
 | --- | --- | --- | --- |
-| V4 self-contained regression corpus | `tests/regression-corpus/*` | committed, contract-validated, replayable through mock E2E | second real Beiping duplicate/update source is still operator-sourced |
-| Deterministic fixtures | `fixtures/event-pipeline-v2/*` | committed, replayable, CI-safe | V2-shaped, some synthetic URLs/assets, legacy triage stages |
+| Self-contained regression corpus | `tests/regression-corpus/*` | committed, contract-validated, replayable through mock E2E | second real Beiping duplicate/update source is still operator-sourced |
 | Vision eval labels | `tests/eval/vision-cases.json` | broadest real-world coverage | many cases depend on Supabase snapshot ids, not self-contained bundles |
 | Production seed manifest | `tests/seed-corpus/production-seed-manifest.json` | product acceptance intent | mostly manifest references, not a full replay corpus |
 
-The V4 corpus is now the primary CI-safe replay suite. V2 fixtures, vision eval
-labels, and production seed references remain useful source inventory for adding
-future cases.
+The self-contained corpus is the primary CI-safe replay suite. Vision eval labels
+and production seed references remain useful source inventory for adding future
+cases, but they are not a substitute for committed article bundles.
 
 ## Target Case Format
 
-Self-contained cases should live under a V4 corpus directory once implemented:
+Self-contained cases live under:
 
 ```text
 tests/regression-corpus/[case-id]/
@@ -49,28 +49,28 @@ trigger platform checks.
 
 ## Coverage Inventory
 
-| Product behavior | Existing coverage | Current layer | V4 status |
+| Product behavior | Existing coverage | Current layer | Status |
 | --- | --- | --- | --- |
-| Ordinary public event | `korean-red-flavor` | V4 corpus, V2 fixture | self-contained |
-| Registration required | `registration-required-workshop` from `kr-red-taste-cooking-workshop` | V4 corpus, eval | self-contained |
-| QR registration | `qr-registration-poster` | V4 corpus, V2 fixture | self-contained |
-| Poster or image-dominant event | `qr-registration-poster` | V4 corpus, V2 fixture | self-contained metadata evidence |
-| Mini-program or action registration | `beiping-mini-program-action` for URL `https://mp.weixin.qq.com/s/0Chl_ewq9yiDbjcBZmuwtQ` | V4 corpus, live investigation | self-contained action metadata |
-| Multi-event article | `italian-monthly-roundup` | V4 corpus, V2 fixture | self-contained |
-| Long-running exhibition | `goethe-sonic-exhibition` | V4 corpus, V2 fixture | self-contained |
-| Recurring or multiple occurrences | `goethe-weekly-library` | V4 corpus, V2 fixture | self-contained with explicit occurrences in `expected.json` |
-| Duplicate/update pair | `beiping-beer-festival` | V4 corpus, V2 fixture | available fixture represented; second real operator-sourced pair still missing |
-| Official visit or non-public news | `official-visit-news` | V4 corpus, V2 fixture | self-contained negative case |
-| Not an event / cultural article | `japan-tofu-culture-article` | V4 corpus, eval | self-contained negative case |
+| Ordinary public event | `korean-red-flavor` | regression corpus | self-contained |
+| Registration required | `registration-required-workshop` from `kr-red-taste-cooking-workshop` | regression corpus, eval | self-contained |
+| QR registration | `qr-registration-poster` | regression corpus | self-contained |
+| Poster or image-dominant event | `qr-registration-poster` | regression corpus | self-contained metadata evidence |
+| Mini-program or action registration | `beiping-mini-program-action` for URL `https://mp.weixin.qq.com/s/0Chl_ewq9yiDbjcBZmuwtQ` | regression corpus, live investigation | self-contained action metadata |
+| Multi-event article | `italian-monthly-roundup` | regression corpus | self-contained |
+| Long-running exhibition | `goethe-sonic-exhibition` | regression corpus | self-contained |
+| Recurring or multiple occurrences | `goethe-weekly-library` | regression corpus | self-contained with explicit occurrences in `expected.json` |
+| Duplicate/update pair | `beiping-beer-festival` | regression corpus | available fixture represented; second real operator-sourced pair still missing |
+| Official visit or non-public news | `official-visit-news` | regression corpus | self-contained negative case |
+| Not an event / cultural article | `japan-tofu-culture-article` | regression corpus, eval | self-contained negative case |
 | Non-general-public or private/internal | `mexico-embassy-world-cup-private-invitation` | eval | covered in labels only; needs committed bundle |
 | Recruitment/course/contest ambiguity | `goethe-youth-theater-recruitment`, `beiping-beer-festival-volunteer-recruitment`, `goethe-summer-language-course-signup`, `daad-photo-contest` | eval, seed | covered; split reject vs review expectations |
-| Not Beijing event | `goethe-venice-biennale-german-pavilion` | V4 corpus, eval | self-contained negative case |
+| Not Beijing event | `goethe-venice-biennale-german-pavilion` | regression corpus, eval | self-contained negative case |
 | QR present but not registration | `brazil-mouth-disease-recognition-news`, `japan-tsuda-umeko-biography`, `goethe-summer-language-course-signup` | eval | covered in labels; needs evidence-level fixture |
-| Capture blocked/login/captcha | `capture-fetch-blocked` | V4 corpus | self-contained typed failure |
+| Capture blocked/login/captcha | `capture-fetch-blocked` | regression corpus | self-contained typed failure |
 
 ## Cases The Operator May Still Need To Source
 
-The existing inventory is enough to start V4 implementation. Additional source
+The existing inventory is enough to start the reset implementation. Additional source
 material is useful for:
 
 - a real Beiping duplicate/update pair from two different article URLs
@@ -87,7 +87,7 @@ for CI regression.
 
 ## Expected Test Paths
 
-V4 should support these paths:
+The reset pipeline should support these paths:
 
 ```text
 capture fixture -> CapturedArticleBundle contract test
@@ -98,7 +98,7 @@ candidate + evidence + dedupe decision -> publish-policy table test
 fake modules -> pipeline orchestrator mock E2E
 ```
 
-The V4 corpus replay command validates the case contracts and runs a deterministic
+The corpus replay command validates the case contracts and runs a deterministic
 mock E2E path through `runArticlePipelineOnce`:
 
 ```bash

@@ -1,6 +1,6 @@
 {
-  "version": "event-pipeline-v4-regression-corpus-v1",
-  "description": "Self-contained Event Pipeline V4 replay corpus. Cases use committed capture bundles or typed capture failures and never require live WeChat, live LLM calls, hosted Supabase writes, or production publish.",
+  "version": "event-pipeline-regression-corpus-v1",
+  "description": "Self-contained Event Pipeline replay corpus. Cases use committed capture bundles or typed capture failures and never require live WeChat, live LLM calls, hosted Supabase writes, or production publish.",
   "operatorSourcedGaps": [
     {
       "label": "beiping_duplicate_update_pair",

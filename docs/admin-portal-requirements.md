@@ -19,7 +19,6 @@ The first admin portal implementation covers:
 - source health list
 - collector run history
 - published upcoming event sanity list
-- add-seed-URL entry point for a known official article or official webpage
 
 The first implementation may start from static or mocked data during UI prototyping, but production behavior must read from backend-owned state. Collector and extraction outputs remain untrusted inputs. The backend decides validation, deduplication, publish eligibility, and final publish state.
 
@@ -158,15 +157,18 @@ The published list is a sanity surface for public events that are already visibl
 
 The MVP focus is quality control, not historical reporting.
 
-### Add URL Or Shared Text
+### Manual Capture Actions
 
-The add-seed flow accepts a public activity URL or pasted shared text that contains a URL. It queues backend validation and collection work. The portal must not assume pasted text is a valid source, a valid activity, or safe to publish before backend validation succeeds.
+The current admin portal does not create collector jobs or browser-crawling
+seed actions. Production WeChat collection is handled by an external capture
+worker that uploads article bundles to Supabase Storage and asks Supabase Edge
+Functions to analyze them.
 
-For the active event pipeline, production WeChat collection is handled by the Mac-local
-Wechat2RSS collector path. Admin-created collection or seed actions must route
-through backend-owned state and the local collector path unless a later approved
-issue adds another source provider. Vercel Sandbox is not an active crawler
-runtime for this MVP slice.
+If a future operator action accepts a URL or pasted shared text, it must create
+the same backend-owned bundle or source state used by the automated capture
+path. It must not run browser crawling inside the Vercel app, write collector
+results directly into product tables, or publish anything before backend
+validation succeeds.
 
 ## Data And State Rules
 

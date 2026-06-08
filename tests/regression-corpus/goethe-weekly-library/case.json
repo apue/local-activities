@@ -1,11 +1,13 @@
 {
   "id": "goethe-weekly-library",
   "title": "Goethe weekly library activity",
-  "labels": ["recurring_or_multiple_occurrences"],
+  "labels": [
+    "recurring_or_multiple_occurrences"
+  ],
   "source": {
-    "type": "event_pipeline_v2_fixture",
+    "type": "historical_fixture",
     "fixtureId": "goethe-weekly-library",
     "url": "https://mp.weixin.qq.com/s/goethe-weekly-library-fixture"
   },
-  "rationale": "Recurring public activity promoted from the V2 fixture inventory."
+  "rationale": "Recurring public activity."
 }
