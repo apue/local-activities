@@ -15,6 +15,7 @@
     "regression:replay": "node scripts/regression-corpus-replay.mjs",
     "data:audit": "node scripts/data-hygiene.mjs audit",
     "data:hygiene": "node scripts/data-hygiene.mjs hygiene",
+    "data:reset": "node scripts/data-hygiene.mjs reset",
     "smoke:admin-readonly": "node scripts/admin-readonly-smoke.mjs",
     "smoke:wechat2rss": "node scripts/wechat2rss-smoke.mjs",
     "smoke:public-catalog": "node scripts/public-catalog-smoke.mjs",
