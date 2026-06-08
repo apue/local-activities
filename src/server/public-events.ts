@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { extractFirstHttpUrl } from "../shared/seed-url";
 import { getSupabaseAdminClient } from "./supabase-admin";
 
 export type PublicEventsClient = {
@@ -59,6 +60,15 @@ export type CanonicalEventRow = {
   poster_asset_id?: string | null;
   qr_asset_id?: string | null;
   registration_qr_asset_id?: string | null;
+  resolution_decision?:
+    | "new_event"
+    | "same_event"
+    | "update_existing"
+    | "cancel_existing"
+    | "withdraw_existing"
+    | "not_public_activity"
+    | "insufficient_info"
+    | null;
   hard_blockers?: Array<Record<string, unknown>> | null;
   soft_blockers?: Array<Record<string, unknown>> | null;
   entry_notes: string | null;
@@ -123,9 +133,12 @@ const basePublicEventColumns = [
   "source_url",
   "summary",
   "schedule_text",
+  "public_eligibility",
+  "event_kind",
   "schedule_kind",
   "recurrence_rule",
   "occurrence_starts_at",
+  "resolution_decision",
   "entry_notes",
   "status",
   "published_at",
@@ -247,6 +260,7 @@ export function filterUpcomingPublishedEvents(
 ) {
   return events
     .filter((event) => event.status === "published")
+    .filter(isPublicRenderableEvent)
     .filter((event) => {
       return getPublicEventEndTime(event, now) >= now.getTime();
     })
@@ -279,7 +293,7 @@ export function shapePublicEvent(row: CanonicalEventRow): PublicEvent {
     reservationStatus: row.reservation_status,
     registrationAction: row.registration_action ?? undefined,
     registrationUrl: row.registration_url ?? undefined,
-    sourceUrl: row.source_url,
+    sourceUrl: extractFirstHttpUrl(row.source_url) ?? row.source_url,
     posterImageUrl: row.poster_image_url ?? undefined,
     posterImageAlt: row.poster_image_alt ?? undefined,
     posterImageSourceUrl: row.poster_image_source_url ?? undefined,
@@ -293,6 +307,22 @@ export function shapePublicEvent(row: CanonicalEventRow): PublicEvent {
     entryNotes: row.entry_notes ?? undefined,
     status: "published",
   };
+}
+
+function isPublicRenderableEvent(event: CanonicalEventRow) {
+  if (event.public_eligibility === "not_public") return false;
+  if (
+    event.event_kind === "news" ||
+    event.event_kind === "visit" ||
+    event.event_kind === "cancellation" ||
+    event.event_kind === "unsupported"
+  ) {
+    return false;
+  }
+  return (
+    event.resolution_decision !== "not_public_activity" &&
+    event.resolution_decision !== "insufficient_info"
+  );
 }
 
 export function formatReservationStatus(

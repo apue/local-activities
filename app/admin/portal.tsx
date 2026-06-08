@@ -16,6 +16,7 @@ import {
   formatUsageTimestamp,
   getDraftEvidenceItems,
   getDraftBlockingReasons,
+  getDraftSourceUrl,
   getReviewStateLabel,
   getUsageRangeLabel,
   isDraftPublishableForDisplay,
@@ -216,6 +217,9 @@ export function AdminPortal() {
   const evidenceItems = selectedDraft
     ? getDraftEvidenceItems(selectedDraft)
     : [];
+  const selectedDraftSourceUrl = selectedDraft
+    ? getDraftSourceUrl(selectedDraft)
+    : "";
 
   useEffect(() => {
     setOperatorOverrideReason(selectedDraft?.operatorOverrideReason ?? "");
@@ -635,15 +639,26 @@ export function AdminPortal() {
                           <strong>{item.label}</strong>
                           {item.assetId ? <span>{item.assetId}</span> : null}
                           {item.sourceUrl ? (
-                            <a href={item.sourceUrl}>Source image</a>
+                            <a
+                              href={item.sourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Source image
+                            </a>
                           ) : null}
                         </figcaption>
                       </figure>
                     ))}
                   </div>
                 ) : null}
-                <a className={styles.sourceLink} href={selectedDraft.articleUrl}>
-                  Open source URL · {selectedDraft.articleUrl}
+                <a
+                  className={styles.sourceLink}
+                  href={selectedDraftSourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open source URL · {selectedDraftSourceUrl}
                 </a>
                 <div className={styles.blockers}>
                   {selectedDecision?.hardBlockers.length ? (

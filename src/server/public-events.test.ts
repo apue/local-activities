@@ -69,6 +69,35 @@ describe("public event helpers", () => {
     ).toEqual(["event-1"]);
   });
 
+  it("filters out non-public and news-like canonical rows before public rendering", () => {
+    const now = new Date("2026-06-01T00:00:00.000Z");
+
+    expect(
+      filterUpcomingPublishedEvents(
+        [
+          baseEvent,
+          {
+            ...baseEvent,
+            event_id: "non-public",
+            public_eligibility: "not_public",
+          },
+          {
+            ...baseEvent,
+            event_id: "news",
+            event_kind: "news",
+            title: "Ambassador visit recap",
+          },
+          {
+            ...baseEvent,
+            event_id: "rejected-resolution",
+            resolution_decision: "not_public_activity",
+          },
+        ],
+        now,
+      ).map((event) => event.event_id),
+    ).toEqual(["event-1"]);
+  });
+
   it("keeps ongoing published events when the end time is still future", () => {
     const now = new Date("2026-06-06T07:00:00.000Z");
 
@@ -181,6 +210,72 @@ describe("public event helpers", () => {
       registrationQrImageUrl: "https://cdn.example.com/qr/register.png",
       registrationQrImageAlt: "Italian Design Weekend registration QR",
     });
+  });
+
+  it("shapes clean public source URLs from shared text values", () => {
+    expect(
+      shapePublicEvent({
+        ...baseEvent,
+        source_url:
+          "活动分享：准备好感受泰国农业精品 https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg 。",
+      }),
+    ).toMatchObject({
+      sourceUrl: "https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg",
+    });
+  });
+
+  it("lists public canonical events with schedule, poster, and registration evidence", async () => {
+    const client = {
+      from() {
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  or() {
+                    return {
+                      order() {
+                        return {
+                          async limit() {
+                            return {
+                              data: [
+                                {
+                                  ...baseEvent,
+                                  registration_action: "扫码报名",
+                                  registration_qr_image_url:
+                                    "https://cdn.example.com/qr/register.png",
+                                  registration_qr_image_alt:
+                                    "Italian Design Weekend registration QR",
+                                },
+                              ],
+                              error: null,
+                            };
+                          },
+                        };
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    } as unknown as PublicEventsClient;
+
+    await expect(
+      listPublicUpcomingEventsFromClient(
+        client,
+        new Date("2026-06-01T00:00:00.000Z"),
+      ),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        scheduleText: "6月6日 14:00-16:00",
+        posterImageUrl: "https://cdn.example.com/posters/event.png",
+        registrationAction: "扫码报名",
+        registrationQrImageUrl: "https://cdn.example.com/qr/register.png",
+      }),
+    ]);
   });
 
   it("formats public reservation status without exposing unknown", () => {
@@ -300,9 +395,12 @@ describe("public event helpers", () => {
     expect(calls).toContainEqual(["from", ["canonical_events"]]);
     expect(calls[1]?.[1]?.[0]).toContain("poster_image_url");
     expect(calls[1]?.[1]?.[0]).toContain("schedule_text");
+    expect(calls[1]?.[1]?.[0]).toContain("public_eligibility");
+    expect(calls[1]?.[1]?.[0]).toContain("event_kind");
     expect(calls[1]?.[1]?.[0]).toContain("schedule_kind");
     expect(calls[1]?.[1]?.[0]).toContain("recurrence_rule");
     expect(calls[1]?.[1]?.[0]).toContain("occurrence_starts_at");
+    expect(calls[1]?.[1]?.[0]).toContain("resolution_decision");
     expect(events[0]?.scheduleText).toBeUndefined();
   });
 
