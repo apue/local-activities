@@ -20,6 +20,7 @@
     "smoke:wechat2rss": "node scripts/wechat2rss-smoke.mjs",
     "smoke:public-catalog": "node scripts/public-catalog-smoke.mjs",
     "capture:wechat2rss:once": "node scripts/capture-worker.mjs",
+    "functions:test": "deno test --allow-env --allow-read supabase/functions/analyze-article-bundle",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

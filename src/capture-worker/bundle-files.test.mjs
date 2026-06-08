@@ -94,4 +94,41 @@ describe("capture worker bundle files", () => {
       hasBytes: false,
     });
   });
+
+  it("writes image bytes as bundle image files when capture provides bytes", () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const bundle = createCapturedArticleBundle({
+      provider: "url_browser",
+      sourceUrl: "https://mp.weixin.qq.com/s/bundle-image-bytes",
+      text: "Poster event",
+      images: [
+        {
+          id: "image-001",
+          sourceUrl: "https://mmbiz.qpic.cn/poster.jpg",
+          role: "poster",
+          contentType: "image/jpeg",
+          bytes,
+        },
+      ],
+    });
+
+    const result = buildArticleBundleFiles({ bundle, mode: "production" });
+    const imageFile = result.files.find((file) => file.path === "images/image-001.jpg");
+    const manifest = JSON.parse(
+      result.files.find((file) => file.path === "manifest.json").body,
+    );
+
+    expect(imageFile).toMatchObject({
+      path: "images/image-001.jpg",
+      body: bytes,
+      contentType: "image/jpeg",
+    });
+    expect(manifest.images[0]).toMatchObject({
+      id: "image-001",
+      path: "images/image-001.jpg",
+      hasBytes: true,
+      contentType: "image/jpeg",
+    });
+    expect(manifest.images[0]).not.toHaveProperty("bytes");
+  });
 });

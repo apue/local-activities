@@ -104,6 +104,30 @@ describe("captured article bundle", () => {
     );
   });
 
+  it("preserves image bytes metadata for storage-backed bundle files", () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    const bundle = createCapturedArticleBundle({
+      provider: "url_browser",
+      sourceUrl: "https://mp.weixin.qq.com/s/poster-bytes",
+      text: "Poster event with downloadable image",
+      images: [
+        {
+          id: "image-001",
+          sourceUrl: "https://mmbiz.qpic.cn/poster.jpg",
+          role: "poster",
+          contentType: "image/jpeg",
+          bytes,
+        },
+      ],
+    });
+
+    expect(bundle.images[0]).toMatchObject({
+      id: "image-001",
+      contentType: "image/jpeg",
+      bytes,
+    });
+  });
+
   it("allows image-dominant bundles when readable text is empty", () => {
     const bundle = createCapturedArticleBundle({
       provider: "url_browser",
