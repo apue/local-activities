@@ -15,9 +15,10 @@ The project currently has useful cases in three layers:
 | Vision eval labels | `tests/eval/vision-cases.json` | broadest real-world coverage | many cases depend on Supabase snapshot ids, not self-contained bundles |
 | Production seed manifest | `tests/seed-corpus/production-seed-manifest.json` | product acceptance intent | mostly manifest references, not a full replay corpus |
 
-The self-contained corpus is the primary CI-safe replay suite. Vision eval labels
-and production seed references remain useful source inventory for adding future
-cases, but they are not a substitute for committed article bundles.
+The 15-case self-contained corpus is the primary CI-safe replay suite. Vision
+eval labels and production seed references remain useful source inventory for
+adding future cases, but they are not a substitute for committed article
+bundles.
 
 ## Target Case Format
 
@@ -54,7 +55,7 @@ trigger platform checks.
 | Ordinary public event | `korean-red-flavor` | regression corpus | self-contained |
 | Registration required | `registration-required-workshop` from `kr-red-taste-cooking-workshop` | regression corpus, eval | self-contained |
 | QR registration | `qr-registration-poster` | regression corpus | self-contained |
-| Poster or image-dominant event | `qr-registration-poster` | regression corpus | self-contained metadata evidence |
+| Poster or image-dominant event | `qr-registration-poster`, `sparse-poster-review` | regression corpus | self-contained metadata evidence |
 | Mini-program or action registration | `beiping-mini-program-action` for URL `https://mp.weixin.qq.com/s/0Chl_ewq9yiDbjcBZmuwtQ` | regression corpus, live investigation | self-contained action metadata |
 | Multi-event article | `italian-monthly-roundup` | regression corpus | self-contained |
 | Long-running exhibition | `goethe-sonic-exhibition` | regression corpus | self-contained |
@@ -62,10 +63,11 @@ trigger platform checks.
 | Duplicate/update pair | `beiping-beer-festival` | regression corpus | available fixture represented; second real operator-sourced pair still missing |
 | Official visit or non-public news | `official-visit-news` | regression corpus | self-contained negative case |
 | Not an event / cultural article | `japan-tofu-culture-article` | regression corpus, eval | self-contained negative case |
-| Non-general-public or private/internal | `mexico-embassy-world-cup-private-invitation` | eval | covered in labels only; needs committed bundle |
+| Non-general-public or private/internal | `mexico-embassy-private-invitation` | regression corpus | self-contained negative case with `not_general_public` label |
 | Recruitment/course/contest ambiguity | `goethe-youth-theater-recruitment`, `beiping-beer-festival-volunteer-recruitment`, `goethe-summer-language-course-signup`, `daad-photo-contest` | eval, seed | covered; split reject vs review expectations |
 | Not Beijing event | `goethe-venice-biennale-german-pavilion` | regression corpus, eval | self-contained negative case |
-| QR present but not registration | `brazil-mouth-disease-recognition-news`, `japan-tsuda-umeko-biography`, `goethe-summer-language-course-signup` | eval | covered in labels; needs evidence-level fixture |
+| QR present but not registration | `qr-present-not-registration` | regression corpus | self-contained negative QR evidence case with `qr_present_not_registration` label |
+| Sparse poster requires review | `sparse-poster-review` | regression corpus | self-contained review case with `information_sparse_requires_review` and `poster_or_image_dominant` labels |
 | Capture blocked/login/captcha | `capture-fetch-blocked` | regression corpus | self-contained typed failure |
 
 ## Cases The Operator May Still Need To Source
@@ -76,8 +78,6 @@ material is useful for:
 - a real Beiping duplicate/update pair from two different article URLs
 - a WeChat article where registration is primarily a mini-program card
 - a page where all crucial event details are inside images with sparse text
-- a private/internal embassy event that looks event-like but is not for the
-  general Beijing public
 - a capture failure example if a source produces login/captcha/fetch-blocked
   behavior during an approved live capture
 
@@ -99,7 +99,7 @@ fake modules -> pipeline orchestrator mock E2E
 ```
 
 The corpus replay command validates the case contracts and runs a deterministic
-mock E2E path through `runArticlePipelineOnce`:
+mock E2E path through `runArticlePipelineOnce` for all 15 current cases:
 
 ```bash
 pnpm regression:replay -- --all
@@ -120,6 +120,35 @@ Production acceptance remains separate:
 
 ```text
 curated seed manifest -> production backend import -> operator checks public/admin/usage
+```
+
+## Promoting Future Bad Cases
+
+Use the promotion CLI when a bad case has already been captured as JSON and
+should become a committed regression case:
+
+```bash
+pnpm regression:promote -- --case-id <id> --label <label> --source-url <url> --rationale <text> --bundle-file <captured-bundle.json> --expected-action review --event-count 1
+```
+
+For negative bundle cases with no event draft, make the exclusion explicit:
+
+```bash
+pnpm regression:promote -- --case-id <id> --label <label> --source-url <url> --rationale <text> --bundle-file <captured-bundle.json> --expected-action exclude
+```
+
+For typed capture failures, provide the failure result instead of a bundle:
+
+```bash
+pnpm regression:promote -- --case-id <id> --label <label> --source-url <url> --rationale <text> --capture-result-file <capture-result.json>
+```
+
+Promotion is an offline file operation. It consumes already captured JSON and
+must not call live WeChat, live LLM providers, hosted Supabase, or production
+write paths. After promotion, run:
+
+```bash
+pnpm regression:replay -- --all
 ```
 
 ## Rules For Adding Cases

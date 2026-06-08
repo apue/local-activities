@@ -57,13 +57,17 @@ Expected checks:
 
 ## Regression Corpus
 
-The corpus should include ordinary events, registration-required events, QR
-registration, image-dominant articles, multi-event articles, long-running
-exhibitions, recurring events, duplicate/update pairs, non-public official
-items, non-events/news, not-Beijing posts, false QR evidence, and sparse-info
-review cases.
+The 15-case self-contained corpus should include ordinary events,
+registration-required events, QR registration, image-dominant articles,
+multi-event articles, long-running exhibitions, recurring events,
+duplicate/update pairs, non-public official items, non-events/news, not-Beijing
+posts, false QR evidence, and sparse-info review cases.
 
 Replay must run without network/provider/production writes.
+
+Promoting future bad cases must use already captured JSON through
+`pnpm regression:promote`; promotion must not call live WeChat, live LLM
+providers, hosted Supabase, or production write paths.
 
 ## Evaluation
 

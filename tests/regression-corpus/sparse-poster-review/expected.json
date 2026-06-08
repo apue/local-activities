@@ -1,0 +1,27 @@
+{
+  "action": "review",
+  "eventCount": 1,
+  "publicEligibility": "public",
+  "requiresReservation": false,
+  "evidence": {
+    "posterCount": 1,
+    "qrCodeCount": 0,
+    "registrationUrlCount": 0,
+    "miniProgramActionCount": 0
+  },
+  "dedupe": { "decision": "new_event" },
+  "publish": {
+    "state": "needs_review",
+    "reasons": ["information_sparse_requires_review"]
+  },
+  "eventDrafts": [
+    {
+      "draftId": "draft-sparse-poster-review",
+      "articleUrl": "https://mp.weixin.qq.com/s/sparse-poster-review-fixture",
+      "title": "Weekend cultural afternoon",
+      "city": "Beijing",
+      "venueName": "Beijing Cultural Space",
+      "publicEligibility": "public"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "qr-present-not-registration",
+  "labels": ["qr_present_not_registration"],
+  "source": {
+    "type": "eval_reference_promoted",
+    "evalCaseId": "brazil-mouth-disease-recognition-news",
+    "url": "https://mp.weixin.qq.com/s/qr-present-not-registration-fixture"
+  },
+  "rationale": "Article contains a QR code for following the official account, not event registration. The evidence extractor must not treat every QR as a registration channel."
+}

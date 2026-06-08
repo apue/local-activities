@@ -13,6 +13,7 @@
     "start": "next start",
     "env:check": "node scripts/env-inventory.mjs",
     "regression:replay": "node scripts/regression-corpus-replay.mjs",
+    "regression:promote": "node scripts/regression-corpus-promote.mjs",
     "data:audit": "node scripts/data-hygiene.mjs audit",
     "data:hygiene": "node scripts/data-hygiene.mjs hygiene",
     "data:reset": "node scripts/data-hygiene.mjs reset",

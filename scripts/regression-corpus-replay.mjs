@@ -23,8 +23,11 @@ export const requiredCoverageLabels = [
   "long_running_exhibition",
   "duplicate_or_update",
   "official_visit_non_public_news",
+  "not_general_public",
   "generic_not_event",
   "not_beijing",
+  "qr_present_not_registration",
+  "information_sparse_requires_review",
   "capture_failure",
 ];
 

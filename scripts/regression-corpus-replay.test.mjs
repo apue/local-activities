@@ -18,7 +18,8 @@ describe("event pipeline regression corpus replay", () => {
     const corpus = await loadRegressionCorpus();
 
     expect(corpus.manifest.version).toBe("event-pipeline-regression-corpus-v1");
-    expect(corpus.cases.length).toBeGreaterThan(0);
+    expect(corpus.cases.length).toBeGreaterThanOrEqual(15);
+    expect(corpus.cases.length).toBeLessThanOrEqual(25);
     for (const label of requiredCoverageLabels) {
       expect(corpus.coverageLabels).toContain(label);
     }
@@ -60,6 +61,26 @@ describe("event pipeline regression corpus replay", () => {
         caseId: "capture-fetch-blocked",
         status: "failed",
         sourceHealth: expect.objectContaining({ ok: false, failureReason: "fetch_blocked" }),
+      }),
+    );
+    expect(result.cases).toContainEqual(
+      expect.objectContaining({
+        caseId: "qr-present-not-registration",
+        eventCount: 0,
+        evidenceSummary: expect.objectContaining({
+          qrCodeCount: 0,
+          nonRegistrationImageCount: 1,
+        }),
+      }),
+    );
+    expect(result.cases).toContainEqual(
+      expect.objectContaining({
+        caseId: "sparse-poster-review",
+        expectedAction: "review",
+        eventCount: 1,
+        publishDecisions: [
+          expect.objectContaining({ state: "needs_review" }),
+        ],
       }),
     );
   });
