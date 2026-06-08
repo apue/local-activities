@@ -79,6 +79,7 @@ export function readLlmExtractorConfig(env = process.env, options = {}) {
 export function buildExtractorPromptInput({
   articleSnapshot,
   evidenceAssets = [],
+  evidenceSet,
   collectorId,
   runId,
 }) {
@@ -115,6 +116,7 @@ export function buildExtractorPromptInput({
       extractedBy: asset.extractedBy,
       confidence: asset.confidence,
     })),
+    sourceEvidence: buildPromptSourceEvidence(evidenceSet),
     outputContract: {
       classification:
         "kind must be activity, not_activity, or cancellation. Use cancellation for cancellation-only posts.",
@@ -162,6 +164,7 @@ export function buildLlmExtractionRequest({
     promptInput: buildExtractorPromptInput({
       articleSnapshot,
       evidenceAssets,
+      evidenceSet,
       collectorId,
       runId,
     }),
@@ -225,7 +228,12 @@ export async function runLlmExtractionFromBundle({
   now = new Date(),
   runId = createRunId(now),
   fetchImpl = fetch,
+  upload = false,
 }) {
+  if (upload) {
+    throw new Error("llm_extractor_upload_removed_use_collector_upload_client");
+  }
+
   const config = readLlmExtractorConfig(env, { requireApiKey: false });
   if (!config.ok) {
     return failureResult({
@@ -252,6 +260,7 @@ export async function runLlmExtractionFromBundle({
       fetchImpl,
       articleSnapshot: request.articleSnapshot,
       evidenceAssets: request.evidenceAssets,
+      promptInput: request.promptInput,
       runId,
     });
   const providerResult = await adapter.generate(request);
@@ -301,7 +310,12 @@ export async function runLlmExtractionOnce({
   now = new Date(),
   runId = createRunId(now),
   providerResponse,
+  upload = false,
 }) {
+  if (upload) {
+    throw new Error("llm_extractor_upload_removed_use_collector_upload_client");
+  }
+
   const config = readLlmExtractorConfig(env, {
     requireApiKey: providerResponse === undefined,
   });
@@ -442,12 +456,14 @@ async function requestProvider({
   articleSnapshot,
   evidenceAssets,
   fetchImpl,
+  promptInput,
   runId,
 }) {
   const request = providerRequest({
     config,
     articleSnapshot,
     evidenceAssets,
+    promptInput,
     runId,
   });
   const startedAt = Date.now();
@@ -481,15 +497,17 @@ function createFetchLlmProviderAdapter({
   fetchImpl,
   articleSnapshot,
   evidenceAssets,
+  promptInput,
   runId,
 }) {
   return {
-    async generate() {
+    async generate(request) {
       const raw = await requestProvider({
         config,
         articleSnapshot,
         evidenceAssets,
         fetchImpl,
+        promptInput: request?.promptInput ?? promptInput,
         runId,
       });
       return {
@@ -653,6 +671,51 @@ function buildRawModelResponseRecord({
   };
 }
 
+function buildPromptSourceEvidence(evidenceSet) {
+  if (!evidenceSet || typeof evidenceSet !== "object") return undefined;
+  const sourceEvidence = removeUndefined({
+    summary: evidenceSet.summary,
+    posters: compactEvidenceEntries(evidenceSet.posters),
+    qrCodes: compactEvidenceEntries(evidenceSet.qrCodes),
+    registrationUrls: compactEvidenceEntries(evidenceSet.registrationUrls),
+    miniProgramActions: compactEvidenceEntries(evidenceSet.miniProgramActions),
+    articleLinks: compactEvidenceEntries(evidenceSet.articleLinks),
+    nonRegistrationImages: compactEvidenceEntries(
+      evidenceSet.nonRegistrationImages,
+    ),
+  });
+  return Object.keys(sourceEvidence).length ? sourceEvidence : undefined;
+}
+
+function compactEvidenceEntries(entries) {
+  if (!Array.isArray(entries)) return undefined;
+  const compacted = entries
+    .map((entry) =>
+      removeUndefined({
+        kind: clean(entry.kind),
+        assetId: clean(entry.assetId),
+        evidenceId: clean(entry.evidenceId),
+        evidenceRole: clean(entry.evidenceRole),
+        url: clean(entry.url),
+        sourceUrl: clean(entry.sourceUrl),
+        text: clean(entry.text),
+        actionType: clean(entry.actionType),
+        appId: clean(entry.appId),
+        path: clean(entry.path),
+        registrationLikely:
+          typeof entry.registrationLikely === "boolean"
+            ? entry.registrationLikely
+            : undefined,
+        nonRegistrationReason: clean(entry.nonRegistrationReason),
+        confidence: isNumberInRange(entry.confidence, 0, 1)
+          ? entry.confidence
+          : undefined,
+      }),
+    )
+    .filter((entry) => Object.keys(entry).length > 0);
+  return compacted.length ? compacted : undefined;
+}
+
 function validateEvidenceSetForBundle(evidenceSet, bundle) {
   if (evidenceSet?.version !== evidenceSetVersion) {
     throw new Error("llm_extraction_evidence_set_version_invalid");
@@ -672,17 +735,24 @@ function validateEvidenceSetForBundle(evidenceSet, bundle) {
   return true;
 }
 
-function providerRequest({ config, articleSnapshot, evidenceAssets, runId }) {
+function providerRequest({
+  config,
+  articleSnapshot,
+  evidenceAssets,
+  runId,
+  promptInput,
+}) {
   const systemPrompt =
     "You extract Beijing official cultural activity drafts. Return only JSON matching the schema. Do not invent missing fields.";
-  const userPrompt = JSON.stringify(
+  const extractionPromptInput =
+    promptInput ??
     buildExtractorPromptInput({
       articleSnapshot,
       evidenceAssets,
       collectorId: config.collectorId,
       runId,
-    }),
-  );
+    });
+  const userPrompt = JSON.stringify(extractionPromptInput);
 
   if (config.openaiApiStyle === "chat_completions") {
     return {
@@ -695,6 +765,7 @@ function providerRequest({ config, articleSnapshot, evidenceAssets, runId }) {
             content: compactChatPrompt({
               articleSnapshot,
               evidenceAssets,
+              promptInput: extractionPromptInput,
               collectorId: config.collectorId,
               runId,
             }),
@@ -731,18 +802,25 @@ function providerRequest({ config, articleSnapshot, evidenceAssets, runId }) {
 function compactChatPrompt({
   articleSnapshot,
   evidenceAssets,
+  promptInput,
   collectorId,
   runId,
 }) {
-  const evidenceText = evidenceAssets.length
-    ? `\n\nEVIDENCE_ASSETS:\n${JSON.stringify(
-        buildExtractorPromptInput({
+  const extractionPromptInput =
+    promptInput ??
+    buildExtractorPromptInput({
           articleSnapshot,
           evidenceAssets,
           collectorId,
           runId,
-        }).evidenceAssets,
-      )}`
+    });
+  const promptEvidence = removeUndefined({
+    evidenceAssets: extractionPromptInput.evidenceAssets,
+    sourceEvidence: extractionPromptInput.sourceEvidence,
+  });
+  const evidenceText =
+    promptEvidence.evidenceAssets?.length || promptEvidence.sourceEvidence
+      ? `\n\nEVIDENCE:\n${JSON.stringify(promptEvidence)}`
     : "";
   return [
     "Extract Beijing cultural events from this article.",

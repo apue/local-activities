@@ -237,7 +237,6 @@ describe("lightweight LLM extractor", () => {
       },
       now: new Date("2026-06-02T08:00:00.000Z"),
       runId: "extract-usage",
-      upload: true,
     });
 
     expect(calls.map((entry) => entry.url)).toEqual([
@@ -358,6 +357,26 @@ describe("lightweight LLM extractor", () => {
     expect(request.evidenceAssets.map((asset) => asset.assetId)).toEqual(
       evidenceSet.evidenceAssets.map((asset) => asset.assetId),
     );
+    expect(request.promptInput.sourceEvidence).toMatchObject({
+      registrationUrls: [
+        {
+          kind: "registration_url",
+          url: "https://mp.weixin.qq.com/s/activity",
+          text: "Register",
+          registrationLikely: true,
+        },
+      ],
+      miniProgramActions: [
+        {
+          kind: "mini_program_action",
+          appId: "wx123",
+          path: "/register",
+          text: "Reserve seat",
+          actionType: "registration",
+          registrationLikely: true,
+        },
+      ],
+    });
   });
 
   it("rejects extraction requests whose evidence set does not match the captured bundle", () => {
@@ -422,6 +441,43 @@ describe("lightweight LLM extractor", () => {
     });
   });
 
+  it("passes full source evidence into the live provider prompt", async () => {
+    const bundle = capturedBundle();
+    const evidenceSet = extractEvidenceFromArticleBundle(bundle);
+    const calls = [];
+
+    const result = await runLlmExtractionFromBundle({
+      env: validEnv(),
+      bundle,
+      evidenceSet,
+      fetchImpl: async (url, init) => {
+        calls.push({ url, body: JSON.parse(init.body) });
+        return jsonResponse(openaiResponse(activityResponse()));
+      },
+      now: new Date("2026-06-02T08:00:00.000Z"),
+      runId: "live-bundle-prompt",
+    });
+
+    expect(result.kind).toBe("drafts");
+    expect(calls).toHaveLength(1);
+    const promptInput = JSON.parse(calls[0].body.input[1].content);
+    expect(promptInput.sourceEvidence).toMatchObject({
+      registrationUrls: [
+        {
+          url: "https://mp.weixin.qq.com/s/activity",
+          registrationLikely: true,
+        },
+      ],
+      miniProgramActions: [
+        {
+          appId: "wx123",
+          path: "/register",
+          actionType: "registration",
+        },
+      ],
+    });
+  });
+
   it("validates mocked output before downstream publish policy can consume drafts", async () => {
     const bundle = capturedBundle();
     const evidenceSet = extractEvidenceFromArticleBundle(bundle);
@@ -474,7 +530,7 @@ describe("lightweight LLM extractor", () => {
     expect(publishDecision.canPublish).toBe(true);
   });
 
-  it("keeps eval usage labelled and refuses upload from eval bundle extraction", async () => {
+  it("keeps eval usage labelled and does not upload from eval bundle extraction", async () => {
     const bundle = capturedBundle();
     const evidenceSet = extractEvidenceFromArticleBundle(bundle);
     const result = await runLlmExtractionFromBundle({
@@ -496,7 +552,6 @@ describe("lightweight LLM extractor", () => {
       },
       now: new Date("2026-06-02T08:00:00.000Z"),
       runId: "eval-replay",
-      upload: true,
     });
 
     expect(result.kind).toBe("drafts");
@@ -506,6 +561,29 @@ describe("lightweight LLM extractor", () => {
       evalOnly: true,
       publishAllowed: false,
     });
+  });
+
+  it("rejects upload attempts at the extractor boundary", async () => {
+    await expect(
+      runLlmExtractionOnce({
+        env: validEnv(),
+        articleSnapshot: textArticle(),
+        providerResponse: activityResponse(),
+        upload: true,
+      }),
+    ).rejects.toThrow("llm_extractor_upload_removed_use_collector_upload_client");
+
+    await expect(
+      runLlmExtractionFromBundle({
+        env: validEnv(),
+        bundle: capturedBundle(),
+        evidenceSet: extractEvidenceFromArticleBundle(capturedBundle()),
+        provider: createMockLlmProviderAdapter({
+          rawResponse: activityResponse(),
+        }),
+        upload: true,
+      }),
+    ).rejects.toThrow("llm_extractor_upload_removed_use_collector_upload_client");
   });
 
   it("creates article-unique metadata evidence ids within the same run", async () => {
