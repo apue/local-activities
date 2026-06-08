@@ -1,6 +1,7 @@
 import type { AdminEventDraftRecord, AdminPublishBlocker } from "./admin-service";
 
 export type PublishDecision = {
+  publishState: "public" | "needs_review" | "rejected" | "needs_info" | "blocked";
   canPublish: boolean;
   canPublishWithOverride: boolean;
   requiresOperatorOverride: boolean;
@@ -27,8 +28,15 @@ export function computePublishDecision(
   const requiresOperatorOverride = canPublishWithOverride && !hasOverride;
   const canPublish =
     hardBlockers.length === 0 && (softBlockers.length === 0 || hasOverride);
+  const publishState = computePublishState({
+    canPublish,
+    requiresOperatorOverride,
+    hardBlockers,
+    softBlockers,
+  });
 
   return {
+    publishState,
     canPublish,
     canPublishWithOverride,
     requiresOperatorOverride,
@@ -79,6 +87,24 @@ function backendHardBlockers(draft: AdminEventDraftRecord) {
       message: "Not public activity",
     });
   }
+  if (draft.eventKind === "news") {
+    blockers.push({
+      code: "news_not_public_event",
+      message: "News item is not a public event",
+    });
+  }
+  if (draft.eventKind === "visit") {
+    blockers.push({
+      code: "visit_not_public_event",
+      message: "Official visit is not a public event",
+    });
+  }
+  if (draft.city !== "Beijing") {
+    blockers.push({
+      code: "not_beijing_event",
+      message: "Event is not in Beijing",
+    });
+  }
   if (
     draft.triageDecision &&
     [
@@ -104,10 +130,7 @@ function backendHardBlockers(draft: AdminEventDraftRecord) {
     draft.resolutionDecision &&
     draft.resolutionDecision !== "new_event"
   ) {
-    blockers.push({
-      code: "unresolved_resolution",
-      message: "Duplicate, update, cancellation, or insufficient-info state is unresolved",
-    });
+    blockers.push(resolutionBlocker(draft.resolutionDecision));
   }
   if (
     draft.reservationStatus === "required" &&
@@ -122,6 +145,45 @@ function backendHardBlockers(draft: AdminEventDraftRecord) {
     });
   }
   return blockers;
+}
+
+function resolutionBlocker(
+  resolutionDecision: NonNullable<AdminEventDraftRecord["resolutionDecision"]>,
+): AdminPublishBlocker {
+  if (resolutionDecision === "same_event") {
+    return {
+      code: "duplicate_event_unresolved",
+      message: "Duplicate event requires resolution before publishing",
+    };
+  }
+  if (resolutionDecision === "update_existing") {
+    return {
+      code: "event_update_requires_review",
+      message: "Updates to an existing event require operator review before publishing",
+    };
+  }
+  if (resolutionDecision === "cancel_existing") {
+    return {
+      code: "event_cancellation_requires_review",
+      message: "Cancellation of an existing event requires operator review before publishing",
+    };
+  }
+  if (resolutionDecision === "withdraw_existing") {
+    return {
+      code: "event_withdrawal_requires_review",
+      message: "Withdrawal of an existing event requires operator review before publishing",
+    };
+  }
+  if (resolutionDecision === "not_public_activity") {
+    return {
+      code: "not_public_activity",
+      message: "Not public activity",
+    };
+  }
+  return {
+    code: "insufficient_info_resolution",
+    message: "Resolution found insufficient information for publishing",
+  };
 }
 
 function uniqueBlockers(blockers: AdminPublishBlocker[]) {
@@ -154,4 +216,39 @@ function backendSoftBlockers(draft: AdminEventDraftRecord) {
     });
   }
   return blockers;
+}
+
+function computePublishState(input: {
+  canPublish: boolean;
+  requiresOperatorOverride: boolean;
+  hardBlockers: AdminPublishBlocker[];
+  softBlockers: AdminPublishBlocker[];
+}): PublishDecision["publishState"] {
+  if (input.canPublish) return "public";
+  if (
+    input.hardBlockers.some((blocker) =>
+      [
+        "not_public_activity",
+        "excluded_triage_decision",
+        "news_not_public_event",
+        "visit_not_public_event",
+        "not_beijing_event",
+        "unsupported_event",
+      ].includes(blocker.code),
+    )
+  ) {
+    return "rejected";
+  }
+  if (
+    input.hardBlockers.some(
+      (blocker) => blocker.code === "missing_required_public_field",
+    )
+  ) {
+    return "needs_info";
+  }
+  if (input.hardBlockers.length > 0) return "blocked";
+  if (input.softBlockers.length > 0 || input.requiresOperatorOverride) {
+    return "needs_review";
+  }
+  return "blocked";
 }

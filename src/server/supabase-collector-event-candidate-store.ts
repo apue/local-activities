@@ -49,6 +49,7 @@ const candidateColumns = [
   "venue_name",
   "venue_address",
   "source_url",
+  "schedule_text",
   "status",
   "published_at",
 ].join(",");

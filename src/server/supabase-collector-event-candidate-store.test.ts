@@ -90,7 +90,7 @@ describe("supabase collector event candidate store", () => {
     expect(calls).toContainEqual([
       "select",
       [
-        "event_id,title,organizer,starts_at,ends_at,timezone,city,venue_name,venue_address,source_url,status,published_at",
+        "event_id,title,organizer,starts_at,ends_at,timezone,city,venue_name,venue_address,source_url,schedule_text,status,published_at",
       ],
     ]);
     expect(calls).toContainEqual(["in", ["status", ["published", "cancelled"]]]);

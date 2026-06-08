@@ -259,11 +259,14 @@ export function computeDraftBackendRouting(
   const reviewState = computeDraftReviewState(payload);
   if (
     !policy.autoPublishEnabled ||
+    reviewState !== "ready_for_review" ||
     payload.confidence < (policy.autoPublishConfidenceThreshold ?? 0.95) ||
     !hasMinimumPublishFields(payload) ||
+    !hasPublicOrganizer(payload) ||
     !hasRequiredRegistrationEvidence(payload) ||
     hasBlockingSignal(payload) ||
     hasTriageReviewRequirement(payload) ||
+    hasBackendPublishPolicyBlocker(payload) ||
     hasPublishBlockers(payload)
   ) {
     return {
@@ -292,6 +295,17 @@ function hasPublishBlockers(payload: EventDraftUpload) {
   return Boolean(payload.hardBlockers?.length || payload.softBlockers?.length);
 }
 
+function hasBackendPublishPolicyBlocker(payload: EventDraftUpload) {
+  return Boolean(
+    payload.publicEligibility === "not_public" ||
+      payload.eventKind === "news" ||
+      payload.eventKind === "visit" ||
+      payload.eventKind === "unsupported" ||
+      payload.scheduleKind === "unsupported" ||
+      (payload.resolutionDecision && payload.resolutionDecision !== "new_event"),
+  );
+}
+
 function hasMinimumPublishFields(payload: EventDraftUpload) {
   return Boolean(
     payload.title &&
@@ -299,6 +313,10 @@ function hasMinimumPublishFields(payload: EventDraftUpload) {
       payload.articleUrl &&
       (payload.venueName || payload.venueAddress),
   );
+}
+
+function hasPublicOrganizer(payload: EventDraftUpload) {
+  return Boolean(payload.organizer);
 }
 
 function hasRequiredRegistrationEvidence(payload: EventDraftUpload) {

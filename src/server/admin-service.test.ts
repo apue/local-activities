@@ -553,7 +553,7 @@ describe("admin service", () => {
         canPublishWithOverride: false,
         hardBlockers: [
           expect.objectContaining({ code: "possible_duplicate_review_state" }),
-          expect.objectContaining({ code: "unresolved_resolution" }),
+          expect.objectContaining({ code: "duplicate_event_unresolved" }),
         ],
       }),
     });
