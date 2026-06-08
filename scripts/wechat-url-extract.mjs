@@ -318,7 +318,7 @@ export async function readWechatArticlePageWithAgentBrowser({
 async function execAgentBrowser(args) {
   const { stdout } = await execFileAsync("agent-browser", args, {
     encoding: "utf8",
-    maxBuffer: 2_000_000,
+    maxBuffer: 8 * 1024 * 1024,
   });
   const trimmed = stdout.trim();
   if (args.includes("--json")) {

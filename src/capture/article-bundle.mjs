@@ -39,7 +39,7 @@ export function createCapturedArticleBundle({
   const normalizedCanonicalUrl = canonicalUrl
     ? requireUrl(canonicalUrl, "canonicalUrl")
     : requiredSourceUrl;
-  const normalizedText = String(text ?? "");
+  const normalizedText = String(text ?? "").trim();
   const normalizedHtml = html == null ? undefined : String(html);
   const normalizedImages = images.map(normalizeBundleImage);
   const normalizedLinks = links
@@ -102,8 +102,8 @@ export function validateCapturedArticleBundle(bundle) {
   requireUrl(bundle.canonicalUrl ?? bundle.sourceUrl, "canonicalUrl");
   requireUrl(bundle.finalUrl, "finalUrl");
   if (!clean(bundle.capturedAt)) throw new Error("captured_bundle_captured_at_required");
-  if (!String(bundle.text ?? "").trim()) {
-    throw new Error("captured_bundle_text_required");
+  if (!hasReadableCaptureMaterial(bundle)) {
+    throw new Error("captured_bundle_material_required");
   }
   if (!Array.isArray(bundle.images)) throw new Error("captured_bundle_images_invalid");
   const imageIds = new Set();
@@ -303,6 +303,16 @@ function normalizeMiniProgram(entry) {
     actionType: clean(entry.actionType) ?? clean(entry.role),
     source: clean(entry.source),
   });
+}
+
+function hasReadableCaptureMaterial(bundle) {
+  return Boolean(
+    String(bundle.text ?? "").trim() ||
+      String(bundle.html ?? "").trim() ||
+      bundle.images?.length ||
+      bundle.links?.length ||
+      bundle.miniPrograms?.length,
+  );
 }
 
 function normalizeCaptureWarning(warning) {

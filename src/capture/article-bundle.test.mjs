@@ -104,14 +104,38 @@ describe("captured article bundle", () => {
     );
   });
 
-  it("rejects bundles without readable article text", () => {
+  it("allows image-dominant bundles when readable text is empty", () => {
+    const bundle = createCapturedArticleBundle({
+      provider: "url_browser",
+      sourceUrl: "https://mp.weixin.qq.com/s/image-only",
+      captureMode: "image_dominant",
+      text: " ",
+      images: [
+        {
+          id: "image-001",
+          sourceUrl: "https://mmbiz.qpic.cn/image-only-poster.jpg",
+          role: "poster",
+        },
+      ],
+    });
+
+    expect(validateCapturedArticleBundle(bundle)).toBe(true);
+    expect(articleBundleToArticleSnapshot(bundle)).toMatchObject({
+      canonicalUrl: "https://mp.weixin.qq.com/s/image-only",
+      visibleText: "",
+      captureMode: "image_dominant",
+      evidenceAssetIds: [expect.stringMatching(/^asset-/)],
+    });
+  });
+
+  it("rejects bundles without readable article material", () => {
     expect(() =>
       createCapturedArticleBundle({
         provider: "url_browser",
         sourceUrl: "https://mp.weixin.qq.com/s/empty",
         text: " ",
       }),
-    ).toThrow("captured_bundle_text_required");
+    ).toThrow("captured_bundle_material_required");
   });
 
   it("preserves canonical URL, content hash, links, mini-program actions, diagnostics, and warnings", () => {
