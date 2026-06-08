@@ -259,8 +259,10 @@ export function computeDraftBackendRouting(
   const reviewState = computeDraftReviewState(payload);
   if (
     !policy.autoPublishEnabled ||
+    reviewState !== "ready_for_review" ||
     payload.confidence < (policy.autoPublishConfidenceThreshold ?? 0.95) ||
     !hasMinimumPublishFields(payload) ||
+    !hasPublicOrganizer(payload) ||
     !hasRequiredRegistrationEvidence(payload) ||
     hasBlockingSignal(payload) ||
     hasTriageReviewRequirement(payload) ||
@@ -311,6 +313,10 @@ function hasMinimumPublishFields(payload: EventDraftUpload) {
       payload.articleUrl &&
       (payload.venueName || payload.venueAddress),
   );
+}
+
+function hasPublicOrganizer(payload: EventDraftUpload) {
+  return Boolean(payload.organizer);
 }
 
 function hasRequiredRegistrationEvidence(payload: EventDraftUpload) {

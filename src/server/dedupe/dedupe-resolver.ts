@@ -294,13 +294,9 @@ function buildProposedChanges(
   ) {
     changes.venueAddress = draft.venueAddress;
   }
-  if (draft.registrationUrl) changes.registrationUrl = draft.registrationUrl;
-  if (draft.registrationAction) changes.registrationAction = draft.registrationAction;
   if (draft.scheduleText && draft.scheduleText !== candidate.scheduleText) {
     changes.scheduleText = draft.scheduleText;
   }
-  if (draft.summary) changes.summary = draft.summary;
-  if (draft.entryNotes) changes.entryNotes = draft.entryNotes;
   return changes;
 }
 
@@ -333,9 +329,15 @@ function textSimilarity(left?: string, right?: string | null) {
 }
 
 function tokenize(value?: string) {
-  return normalizeText(value)
-    .split(" ")
-    .filter((token) => token.length > 0);
+  const normalized = normalizeText(value);
+  if (!normalized) return [];
+  const words = normalized.split(" ").filter((token) => token.length > 0);
+  const cjkChars = Array.from(normalized.matchAll(/\p{Script=Han}/gu)).map(
+    (match) => match[0],
+  );
+  const cjkBigrams = Array.from(normalized.replace(/\s+/g, "").matchAll(/\p{Script=Han}{2}/gu))
+    .map((match) => match[0]);
+  return uniqueStrings([...words, ...cjkChars, ...cjkBigrams]);
 }
 
 function sameText(left?: string, right?: string | null) {
@@ -363,4 +365,8 @@ function sameLocalDate(left?: string, right?: string | null) {
 
 function roundScore(score: number) {
   return Math.round(score * 100) / 100;
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values)];
 }

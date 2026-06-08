@@ -83,13 +83,63 @@ describe("deterministic V4 dedupe resolver", () => {
       reviewState: "needs_review",
       proposedChanges: {
         endsAt: "2026-06-20T15:00:00.000+08:00",
-        registrationUrl: "https://example.com/register-new",
         scheduleText: "Updated end time and registration link.",
       },
       publishBlockers: [
         expect.objectContaining({ code: "event_update_requires_review" }),
       ],
     });
+  });
+
+  it("does not route repeated articles as updates only because non-comparable fields are present", () => {
+    const decision = resolveEventDedupe(
+      {
+        ...baseDraft,
+        registrationAction: "Scan the source article QR code to register.",
+        registrationUrl: "https://example.com/register-new",
+        scheduleText: "6月20日 10:00-14:00",
+        summary: "A repeated summary generated from the source article.",
+        entryNotes: "Bring valid ID.",
+      },
+      [
+        {
+          ...baseCandidate,
+          scheduleText: "6月20日 10:00-14:00",
+        },
+      ],
+    );
+
+    expect(decision).toMatchObject({
+      decision: "same_event",
+      canonicalEventId: "event-beiping-beer-festival",
+      reviewState: "possible_duplicate",
+    });
+  });
+
+  it("matches Chinese title variants for Beiping duplicate/update regression", () => {
+    const decision = resolveEventDedupe(
+      {
+        ...baseDraft,
+        title: "北平机器·友谊万岁精酿啤酒节活动",
+        organizer: "北平机器",
+        venueName: "北平机器酒馆",
+      },
+      [
+        {
+          ...baseCandidate,
+          title: "北平机器友谊万岁精酿啤酒节攻略",
+          organizer: "北平机器",
+          venueName: "北平机器酒馆",
+        },
+      ],
+    );
+
+    expect(decision).toMatchObject({
+      decision: "same_event",
+      canonicalEventId: "event-beiping-beer-festival",
+      reviewState: "possible_duplicate",
+    });
+    expect(decision.match?.score).toBeGreaterThanOrEqual(0.85);
   });
 
   it("routes explicit cancellation candidates as cancel_existing", () => {
