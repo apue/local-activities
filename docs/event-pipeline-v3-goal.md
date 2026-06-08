@@ -1,5 +1,9 @@
 # Event Pipeline V3 Goal Pack
 
+> Superseded for current implementation planning by
+> [Event Pipeline V4 Goal Pack](event-pipeline-v4-goal.md). Keep this file for
+> historical context for issues #211-#221 only.
+
 This document is the execution contract for the next implementation goal. It
 must be enough for a Codex goal-mode session to complete the Event Pipeline V3
 cleanup without relying on chat history.

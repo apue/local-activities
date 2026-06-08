@@ -181,7 +181,7 @@ the acceptance spend is not conflated with eval or daily collector spend.
 ### Historical Browser Runner Benchmark
 
 This benchmark is historical for the V2 sandbox/agent path and is not part of
-Event Pipeline V3 acceptance:
+Active Event Pipeline acceptance:
 
 ```bash
 node scripts/browser-runner-benchmark.mjs \

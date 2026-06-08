@@ -11,9 +11,13 @@ Testing should make each feature independently verifiable. Every GitHub issue sh
 - Keep high-risk logic out of UI components so it can be unit tested.
 - Record validation commands in the PR and issue handoff.
 - Do not claim a task is complete without running the relevant checks.
-- For Event Pipeline V3, every pipeline node must have an independent module
+- For Event Pipeline V4, every pipeline node must have an independent module
   contract and test path as defined in
   [Event Pipeline Architecture](event-pipeline-architecture.md).
+- Regression cases should follow
+  [Regression Corpus](regression-corpus.md). The corpus is the preferred place
+  to preserve known bad cases once they can be replayed without live WeChat or
+  live LLM calls.
 - Eval and fixture/replay commands must not publish production public events by
   default. Deliberate production acceptance uses a separate production seed
   import command.
