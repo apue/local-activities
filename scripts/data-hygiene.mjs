@@ -229,7 +229,7 @@ export function planDataHygieneActions(rows, audit = summarizeDataAudit(rows)) {
       action: "retriage_legacy_draft",
       table: "event_drafts",
       id: draft.id,
-      reason: "Draft predates Event Pipeline V2 triage fields or has null triage_decision.",
+      reason: "Draft predates reset analysis fields or has null triage_decision.",
       applySupported: false,
     });
   }
@@ -645,7 +645,6 @@ function readTargetBaseUrl(env) {
   return (
     env.NEXT_PUBLIC_APP_URL?.trim() ??
     env.APP_BASE_URL?.trim() ??
-    env.COLLECTOR_BASE_URL?.trim() ??
     ""
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   adminApiRequest,
@@ -21,7 +21,6 @@ import {
   getUsageRangeLabel,
   isDraftPublishableForDisplay,
 } from "../../src/client/admin-portal-utils";
-import { extractFirstHttpUrl } from "../../src/shared/seed-url";
 import styles from "./portal.module.css";
 
 type CollectorJob = {
@@ -172,7 +171,6 @@ const emptyUsageSummary: LlmUsageSummary = {
 
 export function AdminPortal() {
   const [token, setToken] = useState("");
-  const [seedUrl, setSeedUrl] = useState("");
   const [jobs, setJobs] = useState<CollectorJob[]>([]);
   const [drafts, setDrafts] = useState<EventDraft[]>([]);
   const [usage, setUsage] = useState<LlmUsageSummary>(emptyUsageSummary);
@@ -279,31 +277,6 @@ export function AdminPortal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function createSeedJob(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const extractedSeedUrl = extractFirstHttpUrl(seedUrl);
-    if (!extractedSeedUrl) {
-      setStatus("error");
-      setMessage("Paste a URL or shared text that contains a URL.");
-      return;
-    }
-
-    setStatus("loading");
-    setMessage("Creating collector job...");
-    try {
-      await adminApiRequest("/api/admin/collector-jobs", {
-        method: "POST",
-        body: JSON.stringify({ seedUrl: extractedSeedUrl }),
-      });
-      setSeedUrl("");
-      await refresh();
-      setMessage("Collector job queued.");
-    } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Create job failed.");
-    }
-  }
-
   async function actOnDraft(action: "needs-info" | "reject" | "publish") {
     if (!selectedDraft) return;
 
@@ -365,7 +338,7 @@ export function AdminPortal() {
         </div>
 
         <form
-          className={styles.seedForm}
+          className={styles.authForm}
           onSubmit={(event) => {
             event.preventDefault();
             void refresh();
@@ -389,21 +362,6 @@ export function AdminPortal() {
           </label>
           <button className={styles.primaryButton} type="submit">
             Load state
-          </button>
-        </form>
-
-        <form className={styles.seedForm} onSubmit={createSeedJob}>
-          <label className={styles.field}>
-            <span>URL or shared text</span>
-            <textarea
-              value={seedUrl}
-              onChange={(event) => setSeedUrl(event.target.value)}
-              placeholder="https://mp.weixin.qq.com/s/... or pasted share text"
-              rows={4}
-            />
-          </label>
-          <button className={styles.primaryButton} type="submit">
-            Queue collector job
           </button>
         </form>
 

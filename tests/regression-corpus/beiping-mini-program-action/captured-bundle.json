@@ -11,7 +11,9 @@
   "authorName": "北平机器",
   "publishedAt": "2026-06-04T00:00:00.000Z",
   "capturedAt": "2026-06-04T00:00:00.000Z",
-  "languageHints": ["zh"],
+  "languageHints": [
+    "zh"
+  ],
   "captureMode": "text_complete",
   "text": "北平机器 友谊万岁精酿啤酒节将在北京举行。点击文中的小程序卡片预约入场。",
   "html": "<article><p>点击文中的小程序卡片预约入场。</p></article>",
@@ -37,6 +39,11 @@
     }
   ],
   "contentHash": "regression-beiping-mini-program-action",
-  "diagnostics": [{ "key": "operator_note", "value": "available Beiping mini-program action source; paired duplicate source pending" }],
+  "diagnostics": [
+    {
+      "key": "operator_note",
+      "value": "available Beiping mini-program action source; paired duplicate source pending"
+    }
+  ],
   "captureWarnings": []
 }

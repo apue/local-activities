@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type { AdminCollectorJobRecord } from "./admin-collector-jobs";
 import type {
   AdminExcludedArticleRecord,
   AdminEventDraftPatch,
@@ -13,7 +14,6 @@ import type {
   AdminStore,
   PublishedAdminEvent,
 } from "./admin-service";
-import type { CollectorJobRecord } from "./collector-job-service";
 import { resolveEvidenceAssetImageUrls } from "./evidence-asset-image-urls";
 import { getSupabaseAdminClient } from "./supabase-admin";
 
@@ -21,7 +21,7 @@ type CollectorJobRow = {
   id: number;
   job_id: string;
   seed_url: string;
-  state: CollectorJobRecord["state"];
+  state: AdminCollectorJobRecord["state"];
   requested_at: string;
   claimed_at: string | null;
   lease_expires_at: string | null;
@@ -29,8 +29,8 @@ type CollectorJobRow = {
   local_run_id: string | null;
   attempt_number: number;
   last_heartbeat_at: string | null;
-  last_heartbeat_stage: CollectorJobRecord["lastHeartbeatStage"] | null;
-  suggested_disposition: CollectorJobRecord["suggestedDisposition"] | null;
+  last_heartbeat_stage: AdminCollectorJobRecord["lastHeartbeatStage"] | null;
+  suggested_disposition: AdminCollectorJobRecord["suggestedDisposition"] | null;
   source_run_id: string | null;
   article_snapshot_ids: string[] | null;
   event_draft_ids: string[] | null;
@@ -42,8 +42,7 @@ type CollectorJobRow = {
   actual_runner: string | null;
   runner_state: string;
   fallback_eligible: boolean;
-  fallback_reason: CollectorJobRecord["fallbackReason"] | null;
-  sandbox_run_id: string | null;
+  fallback_reason: AdminCollectorJobRecord["fallbackReason"] | null;
 };
 
 type EventDraftRow = {
@@ -167,31 +166,7 @@ export function getSupabaseAdminStore(
 class SupabaseAdminStore implements AdminStore {
   constructor(private readonly client: SupabaseClient) {}
 
-  async createCollectorJob(input: {
-    seedUrl: string;
-    requestedAt: string;
-    preferredRunner: CollectorJobRecord["preferredRunner"];
-  }): Promise<CollectorJobRecord> {
-    const row = await this.writeOne<CollectorJobRow>(
-      this.client
-        .from("collector_jobs")
-        .insert({
-          job_id: `job-${randomUUID()}`,
-          seed_url: input.seedUrl,
-          state: "queued",
-          requested_at: input.requestedAt,
-          preferred_runner: input.preferredRunner,
-          runner_state: "local_pending",
-          fallback_eligible: false,
-        })
-        .select("*")
-        .single(),
-    );
-
-    return toJobRecord(row);
-  }
-
-  async listCollectorJobs(): Promise<CollectorJobRecord[]> {
+  async listCollectorJobs(): Promise<AdminCollectorJobRecord[]> {
     const { data, error } = await this.client
       .from("collector_jobs")
       .select("*")
@@ -697,7 +672,7 @@ function toExcludedArticleRecord(
   };
 }
 
-function toJobRecord(row: CollectorJobRow): CollectorJobRecord {
+function toJobRecord(row: CollectorJobRow): AdminCollectorJobRecord {
   return {
     id: row.id,
     jobId: row.job_id,
@@ -731,14 +706,14 @@ function toJobRecord(row: CollectorJobRow): CollectorJobRecord {
 
 function normalizeJobRunner(
   value: string,
-): CollectorJobRecord["preferredRunner"] {
+): AdminCollectorJobRecord["preferredRunner"] {
   return value === "local_collector" ? "local_collector" : "local_collector";
 }
 
 function normalizeJobRunnerState(
   value: string,
-  state: CollectorJobRecord["state"],
-): CollectorJobRecord["runnerState"] {
+  state: AdminCollectorJobRecord["state"],
+): AdminCollectorJobRecord["runnerState"] {
   if (
     value === "local_pending" ||
     value === "local_claimed" ||

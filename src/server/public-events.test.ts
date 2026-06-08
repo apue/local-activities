@@ -354,7 +354,7 @@ describe("public event helpers", () => {
     ).resolves.toEqual([]);
   });
 
-  it("selects V2 schedule fields in public queries", async () => {
+  it("selects schedule fields in public queries", async () => {
     const calls: Array<[string, unknown[]]> = [];
     const client = {
       from(...args: unknown[]) {

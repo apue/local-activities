@@ -262,7 +262,7 @@ function assertExpectedReplay({ item, result }) {
 }
 
 function validateManifest(manifest) {
-  if (manifest?.version !== "event-pipeline-v4-regression-corpus-v1") {
+  if (manifest?.version !== "event-pipeline-regression-corpus-v1") {
     throw new Error("regression_corpus_manifest_version_invalid");
   }
   if (!Array.isArray(manifest.cases) || manifest.cases.length === 0) {

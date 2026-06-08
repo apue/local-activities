@@ -11,7 +11,10 @@
   "authorName": "Goethe-Institut Beijing",
   "publishedAt": "2026-06-01T00:00:00.000Z",
   "capturedAt": "2026-06-01T00:00:00.000Z",
-  "languageHints": ["en", "zh"],
+  "languageHints": [
+    "en",
+    "zh"
+  ],
   "captureMode": "text_complete",
   "text": "Article about the German Pavilion at the Venice Biennale. The activity is in Venice, not Beijing, and is not a Beijing local activity.",
   "html": "<article><p>German Pavilion at the Venice Biennale.</p></article>",
@@ -19,6 +22,6 @@
   "links": [],
   "miniPrograms": [],
   "contentHash": "regression-goethe-venice-biennale-german-pavilion",
-  "diagnostics": [{ "key": "promoted_from", "value": "tests/eval/vision-cases.json:goethe-venice-biennale-german-pavilion" }],
+  "diagnostics": [],
   "captureWarnings": []
 }

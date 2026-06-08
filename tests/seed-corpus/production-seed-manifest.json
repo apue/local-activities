@@ -1,7 +1,7 @@
 {
   "version": "production-seed-manifest-v1",
-  "batchLabel": "event-pipeline-v3-production-acceptance",
-  "description": "Curated official-account source references for final Event Pipeline V3 production acceptance. Live URL cases can be imported automatically. Captured references document required product coverage but need materialized source capture before automatic import.",
+  "batchLabel": "event-pipeline-production-acceptance",
+  "description": "Curated official-account source references for final event pipeline production acceptance. Live URL cases can be imported automatically. Captured references document required product coverage but need materialized source capture before automatic import.",
   "cases": [
     {
       "id": "us-center-qr-lecture-2026-06",

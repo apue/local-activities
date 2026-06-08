@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { EventDraftUpload } from "../../contracts/collector";
-import type { CollectorEventCandidate } from "../collector-event-candidates-route-handlers";
-import { resolveEventDedupe } from "./dedupe-resolver";
+import {
+  resolveEventDedupe,
+  type DedupeCandidateEvent,
+  type DedupeEventDraft,
+} from "./dedupe-resolver";
 
-const baseDraft: EventDraftUpload = {
+const baseDraft: DedupeEventDraft = {
   articleUrl: "https://mp.weixin.qq.com/s/beiping-2026-repeat",
   extractionAttemptId: "attempt-255",
   captureMode: "text_complete",
@@ -26,7 +28,7 @@ const baseDraft: EventDraftUpload = {
   confidence: 0.96,
 };
 
-const baseCandidate: CollectorEventCandidate = {
+const baseCandidate: DedupeCandidateEvent = {
   eventId: "event-beiping-beer-festival",
   title: "Beiping Beer Festival 2026",
   organizer: "Beiping Machine",
@@ -41,7 +43,7 @@ const baseCandidate: CollectorEventCandidate = {
   publishedAt: "2026-06-01T08:00:00.000Z",
 };
 
-describe("deterministic V4 dedupe resolver", () => {
+describe("deterministic dedupe resolver", () => {
   it("routes exact repeat articles as same_event without using live lookup behavior", () => {
     const decision = resolveEventDedupe(baseDraft, [baseCandidate]);
 
@@ -207,7 +209,7 @@ describe("deterministic V4 dedupe resolver", () => {
 
     expect(
       resolveEventDedupe(
-        { ...baseDraft, city: "Shanghai" as EventDraftUpload["city"] },
+        { ...baseDraft, city: "Shanghai" as DedupeEventDraft["city"] },
         [baseCandidate],
       ),
     ).toMatchObject({

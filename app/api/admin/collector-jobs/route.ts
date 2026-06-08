@@ -1,7 +1,4 @@
-import {
-  handleAdminCreateCollectorJob,
-  handleAdminListCollectorJobs,
-} from "../../../../src/server/admin-route-handlers";
+import { handleAdminListCollectorJobs } from "../../../../src/server/admin-route-handlers";
 import { getSupabaseAdminStore } from "../../../../src/server/supabase-admin-store";
 
 export const runtime = "nodejs";
@@ -12,14 +9,5 @@ export async function GET(request: Request) {
     request,
     getSupabaseAdminStore(),
     process.env,
-  );
-}
-
-export async function POST(request: Request) {
-  return handleAdminCreateCollectorJob(
-    request,
-    getSupabaseAdminStore(),
-    process.env,
-    new Date(),
   );
 }

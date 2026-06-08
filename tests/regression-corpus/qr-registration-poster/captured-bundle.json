@@ -11,7 +11,10 @@
   "authorName": "Beijing Cultural Office",
   "publishedAt": "2026-06-03T00:00:00.000Z",
   "capturedAt": "2026-06-03T00:00:00.000Z",
-  "languageHints": ["en", "zh"],
+  "languageHints": [
+    "en",
+    "zh"
+  ],
   "captureMode": "image_dominant",
   "text": "Public lecture. Scan the registration QR code on the poster to reserve a seat.",
   "html": "<article><p>Scan the registration QR code on the poster to reserve a seat.</p></article>",
@@ -36,6 +39,6 @@
   "links": [],
   "miniPrograms": [],
   "contentHash": "regression-qr-registration-poster",
-  "diagnostics": [{ "key": "promoted_from", "value": "fixtures/event-pipeline-v2/qr-registration-poster" }],
+  "diagnostics": [],
   "captureWarnings": []
 }

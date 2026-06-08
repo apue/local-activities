@@ -1,9 +1,11 @@
 {
   "id": "goethe-venice-biennale-german-pavilion",
   "title": "Venice Biennale German Pavilion article",
-  "labels": ["not_beijing"],
+  "labels": [
+    "not_beijing"
+  ],
   "source": {
-    "type": "vision_eval_reference",
+    "type": "eval_reference",
     "evalCaseId": "goethe-venice-biennale-german-pavilion",
     "url": "https://mp.weixin.qq.com/s?__biz=MzA4MzU4MjYwMw==&mid=2692059724&idx=1&sn=bcd2953b79152332300d3bb2368ada10"
   },

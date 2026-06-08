@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the security boundaries for the MVP. The project uses public pages, admin tools, collector ingestion, local browser automation, LLM extraction, and external provider credentials. Those boundaries must stay explicit.
+This document defines access boundaries for the reset architecture.
 
 ## Actors
 
@@ -10,142 +10,113 @@ This document defines the security boundaries for the MVP. The project uses publ
 
 Allowed:
 
-- read published upcoming events
-- open public event detail pages
+- read published events
+- open public detail pages
 - follow official source and reservation links
 
 Not allowed:
 
-- read drafts, source diagnostics, extraction evidence, admin notes, or unpublished events
+- read drafts, ledger details, raw bundles, raw model responses, admin notes, or
+  unpublished events
 - mutate application state
 
 ### Admin User
 
 Allowed:
 
-- add seed URLs
-- review event drafts
-- resolve duplicates, updates, and cancellations
-- update source status and admin decisions
-- publish, correct, or withdraw canonical events
+- review drafts
+- publish, reject, edit, or withdraw events through admin policy
+- inspect processing ledger, usage, source health, and evaluation reports
+- trigger allowed re-analysis or evaluation actions
 
 Required:
 
-- authenticated admin access before any admin route or action
-- audit-friendly state changes through backend policy
+- authenticated admin access
+- audit-friendly state changes
 
-### Collector
+### Capture Worker
 
 Allowed:
 
-- request assigned source tasks when that endpoint exists
-- claim collector jobs and send heartbeats when the job queue endpoint exists
-- upload source run reports
-- upload article indexes and snapshots
-- upload event drafts and failure reports
+- poll Wechat2RSS
+- upload article bundles to Supabase Storage
+- call Supabase Edge Functions with bundle metadata
 
 Not allowed:
 
-- direct database access
-- public event publication
-- canonical event mutation
+- direct event/draft/evidence DB writes
+- LLM provider calls in production
+- canonical event publication
 - admin decision mutation
 
 Required:
 
-- collector API key
-- collector ID for job claim, heartbeat, and diagnostics
-- idempotent uploads by URL and content hash
-- structured failure reasons
+- collector ID
+- `COLLECTOR_EDGE_TOKEN`
+- idempotency by source URL/content hash
+- structured source failure reasons
 
-### Backend Service
+### Supabase Edge Function
 
 Allowed:
 
-- validate and persist collector uploads
-- run extraction, matching, revision, and publication policy
-- expose scoped public and admin data
+- read article bundles from Storage
+- call configured LLM providers
+- validate extraction output
+- write ledger, evidence, draft/event, usage, and evaluation rows
 
 Required:
 
-- keep service-role database credentials server-side
-- validate all collector and admin inputs
-- enforce public/admin/collector boundaries in every access path
+- server-side provider secrets
+- schema validation for all inputs and model outputs
+- production/eval write isolation
 
-### LLM / Agent Module
+### Vercel App
 
 Allowed:
 
-- classify article content
-- propose event drafts
-- propose evidence and uncertainty notes
-- assist with duplicate, update, and cancellation reasoning
+- render public and admin pages
+- perform authenticated admin actions
+- trigger approved Supabase functions for analysis/eval workflows
 
 Not allowed:
 
-- write final canonical event state directly
-- publish events directly
-- invent missing facts without source evidence
-
-Required:
-
-- structured output validation
-- evidence snippets for extracted fields
-- confidence and uncertainty reporting
+- production WeChat crawling
+- production LLM analysis pipeline ownership
 
 ## Secrets
 
-Server-side secrets:
+Server-side / Supabase secrets:
 
-- `DATABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `COLLECTOR_API_KEY`
 - `SUPABASE_SECRET_KEY`
-- map provider credentials
+- `DATABASE_URL`
+- `COLLECTOR_EDGE_TOKEN`
+- `ANALYSIS_LLM_API_KEY`
+- map provider credentials when enabled
 
-Collector-machine-only secrets:
+Browser-safe values:
 
-- `OPENAI_API_KEY`
-- agent API keys or local agent credentials
-- `LOCAL_COLLECTOR_CONSOLE_TOKEN`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- domain-restricted public map keys
 
 Rules:
 
-- never expose service-role keys to browser code
+- never expose service-role or provider keys to browser code
 - never commit `.env` files
-- keep collector credentials out of public frontend bundles
-- rotate `COLLECTOR_API_KEY` if a collector machine is lost or shared
-- do not send Supabase, Vercel, admin, or collector secrets to the LLM or agent API
+- do not send Supabase, Vercel, admin, or collector secrets to LLM providers
+- rotate `COLLECTOR_EDGE_TOKEN` if a capture worker host is lost or shared
 
-## Collector Safety
+## Source Safety
 
-The collector should behave like low-frequency browser automation, not aggressive scraping.
+The capture worker must behave like low-frequency source automation:
 
-Rules:
-
-- do not bypass captcha
+- do not bypass captchas
 - do not evade login requirements
-- do not run high-concurrency source checks
-- report `captcha_required`, `login_required`, `fetch_blocked`, or `parser_mismatch` instead of hiding failure
-- store only the structured data and evidence needed for the product
-- avoid long-term full-text article mirrors as a product feature
-
-## Publication Safety
-
-High-impact fields require special care:
-
-- time
-- venue
-- reservation URL
-- registration deadline
-- cancellation status
-
-Rules:
-
-- uncertain high-impact changes go to admin review
-- failed source fetches do not imply cancellation
-- LLM output is draft evidence, not final truth
-- every update or cancellation should point to source evidence or an admin decision
+- do not run high-concurrency checks
+- report `captcha_required`, `login_required`, `fetch_blocked`, or
+  `source_unhealthy`
+- preserve only product-needed raw material and evidence under retention policy
 
 ## Public Data Exposure
 
@@ -155,15 +126,16 @@ Public pages may expose:
 - summary
 - time
 - venue
-- reservation status and official link
+- reservation status/action
 - organizer/source attribution
-- map deeplink
+- map link
+- poster/registration QR assets when relevant
 
 Public pages must not expose:
 
-- collector diagnostics
-- raw article snapshots
-- LLM prompts or raw model responses
-- admin notes
+- raw article bundles
+- processing ledger internals
+- raw model responses
+- prompts
 - unpublished drafts
-- internal matching scores unless intentionally productized later
+- admin notes

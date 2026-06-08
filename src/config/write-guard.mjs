@@ -65,7 +65,7 @@ export function writeTargetSummary({
 
 export function normalizeEvalUsageEnvironment(env = process.env) {
   const explicit =
-    clean(env.VISION_EVAL_USAGE_ENVIRONMENT) ?? clean(env.USAGE_ENVIRONMENT);
+    clean(env.EVAL_USAGE_ENVIRONMENT) ?? clean(env.USAGE_ENVIRONMENT);
   if (explicit) return explicit.startsWith("eval") ? explicit : `eval:${explicit}`;
   const base = clean(env.VERCEL_ENV) ?? clean(env.NODE_ENV) ?? "local";
   return base.startsWith("eval") ? base : `eval:${base}`;

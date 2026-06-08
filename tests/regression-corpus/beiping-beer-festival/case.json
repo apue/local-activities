@@ -1,9 +1,11 @@
 {
   "id": "beiping-beer-festival",
   "title": "Beiping beer festival known duplicate/update case",
-  "labels": ["duplicate_or_update"],
+  "labels": [
+    "duplicate_or_update"
+  ],
   "source": {
-    "type": "event_pipeline_v2_fixture",
+    "type": "historical_fixture",
     "fixtureId": "beiping-beer-festival",
     "url": "https://mp.weixin.qq.com/s/beiping-beer-fixture"
   },

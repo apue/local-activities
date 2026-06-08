@@ -11,7 +11,9 @@
   "authorName": "Japan Cultural Center",
   "publishedAt": "2026-06-01T00:00:00.000Z",
   "capturedAt": "2026-06-01T00:00:00.000Z",
-  "languageHints": ["zh"],
+  "languageHints": [
+    "zh"
+  ],
   "captureMode": "text_complete",
   "text": "日本的豆腐。本文介绍豆腐的历史、制作和饮食文化，没有活动时间、地点或报名方式。",
   "html": "<article><p>本文介绍豆腐的历史、制作和饮食文化。</p></article>",
@@ -19,6 +21,6 @@
   "links": [],
   "miniPrograms": [],
   "contentHash": "regression-japan-tofu-culture-article",
-  "diagnostics": [{ "key": "promoted_from", "value": "tests/eval/vision-cases.json:japan-tofu-culture-article" }],
+  "diagnostics": [],
   "captureWarnings": []
 }

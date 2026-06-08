@@ -1,9 +1,11 @@
 {
   "id": "japan-tofu-culture-article",
   "title": "Japan tofu culture article",
-  "labels": ["generic_not_event"],
+  "labels": [
+    "generic_not_event"
+  ],
   "source": {
-    "type": "vision_eval_reference",
+    "type": "eval_reference",
     "evalCaseId": "japan-tofu-culture-article",
     "url": "https://mp.weixin.qq.com/s?__biz=MzA3MTg5NDIxOQ==&mid=2650993263&idx=1&sn=31cdc81109a9a71c2d04c92a42d51cd1"
   },

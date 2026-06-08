@@ -1,191 +1,98 @@
 # Technical Baseline
 
-## Language
+## Language And Framework
 
-Use TypeScript for application code, shared contracts, API validation, and collector-side normalized data structures.
+Use TypeScript for application code, shared contracts, API validation, Supabase
+Edge Function source, and capture-worker normalized data structures.
 
-## Web Framework
+Use Next.js App Router on Vercel for the public catalog and admin portal.
 
-Use Next.js App Router as a full-stack framework for the MVP.
+## Runtime Split
 
-Rationale:
-
-- One deployment unit for public pages, admin pages, and API routes.
-- Good Vercel support.
-- Avoids premature frontend/backend separation.
-- Still allows clean internal module boundaries.
-
-## Hosting
-
-Use Vercel for the web app and ingest API.
-
-Vercel Cron may trigger lightweight scheduled checks or orchestration callbacks.
-Vercel Workflow remains the likely durable serverless execution option for
-bounded multi-step backend jobs such as source-run follow-up, review-state
-transitions, or retryable provider calls that do not require WeChat login state.
-Vercel Queue remains a planning-level candidate.
-
-Do not run ordinary long-lived browser automation or unbounded collector jobs
-inside request/response Vercel functions. The active event pipeline uses the Mac-local
-Wechat2RSS collector as the current production WeChat official-account source
-path.
-
-## Database
-
-Use Supabase Postgres as the primary database.
-
-Use Supabase's current publishable/secret API key model for new hosted Auth and API clients, while retaining legacy anon/service-role and `SUPA_*` names for Supabase CLI/local compatibility.
-
-Expected core tables:
-
-- `sources`
-- `source_runs`
-- `source_posts`
-- `article_snapshots`
-- `event_drafts`
-- `canonical_events`
-- `event_mentions`
-- `event_revisions`
-- `collector_failures`
-
-The first concrete migration for these tables is `supabase/migrations/20260528090000_mvp_core_schema.sql`.
-
-## Collector Runtime
-
-Use the Mac-local Wechat2RSS collector as the current production WeChat
-official-account collector runtime.
-
-Initial implementation target:
-
-- Wechat2RSS source provider running on the operator's Mac.
-- Docker-hosted Wechat2RSS service with local login/risk handling.
-- Four-hour schedule for tracked-source polling.
-- Upload-only integration with Vercel ingest APIs.
-
-The collector must implement normalized output contracts so future implementations can use browser extensions, Computer Use, AgentBrowser, or an agent editor.
-
-See [Collector Agent Ingestion Spec](collector-agent-ingestion.md) for the collector/agent upload contract, observed page capture modes, and implementation slices.
-
-See [Event Pipeline Architecture](event-pipeline-architecture.md) for the
-current module boundaries.
-
-See [Deployment Bootstrap Spec](deployment-bootstrap.md) for the end-to-end Vercel, Supabase, and home-machine collector setup target.
-
-## API Validation
-
-Use schema validation for all collector-facing endpoints. Zod is the default candidate because it works well with TypeScript and Next.js.
-
-Shared runtime contracts live under `src/contracts/` and must be used by API routes, local collector code, and tests before accepting collector or admin-facing payloads.
-
-Collector APIs must support:
-
-- bearer-token authentication
-- idempotent upload by URL and content hash
-- structured failure reasons
-- run-level diagnostics
-
-## Event Extraction
-
-Use a structured extraction pipeline:
+The active production split is:
 
 ```text
-article snapshot
-→ classification
-→ event draft extraction
-→ schema validation
-→ confidence and evidence assignment
-→ matching
-→ review or publish
+external capture worker
+-> Supabase Storage
+-> Supabase Edge Functions
+-> Supabase Postgres
+-> Vercel UI
 ```
 
-The LLM provider should not write final database state directly.
+Vercel is not the capture or production analysis runtime. It remains the web app
+runtime.
 
-Extraction must support both DOM text and retained article images. WeChat source pages often place time, venue, or registration QR codes in lazy-loaded poster images. The collector should preserve these images, and the extraction layer should attach field-level provenance and confidence to event drafts.
+## Supabase
 
-Known extraction modes:
+Use Supabase for:
 
-- text-dominant article extraction
-- image-dominant OCR or vision extraction
-- QR-registration extraction
-- multi-mention article splitting
-- expired source-post classification
+- Postgres
+- Storage
+- Edge Functions
+- local/remote migrations through Supabase CLI
 
-Public pages consume reviewed event fields and registration assets. They should not render raw extraction diagnostics or admin-only confidence explanations.
+Required Storage buckets:
 
-## Asset Storage
+- `article-bundles`
+- `event-evidence-assets`
+- `eval-artifacts`
 
-Use Vercel static hosting only for assets committed with the repository, such as prototype fixtures.
+Core data capabilities:
 
-Runtime collector assets must use a storage abstraction because Vercel deployment files are immutable. The first implementation may choose Vercel Blob for speed, but the adapter boundary should allow later migration to S3 or Cloudflare R2/CDN.
+- source registry
+- article bundle metadata
+- processing ledger
+- event drafts
+- canonical events
+- evidence assets
+- dedupe decisions
+- LLM usage
+- evaluation runs and case results
 
-Expected asset records should support:
+## Capture Worker
 
-- stable storage key
-- provider name
-- public URL or access mode
-- content hash for deduplication
-- MIME type and size
-- source post relation
-- event draft or canonical event relation when applicable
-- usage classification such as poster, registration QR, cover image, or article image
+The capture worker runs outside Vercel, initially near the local Wechat2RSS
+Docker service. It polls Wechat2RSS, creates article bundles, uploads them to
+Supabase Storage, and triggers Supabase Edge Function analysis.
 
-## Event Matching
+The capture worker must not call LLM providers or write product event tables
+directly.
 
-Use rule-based weighted matching for MVP:
+## Analysis
 
-- block by date window, city, source relation, and title hints
-- score by registration URL, title similarity, time, location, organizer, and evidence overlap
-- route to automatic merge, review, or new event
+Supabase Edge Functions own the production analysis pipeline. The analysis
+function reads a stored bundle, assembles multimodal LLM input, calls the
+configured OpenAI-compatible provider, validates the output, records usage,
+dedupes, routes publication state, and writes ledger/evidence/draft/event rows.
 
-Embeddings may be added after enough examples exist.
+Alibaba Cloud Model Studio is the initial provider target. Provider credentials
+belong in Supabase Edge Function secrets.
 
-## Location
+## Vercel
 
-Implement a `LocationService` that depends on provider interfaces:
+Vercel hosts:
 
-- `GeocodingProvider`
-- `MapLinkProvider`
+- public catalog
+- event detail pages
+- admin portal
+- read-only operational views
 
-The MVP can use a single provider, but the application must store provider metadata and coordinate system.
+Admin actions may trigger Supabase Edge Functions, but Vercel must not become
+the production LLM analysis runtime for this reset.
 
-## Auth
+## Testing
 
-MVP auth requirements:
+Use Vitest for TypeScript/Node modules and Supabase CLI for migrations and Edge
+Function local serving.
 
-- collector API key for ingest endpoints
-- admin access protection
+Routine tests must be deterministic and must not require live WeChat, live LLM,
+or production writes. Live source and live provider smokes are explicit
+acceptance checks.
 
-User accounts are not required for the first public MVP.
+## Active References
 
-## Testing Baseline
-
-When application code is scaffolded:
-
-- unit-test event matching and status transitions
-- unit-test API schema validation
-- integration-test collector ingest idempotency
-- fixture-test article extraction with saved sample text
-
-## Deployment Baseline
-
-Expected environments:
-
-- local development
-- Vercel preview
-- Vercel production
-- local collector machine
-
-The repository keeps a full safe variable template in [`.env.example`](../.env.example). Required groups include:
-
-- app/admin secrets
-- Supabase/Postgres credentials, including publishable/secret keys and CLI-compatible local aliases
-- collector authentication
-- AMAP map/geocoding credentials when enabled
-- OpenAI-compatible text inference credentials
-- optional TTS provider credentials
-- optional Exa/Serper/Firecrawl search and crawling provider credentials
-- optional Vercel Cron/Workflow/Queue configuration
-
-See [MVP Tech Stack And End-To-End Feature Notes](tech-stack.md) for feature-by-feature stack notes.
-
-See [Deployment Bootstrap Spec](deployment-bootstrap.md) for production/preview Vercel env setup, collector-machine env setup, and the end-to-end smoke test expected after implementation lands.
+- [Event Pipeline Reset Goal](event-pipeline-reset-goal.md)
+- [Event Pipeline Architecture](event-pipeline-architecture.md)
+- [Regression Corpus](regression-corpus.md)
+- [Testing Strategy](testing-strategy.md)
+- [Security And Permissions](security-and-permissions.md)

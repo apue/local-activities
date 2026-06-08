@@ -11,7 +11,10 @@
   "authorName": "Italian Cultural Institute Beijing",
   "publishedAt": "2026-06-05T00:00:00.000Z",
   "capturedAt": "2026-06-05T00:00:00.000Z",
-  "languageHints": ["en", "zh"],
+  "languageHints": [
+    "en",
+    "zh"
+  ],
   "captureMode": "text_complete",
   "text": "Italian Cultural Institute June activities in Beijing.\n1. Film night on June 11.\n2. Literature salon on June 14.\n3. Design talk on June 18.\n4. Concert on June 25.",
   "html": "<article><h1>June activities</h1><ol><li>Film night</li><li>Literature salon</li><li>Design talk</li><li>Concert</li></ol></article>",
@@ -28,6 +31,6 @@
   "links": [],
   "miniPrograms": [],
   "contentHash": "regression-italian-monthly-roundup",
-  "diagnostics": [{ "key": "promoted_from", "value": "fixtures/event-pipeline-v2/italian-monthly-roundup" }],
+  "diagnostics": [],
   "captureWarnings": []
 }

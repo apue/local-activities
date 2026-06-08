@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import type { AdminCollectorJobRecord } from "./admin-collector-jobs";
 import {
   AdminDraftPublishBlockedError,
-  createAdminCollectorJob,
   getAdminEventDraftDetail,
   listAdminExcludedArticles,
   listAdminLlmUsageSummary,
@@ -16,10 +16,9 @@ import {
   type AdminEventDraftRecord,
   type AdminStore,
 } from "./admin-service";
-import type { CollectorJobRecord } from "./collector-job-service";
 
 class MemoryAdminStore implements AdminStore {
-  jobs: CollectorJobRecord[] = [];
+  jobs: AdminCollectorJobRecord[] = [];
   drafts = new Map<string, AdminEventDraftRecord>();
   excludedArticles = new Map<string, AdminExcludedArticleRecord>();
   llmUsageInput?: Parameters<AdminStore["getLlmUsageSummary"]>[0];
@@ -84,26 +83,6 @@ class MemoryAdminStore implements AdminStore {
     for (const article of excludedArticles) {
       this.excludedArticles.set(article.id, article);
     }
-  }
-
-  async createCollectorJob(input: {
-    seedUrl: string;
-    requestedAt: string;
-    preferredRunner: CollectorJobRecord["preferredRunner"];
-  }): Promise<CollectorJobRecord> {
-    const job: CollectorJobRecord = {
-      id: this.jobs.length + 1,
-      jobId: `job-${this.jobs.length + 1}`,
-      seedUrl: input.seedUrl,
-      state: "queued",
-      requestedAt: input.requestedAt,
-      attemptNumber: 0,
-      preferredRunner: input.preferredRunner,
-      runnerState: "local_pending",
-      fallbackEligible: false,
-    };
-    this.jobs.push(job);
-    return job;
   }
 
   async listCollectorJobs() {
@@ -239,50 +218,6 @@ const excludedArticle: AdminExcludedArticleRecord = {
 };
 
 describe("admin service", () => {
-  it("creates queued collector jobs from valid seed URLs", async () => {
-    const store = new MemoryAdminStore();
-
-    const result = await createAdminCollectorJob(
-      { seedUrl: "https://mp.weixin.qq.com/s/example" },
-      store,
-      new Date("2026-05-28T08:00:00.000Z"),
-    );
-
-    expect(result).toMatchObject({
-      jobId: "job-1",
-      state: "queued",
-      seedUrl: "https://mp.weixin.qq.com/s/example",
-      preferredRunner: "local_collector",
-      runnerState: "local_pending",
-      fallbackEligible: false,
-    });
-  });
-
-  it("extracts seed URLs from shared text before creating jobs", async () => {
-    const store = new MemoryAdminStore();
-
-    const result = await createAdminCollectorJob(
-      {
-        seedUrl:
-          "复制这段小红书分享文案打开 App 查看 https://xhslink.com/a/abc123 ，周末活动见",
-      },
-      store,
-      new Date("2026-05-28T08:00:00.000Z"),
-    );
-
-    expect(result.seedUrl).toBe("https://xhslink.com/a/abc123");
-  });
-
-  it("rejects invalid seed URLs", async () => {
-    await expect(
-      createAdminCollectorJob(
-        { seedUrl: "not-a-url" },
-        new MemoryAdminStore(),
-        new Date("2026-05-28T08:00:00.000Z"),
-      ),
-    ).rejects.toThrow("invalid_seed_url");
-  });
-
   it("lists event drafts by review state", async () => {
     const store = new MemoryAdminStore([
       completeDraft,
@@ -365,7 +300,7 @@ describe("admin service", () => {
     });
   });
 
-  it("returns Event Pipeline V2 review context on draft detail", async () => {
+  it("returns event analysis review context on draft detail", async () => {
     const draft: AdminEventDraftRecord = {
       ...completeDraft,
       triageDecision: "possible_public_activity",

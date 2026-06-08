@@ -6,18 +6,15 @@ export const failureReasonSchema = z.enum([
   "fetch_blocked",
   "fetch_timeout",
   "region_network_failed",
-  "sandbox_runtime_timeout",
   "login_required",
   "captcha_required",
   "parser_mismatch",
   "source_identity_missing",
   "activity_fields_missing",
   "image_download_failed",
-  "ocr_failed",
-  "vision_failed",
-  "agent_config_missing",
-  "agent_request_failed",
-  "agent_response_invalid_schema",
+  "analysis_config_missing",
+  "analysis_request_failed",
+  "analysis_response_invalid_schema",
   "not_activity",
   "unsupported",
 ]);
@@ -81,114 +78,6 @@ export const captureModeSchema = z.enum([
   "unsupported",
 ]);
 
-export const triageDecisionSchema = z.enum([
-  "public_activity",
-  "possible_public_activity",
-  "official_visit",
-  "non_public_news",
-  "internal_or_private",
-  "not_event",
-  "unsupported",
-]);
-
-export const triageActionSchema = z.enum(["extract", "review", "exclude"]);
-
-export const publicEligibilitySchema = z.enum(["public", "not_public", "unclear"]);
-
-export const eventKindSchema = z.enum([
-  "single",
-  "multi_day",
-  "long_running",
-  "recurring",
-  "news",
-  "visit",
-  "cancellation",
-  "unsupported",
-]);
-
-export const scheduleKindSchema = z.enum([
-  "single",
-  "multi_day",
-  "long_running",
-  "recurring",
-  "unsupported",
-]);
-
-export const registrationRequirementSchema = z.enum([
-  "required",
-  "not_required",
-  "unknown",
-]);
-
-export const resolutionDecisionSchema = z.enum([
-  "new_event",
-  "same_event",
-  "update_existing",
-  "cancel_existing",
-  "withdraw_existing",
-  "not_public_activity",
-  "insufficient_info",
-]);
-
-export const llmUsageOperationSchema = z.enum([
-  "event_extraction",
-  "event_resolution",
-  "vision_eval",
-  "editor_agent",
-  "other",
-]);
-
-export const llmUsageStatusSchema = z.enum(["succeeded", "failed"]);
-
-const llmUsageMetadataSchema = z
-  .record(
-    z.string().min(1),
-    z.union([z.string(), z.number(), z.boolean(), z.null()]),
-  )
-  .superRefine((metadata, context) => {
-    for (const key of Object.keys(metadata)) {
-      if (isSensitiveLlmUsageMetadataKey(key)) {
-        context.addIssue({
-          code: "custom",
-          message: "metadata key is not safe for the usage ledger",
-          path: [key],
-        });
-      }
-    }
-  });
-
-export const llmUsageEventSchema = z
-  .object({
-    usageId: z.string().min(1).optional(),
-    recordedAt: z.string().datetime({ offset: true }).optional(),
-    operation: llmUsageOperationSchema,
-    provider: z.string().min(1),
-    model: z.string().min(1),
-    status: llmUsageStatusSchema,
-    inputTokens: z.number().int().nonnegative().optional(),
-    outputTokens: z.number().int().nonnegative().optional(),
-    totalTokens: z.number().int().nonnegative().optional(),
-    cachedInputTokens: z.number().int().nonnegative().optional(),
-    reasoningOutputTokens: z.number().int().nonnegative().optional(),
-    costMicroCny: z.number().int().nonnegative().optional(),
-    latencyMs: z.number().int().nonnegative().optional(),
-    sourceRunId: z.string().min(1).optional(),
-    collectorJobId: z.string().min(1).optional(),
-    articleSnapshotId: z.string().min(1).optional(),
-    eventDraftId: z.string().min(1).optional(),
-    excludedArticleId: z.string().min(1).optional(),
-    metadata: llmUsageMetadataSchema.optional(),
-  })
-  .strict();
-
-export const publishBlockerSchema = z
-  .object({
-    code: z.string().min(1),
-    message: z.string().min(1).max(1_000),
-    evidenceAssetIds: z.array(z.string().min(1)).optional(),
-  })
-  .strict();
-
 export const articleSnapshotSchema = z
   .object({
     sourceId: z.string().min(1).optional(),
@@ -217,7 +106,7 @@ export const evidenceRoleSchema = z.enum([
   "screenshot",
   "article_image",
   "ocr_text",
-  "vision_summary",
+  "visual_analysis_summary",
 ]);
 
 export const evidenceAssetSchema = z
@@ -237,88 +126,6 @@ export const evidenceAssetSchema = z
   })
   .strict();
 
-export const draftSignalSchema = z.enum([
-  "qr_registration",
-  "registration_evidence_required",
-  "image_dominant",
-  "missing_required_public_field",
-  "secondary_mention",
-  "possible_duplicate",
-  "ready_for_review",
-]);
-
-export const eventDraftUploadSchema = z
-  .object({
-    articleUrl: z.string().url(),
-    sourceId: z.string().min(1).optional(),
-    extractionAttemptId: z.string().min(1),
-    captureMode: captureModeSchema,
-    triageDecision: triageDecisionSchema.optional(),
-    triageAction: triageActionSchema.optional(),
-    triageConfidence: z.number().min(0).max(1).optional(),
-    publicSignals: z.array(z.string().min(1)).optional(),
-    exclusionSignals: z.array(z.string().min(1)).optional(),
-    publicEligibility: publicEligibilitySchema.optional(),
-    eventKind: eventKindSchema.optional(),
-    scheduleKind: scheduleKindSchema.optional(),
-    title: z.string().min(1).optional(),
-    originalTitle: z.string().min(1).optional(),
-    organizer: z.string().min(1).optional(),
-    startsAt: z.string().datetime({ offset: true }).optional(),
-    endsAt: z.string().datetime({ offset: true }).optional(),
-    recurrenceRule: z.string().min(1).max(1_000).optional(),
-    occurrenceStartsAt: z
-      .array(z.string().datetime({ offset: true }))
-      .optional(),
-    timezone: z.literal("Asia/Shanghai"),
-    venueName: z.string().min(1).optional(),
-    venueAddress: z.string().min(1).optional(),
-    city: z.literal("Beijing"),
-    reservationStatus: z.enum(["required", "not_required", "unknown"]).optional(),
-    registrationRequirement: registrationRequirementSchema.optional(),
-    registrationAction: z.string().min(1).optional(),
-    registrationUrl: z.string().url().optional(),
-    scheduleText: z.string().min(1).max(1_000).optional(),
-    posterAssetId: z.string().min(1).optional(),
-    qrAssetId: z.string().min(1).optional(),
-    registrationQrAssetId: z.string().min(1).optional(),
-    posterImageUrl: z.string().url().optional(),
-    posterImageAlt: z.string().min(1).max(500).optional(),
-    posterImageSourceUrl: z.string().url().optional(),
-    summary: z.string().min(1).max(4_000).optional(),
-    entryNotes: z.string().min(1).max(4_000).optional(),
-    signals: z.array(draftSignalSchema),
-    evidenceAssetIds: z.array(z.string().min(1)),
-    fieldEvidence: z.record(z.string().min(1), z.array(z.string().min(1))),
-    confidence: z.number().min(0).max(1),
-    hardBlockers: z.array(publishBlockerSchema).optional(),
-    softBlockers: z.array(publishBlockerSchema).optional(),
-    resolutionDecision: resolutionDecisionSchema.optional(),
-  })
-  .strict();
-
-export const excludedArticleUploadSchema = z
-  .object({
-    articleUrl: z.string().url(),
-    sourceId: z.string().min(1).optional(),
-    triageAttemptId: z.string().min(1),
-    triageDecision: triageDecisionSchema.exclude([
-      "public_activity",
-      "possible_public_activity",
-    ]),
-    triageAction: z.literal("exclude"),
-    confidence: z.number().min(0).max(1),
-    publicSignals: z.array(z.string().min(1)),
-    exclusionSignals: z.array(z.string().min(1)),
-    exclusionReason: z.string().min(1).max(2_000),
-    evidenceAssetIds: z.array(z.string().min(1)),
-    promptVersion: z.string().min(1),
-    schemaVersion: z.string().min(1),
-    provider: z.string().min(1),
-    model: z.string().min(1),
-  })
-  .strict();
-
 export const collectorFailureSchema = z
   .object({
     sourceId: z.string().min(1).optional(),
@@ -328,11 +135,8 @@ export const collectorFailureSchema = z
       "page_fetch",
       "dom_parse",
       "image_capture",
-      "ocr",
-      "vision_extraction",
-      "agent_extraction",
-      "draft_extraction",
-      "upload",
+      "bundle_validation",
+      "analysis",
     ]),
     reason: failureReasonSchema,
     message: z.string().min(1).max(2_000),
@@ -349,24 +153,4 @@ export type SourceCandidate = z.infer<typeof sourceCandidateSchema>;
 export type SourceRunReport = z.infer<typeof sourceRunReportSchema>;
 export type ArticleSnapshot = z.infer<typeof articleSnapshotSchema>;
 export type EvidenceAsset = z.infer<typeof evidenceAssetSchema>;
-export type EventDraftUpload = z.infer<typeof eventDraftUploadSchema>;
-export type ExcludedArticleUpload = z.infer<typeof excludedArticleUploadSchema>;
 export type CollectorFailure = z.infer<typeof collectorFailureSchema>;
-export type LlmUsageEventUpload = z.infer<typeof llmUsageEventSchema>;
-
-function isSensitiveLlmUsageMetadataKey(key: string) {
-  const normalized = key.toLowerCase();
-  if (normalized === "maxoutputtokens") return false;
-  return [
-    "prompt",
-    "response",
-    "html",
-    "image",
-    "api_key",
-    "apikey",
-    "header",
-    "cookie",
-    "token",
-    "secret",
-  ].some((fragment) => normalized.includes(fragment));
-}

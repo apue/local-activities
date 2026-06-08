@@ -1,6 +1,60 @@
-import type { EventDraftUpload } from "../../contracts/collector";
 import type { AdminPublishBlocker, AdminReviewState } from "../admin-service";
-import type { CollectorEventCandidate } from "../collector-event-candidates-route-handlers";
+
+export type DedupeEventDraft = {
+  articleUrl: string;
+  extractionAttemptId?: string;
+  captureMode?: string;
+  publicEligibility?: "public" | "not_public" | "unclear";
+  eventKind?:
+    | "single"
+    | "multi_day"
+    | "long_running"
+    | "recurring"
+    | "news"
+    | "visit"
+    | "cancellation"
+    | "unsupported";
+  scheduleKind?:
+    | "single"
+    | "multi_day"
+    | "long_running"
+    | "recurring"
+    | "unsupported";
+  title?: string;
+  organizer?: string;
+  startsAt?: string;
+  endsAt?: string;
+  timezone?: "Asia/Shanghai";
+  venueName?: string;
+  venueAddress?: string;
+  city: "Beijing";
+  reservationStatus?: "required" | "not_required" | "unknown";
+  registrationAction?: string;
+  registrationUrl?: string;
+  scheduleText?: string;
+  summary?: string;
+  entryNotes?: string;
+  signals?: string[];
+  evidenceAssetIds?: string[];
+  fieldEvidence?: Record<string, string[]>;
+  confidence?: number;
+};
+
+export type DedupeCandidateEvent = {
+  eventId: string;
+  title: string;
+  organizer?: string | null;
+  startsAt: string;
+  endsAt?: string | null;
+  timezone: "Asia/Shanghai";
+  city: "Beijing";
+  venueName?: string | null;
+  venueAddress?: string | null;
+  sourceUrl: string;
+  scheduleText?: string | null;
+  status: "draft" | "published" | "cancelled" | "withdrawn";
+  publishedAt?: string | null;
+};
 
 export type DedupeDecisionKind =
   | "new_event"
@@ -27,7 +81,7 @@ export type DedupeDecision = {
 };
 
 type CandidateMatch = {
-  candidate: CollectorEventCandidate;
+  candidate: DedupeCandidateEvent;
   score: number;
   reasons: string[];
 };
@@ -36,8 +90,8 @@ const exactMatchThreshold = 0.85;
 const possibleDuplicateThreshold = 0.55;
 
 export function resolveEventDedupe(
-  draft: EventDraftUpload,
-  candidates: CollectorEventCandidate[],
+  draft: DedupeEventDraft,
+  candidates: DedupeCandidateEvent[],
 ): DedupeDecision {
   const rejection = rejectUnsupportedDraft(draft);
   if (rejection) return rejection;
@@ -126,7 +180,7 @@ export function resolveEventDedupe(
   };
 }
 
-function rejectUnsupportedDraft(draft: EventDraftUpload): DedupeDecision | undefined {
+function rejectUnsupportedDraft(draft: DedupeEventDraft): DedupeDecision | undefined {
   if (draft.publicEligibility === "not_public") {
     return rejectDecision("not_public_activity", "Not public activity");
   }
@@ -154,7 +208,7 @@ function rejectDecision(code: string, message: string): DedupeDecision {
   };
 }
 
-function hasRequiredPublicFields(draft: EventDraftUpload) {
+function hasRequiredPublicFields(draft: DedupeEventDraft) {
   return Boolean(
     draft.title &&
       draft.startsAt &&
@@ -163,13 +217,13 @@ function hasRequiredPublicFields(draft: EventDraftUpload) {
   );
 }
 
-function hasHumanReadableEventInformation(draft: EventDraftUpload) {
+function hasHumanReadableEventInformation(draft: DedupeEventDraft) {
   return Boolean(draft.scheduleText || draft.summary || draft.title);
 }
 
 function findBestCandidateMatch(
-  draft: EventDraftUpload,
-  candidates: CollectorEventCandidate[],
+  draft: DedupeEventDraft,
+  candidates: DedupeCandidateEvent[],
 ): CandidateMatch | undefined {
   return candidates
     .map((candidate) => scoreCandidate(draft, candidate))
@@ -177,8 +231,8 @@ function findBestCandidateMatch(
 }
 
 function scoreCandidate(
-  draft: EventDraftUpload,
-  candidate: CollectorEventCandidate,
+  draft: DedupeEventDraft,
+  candidate: DedupeCandidateEvent,
 ): CandidateMatch {
   let score = 0;
   const reasons: string[] = [];
@@ -262,8 +316,8 @@ function existingEventDecision(
 }
 
 function buildProposedChanges(
-  draft: EventDraftUpload,
-  candidate: CollectorEventCandidate,
+  draft: DedupeEventDraft,
+  candidate: DedupeCandidateEvent,
 ) {
   const changes: Record<string, unknown> = {};
   if (
@@ -300,12 +354,12 @@ function buildProposedChanges(
   return changes;
 }
 
-function isCancellationDraft(draft: EventDraftUpload) {
+function isCancellationDraft(draft: DedupeEventDraft) {
   const text = `${draft.title ?? ""} ${draft.summary ?? ""} ${draft.scheduleText ?? ""}`;
   return draft.eventKind === "cancellation" || /cancelled|canceled|取消|延期/.test(text);
 }
 
-function isWithdrawalDraft(draft: EventDraftUpload) {
+function isWithdrawalDraft(draft: DedupeEventDraft) {
   const text = `${draft.title ?? ""} ${draft.summary ?? ""} ${draft.scheduleText ?? ""}`;
   return /withdrawn|closed|下架|撤回/.test(text);
 }

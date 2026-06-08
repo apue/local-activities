@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { AdminCollectorJobRecord } from "./admin-collector-jobs";
 import type {
   AdminEventDraftRecord,
   AdminExcludedArticleRecord,
@@ -7,7 +8,6 @@ import type {
   AdminStore,
 } from "./admin-service";
 import {
-  handleAdminCreateCollectorJob,
   handleAdminDraftAction,
   handleAdminLogin,
   handleAdminListExcludedArticles,
@@ -17,7 +17,6 @@ import {
   handleAdminPromoteExcludedArticle,
   handleAdminPatchEventDraft,
 } from "./admin-route-handlers";
-import type { CollectorJobRecord } from "./collector-job-service";
 
 class RouteAdminStore implements AdminStore {
   draft: AdminEventDraftRecord = {
@@ -122,25 +121,7 @@ class RouteAdminStore implements AdminStore {
     ],
   };
 
-  async createCollectorJob(input: {
-    seedUrl: string;
-    requestedAt: string;
-    preferredRunner: CollectorJobRecord["preferredRunner"];
-  }): Promise<CollectorJobRecord> {
-    return {
-      id: 1,
-      jobId: "job-1",
-      seedUrl: input.seedUrl,
-      state: "queued",
-      requestedAt: input.requestedAt,
-      attemptNumber: 0,
-      preferredRunner: input.preferredRunner,
-      runnerState: "local_pending",
-      fallbackEligible: false,
-    };
-  }
-
-  async listCollectorJobs(): Promise<CollectorJobRecord[]> {
+  async listCollectorJobs(): Promise<AdminCollectorJobRecord[]> {
     return [];
   }
 
@@ -207,7 +188,7 @@ class RouteAdminStore implements AdminStore {
 }
 
 class FailingListAdminStore extends RouteAdminStore {
-  async listCollectorJobs(): Promise<CollectorJobRecord[]> {
+  async listCollectorJobs(): Promise<AdminCollectorJobRecord[]> {
     throw new Error("admin_job_list_failed");
   }
 
@@ -238,14 +219,10 @@ function request(body?: unknown, headers: HeadersInit = {}) {
 
 describe("admin route handlers", () => {
   it("rejects missing admin credentials", async () => {
-    const response = await handleAdminCreateCollectorJob(
-      request(
-        { seedUrl: "https://mp.weixin.qq.com/s/example" },
-        { authorization: "Bearer wrong" },
-      ),
+    const response = await handleAdminListCollectorJobs(
+      request(undefined, { authorization: "Bearer wrong" }),
       new RouteAdminStore(),
       { ADMIN_ACCESS_TOKEN: "admin-secret" },
-      new Date("2026-05-28T08:00:00.000Z"),
     );
 
     expect(response.status).toBe(401);
@@ -297,84 +274,6 @@ describe("admin route handlers", () => {
     await expect(response.json()).resolves.toEqual({
       ok: true,
       jobs: [],
-    });
-  });
-
-  it("creates queued collector jobs for valid seed URLs", async () => {
-    const response = await handleAdminCreateCollectorJob(
-      request({ seedUrl: "https://mp.weixin.qq.com/s/example" }),
-      new RouteAdminStore(),
-      { ADMIN_ACCESS_TOKEN: "admin-secret" },
-      new Date("2026-05-28T08:00:00.000Z"),
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      ok: true,
-      job: {
-        jobId: "job-1",
-        state: "queued",
-        preferredRunner: "local_collector",
-        runnerState: "local_pending",
-        fallbackEligible: false,
-      },
-    });
-  });
-
-  it("accepts shared text that contains a seed URL", async () => {
-    const response = await handleAdminCreateCollectorJob(
-      request({
-        seedUrl:
-          "活动分享：准备好感受泰国农业精品 https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg 。",
-      }),
-      new RouteAdminStore(),
-      { ADMIN_ACCESS_TOKEN: "admin-secret" },
-      new Date("2026-05-28T08:00:00.000Z"),
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      ok: true,
-      job: {
-        seedUrl: "https://mp.weixin.qq.com/s/r14ZCPdt5E56TFXzUPJ5Dg",
-      },
-    });
-  });
-
-  it("rejects shared text without any URL", async () => {
-    const response = await handleAdminCreateCollectorJob(
-      request({ seedUrl: "只有活动介绍，没有链接" }),
-      new RouteAdminStore(),
-      { ADMIN_ACCESS_TOKEN: "admin-secret" },
-      new Date("2026-05-28T08:00:00.000Z"),
-    );
-
-    expect(response.status).toBe(400);
-  await expect(response.json()).resolves.toMatchObject({
-    ok: false,
-    error: "invalid_seed_url",
-  });
-});
-
-  it("accepts explicitly local collector jobs without runner side effects", async () => {
-    const response = await handleAdminCreateCollectorJob(
-      request({
-        seedUrl: "https://mp.weixin.qq.com/s/example",
-        preferredRunner: "local_collector",
-      }),
-      new RouteAdminStore(),
-      { ADMIN_ACCESS_TOKEN: "admin-secret" },
-      new Date("2026-05-28T08:00:00.000Z"),
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      ok: true,
-      job: {
-        jobId: "job-1",
-        preferredRunner: "local_collector",
-        runnerState: "local_pending",
-      },
     });
   });
 

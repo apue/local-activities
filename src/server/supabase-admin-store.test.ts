@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { getSupabaseAdminStore } from "./supabase-admin-store";
 
 describe("supabase admin store", () => {
-  it("maps Event Pipeline V2 draft review fields for admin records", async () => {
+  it("maps event analysis draft review fields for admin records", async () => {
     const store = getSupabaseAdminStore(
       supabaseClientReturningEventDrafts([
         {
@@ -129,8 +129,8 @@ describe("supabase admin store", () => {
           requested_at: "2026-05-28T08:00:00.000Z",
           claimed_at: "2026-05-28T08:01:00.000Z",
           lease_expires_at: "2026-05-28T08:20:00.000Z",
-          collector_id: "sandbox-job-1",
-          local_run_id: "sandbox-job-1-1",
+          collector_id: "capture-worker-1",
+          local_run_id: "capture-worker-1-1",
           attempt_number: 1,
           last_heartbeat_at: null,
           last_heartbeat_stage: null,
@@ -142,12 +142,11 @@ describe("supabase admin store", () => {
           failure_ids: ["failure-1"],
           result_message: "Structured failure uploaded.",
           finished_at: "2026-05-28T08:02:00.000Z",
-          preferred_runner: "vercel_sandbox",
-          actual_runner: "vercel_sandbox",
+          preferred_runner: "local_collector",
+          actual_runner: "local_collector",
           runner_state: "failed",
           fallback_eligible: false,
           fallback_reason: null,
-          sandbox_run_id: "sb-1",
         },
       ]),
     );
@@ -192,7 +191,7 @@ describe("supabase admin store", () => {
           event_draft_id: "draft-1",
           excluded_article_id: null,
           metadata: {
-            failureReason: "agent_request_failed",
+            failureReason: "analysis_request_failed",
             workload: "event_resolution",
             environment: "eval:model-benchmark",
           },
@@ -217,7 +216,7 @@ describe("supabase admin store", () => {
           event_draft_id: "draft-1",
           excluded_article_id: null,
           metadata: {
-            schemaVersion: "event-extraction-v2-schema-v1",
+            schemaVersion: "event-analysis-schema-v1",
             workload: "event_extraction",
             environment: "production_collector",
           },
@@ -315,7 +314,7 @@ describe("supabase admin store", () => {
           id: "usage-2",
           status: "failed",
           metadata: {
-            failureReason: "agent_request_failed",
+            failureReason: "analysis_request_failed",
             workload: "event_resolution",
             environment: "eval:model-benchmark",
           },
@@ -325,7 +324,7 @@ describe("supabase admin store", () => {
           operation: "event_extraction",
           totalTokens: 1150,
           metadata: {
-            schemaVersion: "event-extraction-v2-schema-v1",
+            schemaVersion: "event-analysis-schema-v1",
             workload: "event_extraction",
             environment: "production_collector",
           },
