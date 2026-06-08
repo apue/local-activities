@@ -42,9 +42,28 @@ export function extractImageCandidatesFromHtml(html, { articleUrl } = {}) {
 }
 
 export function classifyImageCandidate(candidate) {
-  const text = `${candidate.url ?? ""} ${candidate.alt ?? ""}`.toLowerCase();
-  if (/qr|qrcode|二维码|报名|预约|registration/.test(text)) return "qr";
-  if (/poster|海报|活动|event|展览|festival|讲座/.test(text)) return "poster";
+  const roleHint = String(candidate.role ?? candidate.sourceRole ?? "")
+    .trim()
+    .toLowerCase();
+  if (["qr", "registration", "registration_qr"].includes(roleHint)) return "qr";
+  if (roleHint === "poster") return "poster";
+
+  const labelText = [
+    candidate.alt,
+    candidate.text,
+    candidate.textContent,
+    candidate.caption,
+    candidate.nearbyText,
+    candidate.ariaLabel,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (/二维码|扫码|报名|预约|registration|register|sign\s*up|reserve/.test(labelText)) {
+    return "qr";
+  }
+  const posterText = `${labelText} ${candidate.url ?? ""}`.toLowerCase();
+  if (/poster|海报|活动|event|展览|festival|讲座/.test(posterText)) return "poster";
   if (
     candidate.width >= 480 &&
     candidate.height >= 480 &&
@@ -85,7 +104,7 @@ export function buildImageEvidenceAssetEnvelopes({
         contentHash,
         extractedBy: "dom",
         confidence: role === "article_image" ? 0.55 : 0.8,
-        textContent: candidate.alt,
+        textContent: candidateText(candidate),
       }),
     };
   });
@@ -163,6 +182,20 @@ function hashText(value) {
 
 function hashBytes(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function candidateText(candidate) {
+  const text = [
+    candidate.alt,
+    candidate.text,
+    candidate.textContent,
+    candidate.caption,
+    candidate.nearbyText,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  return text || undefined;
 }
 
 async function withStoredImageEvidence({ envelope, fetchImpl, putPublicAsset }) {

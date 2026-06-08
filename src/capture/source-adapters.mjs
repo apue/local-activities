@@ -147,6 +147,8 @@ export function imagesFromHtml(html, articleUrl) {
         width: candidate.width,
         height: candidate.height,
         contentHash: hashText(candidate.url),
+        alt: candidate.alt,
+        textContent: candidateText(candidate),
         extractedBy: "dom",
         confidence: role === "article_image" ? 0.55 : 0.8,
       });
@@ -279,6 +281,14 @@ function decodeBasicHtmlEntities(value) {
 
 function registrationText(value) {
   return /报名|预约|注册|register|sign\s*up|rsvp/i.test(String(value ?? ""));
+}
+
+function candidateText(candidate) {
+  return clean(
+    [candidate.alt, candidate.text, candidate.textContent, candidate.caption, candidate.nearbyText]
+      .filter(Boolean)
+      .join(" "),
+  );
 }
 
 function dedupeByKey(values, keyFor) {
