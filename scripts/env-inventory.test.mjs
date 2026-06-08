@@ -4,6 +4,7 @@ import {
   evaluateTarget,
   formatReport,
   parseEnvText,
+  runCli,
   redactValue,
   targetNames,
 } from "./env-inventory.mjs";
@@ -34,13 +35,62 @@ describe("env inventory", () => {
       COLLECTOR_INTERVAL_HOURS: "4",
       WECHAT2RSS_BASE_URL: "http://127.0.0.1:4000",
       WECHAT2RSS_TOKEN: "wechat2rss-token",
-      ARTICLE_BUNDLES_BUCKET: "article-bundles",
     });
 
     expect(result.present).toContain("WECHAT2RSS_TOKEN");
     expect(result.placeholders).toContain("COLLECTOR_EDGE_TOKEN");
     expect(result.missing).not.toContain("COLLECTOR_EDGE_TOKEN");
     expect(result.ok).toBe(false);
+  });
+
+  it("does not require bucket env vars when the capture worker uses defaults", () => {
+    const result = evaluateTarget("collector", {
+      COLLECTOR_ID: "home-192-168-0-16",
+      COLLECTOR_EDGE_TOKEN: "collector-edge-token",
+      SUPABASE_URL: "https://project.supabase.co",
+      SUPABASE_SECRET_KEY: "sb_secret_value",
+      COLLECTOR_INTERVAL_HOURS: "4",
+      WECHAT2RSS_BASE_URL: "http://127.0.0.1:4000",
+      WECHAT2RSS_TOKEN: "wechat2rss-token",
+    });
+
+    expect(result.missing).not.toContain("ARTICLE_BUNDLES_BUCKET");
+    expect(result.optional).toContain("ARTICLE_BUNDLES_BUCKET");
+    expect(result.ok).toBe(true);
+  });
+
+  it("merges multiple dotenv files in CLI order", () => {
+    const output = [];
+    const exitCode = runCli(
+      [
+        "--env-file",
+        ".env.base",
+        "--env-file",
+        ".env.collector",
+        "--target",
+        "collector",
+      ],
+      {},
+      {
+        loadEnvFileImpl: (path) =>
+          path === ".env.base"
+            ? {
+                SUPABASE_URL: "https://project.supabase.co",
+                SUPABASE_SECRET_KEY: "sb_secret_value",
+                COLLECTOR_EDGE_TOKEN: "collector-edge-token",
+              }
+            : {
+                COLLECTOR_ID: "collector-local",
+                COLLECTOR_INTERVAL_HOURS: "4",
+                WECHAT2RSS_BASE_URL: "http://127.0.0.1:4000",
+                WECHAT2RSS_TOKEN: "wechat2rss-token",
+              },
+        log: (value) => output.push(value),
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(output.join("\n")).toContain("OK collector");
   });
 
   it("treats localhost public URLs as placeholders for deployable targets", () => {

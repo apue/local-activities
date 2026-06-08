@@ -60,9 +60,16 @@ configured secrets and budget approval.
 
 ## Capture Worker Dry Run
 
-After the capture worker exists, run its dry-run command against mocked or local
-Wechat2RSS input. The dry run must print discovered bundle metadata and intended
-Storage paths without writing production event rows.
+Run the capture worker dry-run against local Wechat2RSS input:
+
+```bash
+pnpm capture:wechat2rss:once -- --dry-run --env-file .env.collector
+```
+
+The dry run prints discovered bundle metadata and intended Storage paths without
+uploading bundle files, invoking analysis, or writing production event rows.
+Use `--apply` only after `analyze-article-bundle` exists and the target has been
+approved for bundle uploads.
 
 ## Hosted Data Cleanup
 

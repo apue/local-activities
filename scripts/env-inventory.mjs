@@ -75,13 +75,13 @@ export const targets = {
       "COLLECTOR_INTERVAL_HOURS",
       "WECHAT2RSS_BASE_URL",
       "WECHAT2RSS_TOKEN",
-      "ARTICLE_BUNDLES_BUCKET",
     ],
     optional: [
       "EXA_API_KEY",
       "SERPER_API_KEY",
       "FIRECRAWL_API_KEY",
       "WECHAT2RSS_LOOKBACK_DAYS",
+      "ARTICLE_BUNDLES_BUCKET",
       "EVENT_EVIDENCE_ASSETS_BUCKET",
       "EVAL_ARTIFACTS_BUCKET",
       "CAPTURE_WORKER_POLL_INTERVAL_SECONDS",
@@ -237,7 +237,7 @@ function stripOptionalQuotes(value) {
 function parseArgs(argv) {
   const args = {
     target: "all",
-    envFile: undefined,
+    envFiles: [],
     help: false,
     listTargets: false,
   };
@@ -252,7 +252,7 @@ function parseArgs(argv) {
       args.target = argv[index + 1];
       index += 1;
     } else if (arg === "--env-file") {
-      args.envFile = argv[index + 1];
+      args.envFiles.push(argv[index + 1]);
       index += 1;
     } else {
       throw new Error(`unknown_arg:${arg}`);
@@ -269,12 +269,16 @@ Checks required environment variable names without printing configured values.
 
 Options:
   --target        Runtime target to check. Defaults to all.
-  --env-file      Optional dotenv file merged over the current process env.
+  --env-file      Optional dotenv file merged over the current process env. May be repeated.
   --list-targets  Print supported target names.
   --help          Show this help text.`);
 }
 
-export function runCli(argv = process.argv.slice(2), baseEnv = process.env) {
+export function runCli(
+  argv = process.argv.slice(2),
+  baseEnv = process.env,
+  { loadEnvFileImpl = loadEnvFile, log = console.log } = {},
+) {
   const args = parseArgs(argv);
 
   if (args.help) {
@@ -292,12 +296,15 @@ export function runCli(argv = process.argv.slice(2), baseEnv = process.env) {
     if (!targets[targetName]) throw new Error(`unknown_target:${targetName}`);
   }
 
-  const env = mergeEnvs(baseEnv, loadEnvFile(args.envFile));
+  const env = mergeEnvs(
+    baseEnv,
+    ...args.envFiles.map((envFile) => loadEnvFileImpl(envFile)),
+  );
   const results = selectedTargets.map((targetName) =>
     evaluateTarget(targetName, env),
   );
 
-  console.log(formatReport(results));
+  log(formatReport(results));
 
   return results.every((result) => result.ok) ? 0 : 1;
 }
