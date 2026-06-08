@@ -1,0 +1,25 @@
+{
+  "version": "event-pipeline-v4-regression-corpus-v1",
+  "description": "Self-contained Event Pipeline V4 replay corpus. Cases use committed capture bundles or typed capture failures and never require live WeChat, live LLM calls, hosted Supabase writes, or production publish.",
+  "operatorSourcedGaps": [
+    {
+      "label": "beiping_duplicate_update_pair",
+      "status": "missing_second_source",
+      "note": "Only one self-contained Beiping beer festival fixture is committed. Do not fabricate a second real Beiping source; add the operator-sourced paired bundle when available."
+    }
+  ],
+  "cases": [
+    { "id": "korean-red-flavor", "labels": ["ordinary_public_event"] },
+    { "id": "registration-required-workshop", "labels": ["registration_required"] },
+    { "id": "qr-registration-poster", "labels": ["qr_registration", "poster_or_image_dominant"] },
+    { "id": "beiping-mini-program-action", "labels": ["mini_program_action_registration"] },
+    { "id": "italian-monthly-roundup", "labels": ["multi_event_article"] },
+    { "id": "goethe-weekly-library", "labels": ["recurring_or_multiple_occurrences"] },
+    { "id": "goethe-sonic-exhibition", "labels": ["long_running_exhibition"] },
+    { "id": "beiping-beer-festival", "labels": ["duplicate_or_update"] },
+    { "id": "official-visit-news", "labels": ["official_visit_non_public_news"] },
+    { "id": "japan-tofu-culture-article", "labels": ["generic_not_event"] },
+    { "id": "goethe-venice-biennale-german-pavilion", "labels": ["not_beijing"] },
+    { "id": "capture-fetch-blocked", "labels": ["capture_failure"] }
+  ]
+}

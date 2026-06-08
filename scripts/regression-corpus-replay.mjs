@@ -1,0 +1,330 @@
+#!/usr/bin/env node
+
+import { readFile, readdir } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import {
+  createCaptureFailureResult,
+  validateCapturedArticleBundle,
+  validateCaptureResult,
+} from "../src/capture/article-bundle.mjs";
+import { extractEvidenceFromArticleBundle } from "../src/collector/evidence/extractor.mjs";
+import { runArticlePipelineOnce } from "../src/collector/orchestrator/pipeline.mjs";
+
+export const requiredCoverageLabels = [
+  "ordinary_public_event",
+  "registration_required",
+  "qr_registration",
+  "poster_or_image_dominant",
+  "mini_program_action_registration",
+  "multi_event_article",
+  "recurring_or_multiple_occurrences",
+  "long_running_exhibition",
+  "duplicate_or_update",
+  "official_visit_non_public_news",
+  "generic_not_event",
+  "not_beijing",
+  "capture_failure",
+];
+
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const defaultCorpusDir = path.resolve(moduleDir, "../tests/regression-corpus");
+const manifestFileName = "manifest.json";
+const successCaseFiles = ["case.json", "captured-bundle.json", "expected.json"];
+const failureCaseFiles = ["case.json", "capture-result.json", "expected.json"];
+const refusedTargets = new Set([
+  "live_wechat",
+  "live_llm",
+  "hosted_supabase",
+  "production",
+]);
+
+export function assertOfflineReplayTarget({ target = "offline" } = {}) {
+  if (refusedTargets.has(target)) {
+    throw new Error(`regression_replay_refuses_live_or_production_target:${target}`);
+  }
+  return true;
+}
+
+export async function loadRegressionCorpus({ corpusDir = defaultCorpusDir } = {}) {
+  const manifestPath = path.join(corpusDir, manifestFileName);
+  const manifest = await readJson(manifestPath);
+  validateManifest(manifest);
+
+  const cases = [];
+  for (const entry of manifest.cases) {
+    cases.push(await loadRegressionCase({ caseId: entry.id, corpusDir, manifestEntry: entry }));
+  }
+
+  const coverageLabels = [...new Set(cases.flatMap((item) => item.case.labels ?? []))].sort();
+  const missingCoverage = requiredCoverageLabels.filter(
+    (label) => !coverageLabels.includes(label),
+  );
+  if (missingCoverage.length) {
+    throw new Error(`regression_corpus_coverage_missing:${missingCoverage.join(",")}`);
+  }
+
+  return { manifest, cases, coverageLabels };
+}
+
+export async function replayRegressionCase({
+  caseId,
+  corpusDir = defaultCorpusDir,
+  target = "offline",
+} = {}) {
+  assertOfflineReplayTarget({ target });
+  if (!caseId) throw new Error("regression_case_id_required");
+
+  const corpus = await loadRegressionCorpus({ corpusDir });
+  const item = corpus.cases.find((candidate) => candidate.case.id === caseId);
+  if (!item) throw new Error(`regression_case_unknown:${caseId}`);
+
+  return replayLoadedCase(item);
+}
+
+export async function runRegressionReplay({
+  all = false,
+  caseId,
+  corpusDir = defaultCorpusDir,
+  target = "offline",
+} = {}) {
+  assertOfflineReplayTarget({ target });
+  if (!all && !caseId) throw new Error("regression_replay_case_or_all_required");
+
+  const corpus = await loadRegressionCorpus({ corpusDir });
+  const selectedCases = all
+    ? corpus.cases
+    : corpus.cases.filter((item) => item.case.id === caseId);
+  if (!selectedCases.length) throw new Error(`regression_case_unknown:${caseId}`);
+
+  const cases = [];
+  for (const item of selectedCases) {
+    cases.push(await replayLoadedCase(item));
+  }
+
+  return {
+    ok: cases.every((item) => item.status === "success" || item.expectedAction === "capture_failure"),
+    target,
+    caseCount: cases.length,
+    cases,
+  };
+}
+
+export function parseRegressionReplayArgs(argv = process.argv.slice(2)) {
+  const options = { target: "offline" };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--") continue;
+    if (arg === "--all") options.all = true;
+    else if (arg === "--case") options.caseId = argv[++index];
+    else if (arg === "--target") options.target = argv[++index];
+    else throw new Error(`regression_replay_arg_unknown:${arg}`);
+  }
+  return options;
+}
+
+export async function runRegressionReplayCli(argv = process.argv.slice(2)) {
+  const result = await runRegressionReplay(parseRegressionReplayArgs(argv));
+  console.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+async function loadRegressionCase({ caseId, corpusDir, manifestEntry }) {
+  const caseDir = path.join(corpusDir, caseId);
+  const fileNames = await readdir(caseDir).catch(() => {
+    throw new Error(`regression_corpus_case_dir_missing:${caseId}`);
+  });
+  const hasCaptureResult = fileNames.includes("capture-result.json");
+  const requiredFiles = hasCaptureResult ? failureCaseFiles : successCaseFiles;
+  for (const fileName of requiredFiles) {
+    if (!fileNames.includes(fileName)) {
+      throw new Error(`regression_corpus_file_missing:${caseId}:${fileName}`);
+    }
+  }
+
+  const caseMeta = await readJson(path.join(caseDir, "case.json"));
+  const expected = await readJson(path.join(caseDir, "expected.json"));
+  validateCaseMeta({ caseMeta, manifestEntry, caseId });
+  validateExpected({ expected, caseId });
+
+  if (hasCaptureResult) {
+    const captureResult = await readJson(path.join(caseDir, "capture-result.json"));
+    validateCaptureResult(captureResult);
+    if (captureResult.ok !== false) {
+      throw new Error(`regression_corpus_capture_result_not_failure:${caseId}`);
+    }
+    return { case: caseMeta, expected, captureResult };
+  }
+
+  const bundle = await readJson(path.join(caseDir, "captured-bundle.json"));
+  validateCapturedArticleBundle(bundle);
+  return { case: caseMeta, expected, bundle };
+}
+
+async function replayLoadedCase(item) {
+  const expected = item.expected;
+  const sourceUrl =
+    item.bundle?.sourceUrl ??
+    item.captureResult?.failure?.sourceUrl ??
+    item.case.source?.url;
+  const report = await runArticlePipelineOnce({
+    env: { COLLECTOR_ID: "regression-corpus" },
+    runId: `regression-${item.case.id}`,
+    sourceUrl,
+    now: new Date("2026-06-08T00:00:00.000Z"),
+    fetchImpl: async () => {
+      throw new Error("regression_replay_network_forbidden");
+    },
+    capture: async () => captureResultForCase(item),
+    extractEvidence: async ({ bundle }) => extractEvidenceFromArticleBundle(bundle),
+    extractEvents: async ({ runId, evidenceSet }) => ({
+      kind: "drafts",
+      runId,
+      eventDrafts: (expected.eventDrafts ?? []).map((payload, index) =>
+        eventDraftEnvelope({ payload, runId, index }),
+      ),
+      evidenceAssets: evidenceSet.evidenceAssets ?? [],
+      failures: [],
+    }),
+    resolveDedupe: async ({ eventDraft }) => ({
+      ...(expected.dedupe ?? { decision: "new_event" }),
+      eventDraftId: eventDraft.payload.draftId,
+    }),
+    decidePublish: async () => expected.publish ?? { state: "needs_review", reasons: [] },
+  });
+
+  const result = summarizeReport({ item, report });
+  assertExpectedReplay({ item, result });
+  return result;
+}
+
+function captureResultForCase(item) {
+  if (item.captureResult?.ok === false) {
+    return createCaptureFailureResult(item.captureResult.failure);
+  }
+  return {
+    version: "capture-result-v1",
+    ok: true,
+    bundle: item.bundle,
+    diagnostics: [],
+    captureWarnings: [],
+  };
+}
+
+function summarizeReport({ item, report }) {
+  const evidenceSummary = report.evidenceSet?.summary ?? {};
+  return {
+    caseId: item.case.id,
+    expectedAction: item.expected.action,
+    status: report.status,
+    kind: report.kind,
+    eventCount: report.extraction?.eventDrafts?.length ?? 0,
+    evidenceSummary,
+    sourceHealth: report.sourceHealth,
+    stageStatuses: report.stageStatuses,
+    dedupeDecisions: report.dedupeDecisions,
+    publishDecisions: report.publishDecisions,
+    failures: report.failures,
+  };
+}
+
+function assertExpectedReplay({ item, result }) {
+  const expected = item.expected;
+  if (expected.action === "capture_failure") {
+    if (result.status !== "failed") {
+      throw new Error(`regression_case_expected_capture_failure:${item.case.id}`);
+    }
+    if (result.sourceHealth?.failureReason !== expected.sourceHealth?.failureReason) {
+      throw new Error(`regression_case_source_health_mismatch:${item.case.id}`);
+    }
+    return;
+  }
+
+  if (result.eventCount !== expected.eventCount) {
+    throw new Error(`regression_case_event_count_mismatch:${item.case.id}`);
+  }
+  for (const [key, value] of Object.entries(expected.evidence ?? {})) {
+    if ((result.evidenceSummary?.[key] ?? 0) !== value) {
+      throw new Error(`regression_case_evidence_mismatch:${item.case.id}:${key}`);
+    }
+  }
+  const expectedDedupe = expected.dedupe?.decision;
+  const actualDedupe = result.dedupeDecisions[0]?.decision ?? result.dedupeDecisions[0]?.action;
+  if (expectedDedupe && expected.eventCount > 0 && actualDedupe !== expectedDedupe) {
+    throw new Error(`regression_case_dedupe_mismatch:${item.case.id}`);
+  }
+  const expectedPublish = expected.publish?.state;
+  const actualPublish = result.publishDecisions[0]?.state;
+  if (expectedPublish && expected.eventCount > 0 && actualPublish !== expectedPublish) {
+    throw new Error(`regression_case_publish_mismatch:${item.case.id}`);
+  }
+}
+
+function validateManifest(manifest) {
+  if (manifest?.version !== "event-pipeline-v4-regression-corpus-v1") {
+    throw new Error("regression_corpus_manifest_version_invalid");
+  }
+  if (!Array.isArray(manifest.cases) || manifest.cases.length === 0) {
+    throw new Error("regression_corpus_manifest_cases_required");
+  }
+  const ids = new Set();
+  for (const entry of manifest.cases) {
+    if (!entry?.id) throw new Error("regression_corpus_manifest_case_id_required");
+    if (ids.has(entry.id)) throw new Error(`regression_corpus_manifest_case_duplicate:${entry.id}`);
+    ids.add(entry.id);
+    if (!Array.isArray(entry.labels) || entry.labels.length === 0) {
+      throw new Error(`regression_corpus_manifest_case_labels_required:${entry.id}`);
+    }
+  }
+}
+
+function validateCaseMeta({ caseMeta, manifestEntry, caseId }) {
+  if (caseMeta?.id !== caseId) throw new Error(`regression_corpus_case_id_mismatch:${caseId}`);
+  if (!Array.isArray(caseMeta.labels) || caseMeta.labels.length === 0) {
+    throw new Error(`regression_corpus_case_labels_required:${caseId}`);
+  }
+  for (const label of manifestEntry.labels) {
+    if (!caseMeta.labels.includes(label)) {
+      throw new Error(`regression_corpus_case_manifest_label_missing:${caseId}:${label}`);
+    }
+  }
+  if (!caseMeta.source?.type) throw new Error(`regression_corpus_case_source_required:${caseId}`);
+  if (!caseMeta.rationale) throw new Error(`regression_corpus_case_rationale_required:${caseId}`);
+}
+
+function validateExpected({ expected, caseId }) {
+  if (!["extract", "exclude", "review", "capture_failure"].includes(expected?.action)) {
+    throw new Error(`regression_corpus_expected_action_invalid:${caseId}`);
+  }
+  if (!Number.isInteger(expected.eventCount) || expected.eventCount < 0) {
+    throw new Error(`regression_corpus_expected_event_count_invalid:${caseId}`);
+  }
+  if (expected.action !== "capture_failure" && !expected.evidence) {
+    throw new Error(`regression_corpus_expected_evidence_required:${caseId}`);
+  }
+}
+
+function eventDraftEnvelope({ payload, runId, index }) {
+  return {
+    collectorId: "regression-corpus",
+    runId,
+    observedAt: "2026-06-08T00:00:00.000Z",
+    payloadVersion: "2026-05-collector-v1",
+    payload: {
+      draftId: payload.draftId ?? `draft-${index + 1}`,
+      ...payload,
+    },
+  };
+}
+
+async function readJson(filePath) {
+  return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runRegressionReplayCli().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

@@ -1,0 +1,11 @@
+{
+  "id": "qr-registration-poster",
+  "title": "QR registration poster",
+  "labels": ["qr_registration", "poster_or_image_dominant"],
+  "source": {
+    "type": "event_pipeline_v2_fixture",
+    "fixtureId": "qr-registration-poster",
+    "url": "https://mp.weixin.qq.com/s/qr-registration-fixture"
+  },
+  "rationale": "Poster and registration QR evidence case promoted from the V2 fixture inventory."
+}

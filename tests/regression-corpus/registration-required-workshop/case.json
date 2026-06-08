@@ -1,0 +1,11 @@
+{
+  "id": "registration-required-workshop",
+  "title": "Korean red taste cooking workshop",
+  "labels": ["registration_required"],
+  "source": {
+    "type": "vision_eval_reference",
+    "evalCaseId": "kr-red-taste-cooking-workshop",
+    "url": "https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429079&idx=1&sn=bdc4ed5d21678cd4fe8e295d73ee4473"
+  },
+  "rationale": "Registration-required workshop case from the eval inventory with registration text but no QR requirement."
+}

@@ -1,0 +1,26 @@
+{
+  "action": "extract",
+  "eventCount": 1,
+  "publicEligibility": "public",
+  "requiresReservation": true,
+  "evidence": {
+    "posterCount": 1,
+    "qrCodeCount": 0,
+    "registrationUrlCount": 0,
+    "miniProgramActionCount": 1
+  },
+  "dedupe": { "decision": "new_event" },
+  "publish": { "state": "needs_review", "reasons": ["mini_program_registration"] },
+  "eventDrafts": [
+    {
+      "draftId": "draft-beiping-mini-program-action",
+      "articleUrl": "https://mp.weixin.qq.com/s/0Chl_ewq9yiDbjcBZmuwtQ",
+      "title": "北平机器 友谊万岁精酿啤酒节",
+      "startsAt": "2026-06-27T12:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "北平机器",
+      "registrationRequirement": "required",
+      "publicEligibility": "public"
+    }
+  ]
+}

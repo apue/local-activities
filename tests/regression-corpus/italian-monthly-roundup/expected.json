@@ -1,0 +1,20 @@
+{
+  "action": "extract",
+  "eventCount": 4,
+  "publicEligibility": "public",
+  "requiresReservation": false,
+  "evidence": {
+    "posterCount": 1,
+    "qrCodeCount": 0,
+    "registrationUrlCount": 0,
+    "miniProgramActionCount": 0
+  },
+  "dedupe": { "decision": "new_event" },
+  "publish": { "state": "needs_review", "reasons": ["multi_event_article"] },
+  "eventDrafts": [
+    { "draftId": "draft-italian-film-night", "articleUrl": "https://mp.weixin.qq.com/s/italian-monthly-fixture", "title": "Italian film night", "startsAt": "2026-06-11T19:00:00+08:00", "city": "Beijing", "publicEligibility": "public" },
+    { "draftId": "draft-italian-literature-salon", "articleUrl": "https://mp.weixin.qq.com/s/italian-monthly-fixture", "title": "Italian literature salon", "startsAt": "2026-06-14T15:00:00+08:00", "city": "Beijing", "publicEligibility": "public" },
+    { "draftId": "draft-italian-design-talk", "articleUrl": "https://mp.weixin.qq.com/s/italian-monthly-fixture", "title": "Italian design talk", "startsAt": "2026-06-18T19:00:00+08:00", "city": "Beijing", "publicEligibility": "public" },
+    { "draftId": "draft-italian-concert", "articleUrl": "https://mp.weixin.qq.com/s/italian-monthly-fixture", "title": "Italian concert", "startsAt": "2026-06-25T19:30:00+08:00", "city": "Beijing", "publicEligibility": "public" }
+  ]
+}

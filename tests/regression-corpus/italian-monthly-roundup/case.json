@@ -1,0 +1,11 @@
+{
+  "id": "italian-monthly-roundup",
+  "title": "Italian Cultural Institute monthly roundup",
+  "labels": ["multi_event_article"],
+  "source": {
+    "type": "event_pipeline_v2_fixture",
+    "fixtureId": "italian-monthly-roundup",
+    "url": "https://mp.weixin.qq.com/s/italian-monthly-fixture"
+  },
+  "rationale": "Multi-event article promoted from the V2 fixture inventory."
+}

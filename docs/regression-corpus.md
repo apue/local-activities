@@ -6,16 +6,18 @@ on live WeChat, live LLM calls, or hosted production data during CI.
 
 ## Current State
 
-The project currently has useful cases in three different layers:
+The project currently has useful cases in four layers:
 
 | Layer | Location | Strength | Weakness |
 | --- | --- | --- | --- |
+| V4 self-contained regression corpus | `tests/regression-corpus/*` | committed, contract-validated, replayable through mock E2E | second real Beiping duplicate/update source is still operator-sourced |
 | Deterministic fixtures | `fixtures/event-pipeline-v2/*` | committed, replayable, CI-safe | V2-shaped, some synthetic URLs/assets, legacy triage stages |
 | Vision eval labels | `tests/eval/vision-cases.json` | broadest real-world coverage | many cases depend on Supabase snapshot ids, not self-contained bundles |
 | Production seed manifest | `tests/seed-corpus/production-seed-manifest.json` | product acceptance intent | mostly manifest references, not a full replay corpus |
 
-This means the project has many good examples, but not yet one clean regression
-suite. V4 work should promote selected cases into self-contained bundles.
+The V4 corpus is now the primary CI-safe replay suite. V2 fixtures, vision eval
+labels, and production seed references remain useful source inventory for adding
+future cases.
 
 ## Target Case Format
 
@@ -36,6 +38,11 @@ evidence expectations, duplicate/update result, and publish state. `assets/`
 stores small committed image fixtures only when they are necessary for QR,
 poster, or image-dominant regression behavior.
 
+Capture-failure cases use `capture-result.json` instead of
+`captured-bundle.json`. This mirrors the capture contract: a failed capture has
+a typed failure reason and diagnostics but no article bundle to validate or
+extract evidence from.
+
 Important live URLs may be listed as capture inputs, but they should not be the
 only regression source because WeChat URLs can change, 404, require login, or
 trigger platform checks.
@@ -44,22 +51,22 @@ trigger platform checks.
 
 | Product behavior | Existing coverage | Current layer | V4 status |
 | --- | --- | --- | --- |
-| Ordinary public event | `thai-festival-beijing-2026`, `korean-red-flavor`, `goethe-open-day-german-summer` | eval, seed, V2 fixture | covered; promote one self-contained bundle |
-| Registration required | `kr-red-taste-cooking-workshop`, `us-center-qr-lecture-2026-06` | eval, seed | covered; preserve registration fields |
-| QR registration | `us-center-qr-lecture-2026-06`, `goethe-plant-persona-workshop`, `kr-opera-journey-registration`, `qr-registration-poster` | eval, seed, V2 fixture | covered; evidence classifier must be hardened |
-| Poster or image-dominant event | `iic-save-the-date-image-sparse-multi-event`, `goethe-open-day-german-summer`, `qr-registration-poster` | eval, seed, V2 fixture | covered; needs self-contained images where required |
-| Mini-program or action registration | Beiping beer festival live URL `https://mp.weixin.qq.com/s/0Chl_ewq9yiDbjcBZmuwtQ` exposed WeChat mini-program cards | live investigation | missing self-contained V4 case |
-| Multi-event article | `goethe-weekend-roundup`, `italian-monthly-roundup`, `korean-june-film-lineup-multi-event` | eval, seed, V2 fixture | covered; expected event ranges need stable replay |
-| Long-running exhibition | `goethe-sonic-exhibition`, `goethe-weekend-roundup` | V2 fixture, eval | covered; schedule expectations need clearer contract |
-| Recurring or multiple occurrences | `goethe-weekly-library`, `korean-no-other-choice-two-screenings`, `goethe-weekend-roundup` | V2 fixture, eval | covered; occurrences should be explicit in expected output |
-| Duplicate/update pair | `beiping-beer-festival`, `beiping-friendship-beer-festival-guide`, production seed duplicate placeholder | V2 fixture, eval, seed | weak; needs real paired bundle for Beiping update/dedupe |
-| Official visit or non-public news | `official-visit-news`, `german-minister-visit-recap` | V2 fixture, eval, seed | covered; promote to self-contained negative case |
-| Not an event / cultural article | `japan-tofu-culture-article`, `japan-kaomoji-culture-article`, `japan-tsuda-umeko-biography` | eval, seed | covered; promote at least one self-contained case |
+| Ordinary public event | `korean-red-flavor` | V4 corpus, V2 fixture | self-contained |
+| Registration required | `registration-required-workshop` from `kr-red-taste-cooking-workshop` | V4 corpus, eval | self-contained |
+| QR registration | `qr-registration-poster` | V4 corpus, V2 fixture | self-contained |
+| Poster or image-dominant event | `qr-registration-poster` | V4 corpus, V2 fixture | self-contained metadata evidence |
+| Mini-program or action registration | `beiping-mini-program-action` for URL `https://mp.weixin.qq.com/s/0Chl_ewq9yiDbjcBZmuwtQ` | V4 corpus, live investigation | self-contained action metadata |
+| Multi-event article | `italian-monthly-roundup` | V4 corpus, V2 fixture | self-contained |
+| Long-running exhibition | `goethe-sonic-exhibition` | V4 corpus, V2 fixture | self-contained |
+| Recurring or multiple occurrences | `goethe-weekly-library` | V4 corpus, V2 fixture | self-contained with explicit occurrences in `expected.json` |
+| Duplicate/update pair | `beiping-beer-festival` | V4 corpus, V2 fixture | available fixture represented; second real operator-sourced pair still missing |
+| Official visit or non-public news | `official-visit-news` | V4 corpus, V2 fixture | self-contained negative case |
+| Not an event / cultural article | `japan-tofu-culture-article` | V4 corpus, eval | self-contained negative case |
 | Non-general-public or private/internal | `mexico-embassy-world-cup-private-invitation` | eval | covered in labels only; needs committed bundle |
 | Recruitment/course/contest ambiguity | `goethe-youth-theater-recruitment`, `beiping-beer-festival-volunteer-recruitment`, `goethe-summer-language-course-signup`, `daad-photo-contest` | eval, seed | covered; split reject vs review expectations |
-| Not Beijing event | `goethe-ai-animation-nanjing`, `open-m-hangzhou-art-festival`, `goethe-venice-biennale-german-pavilion` | eval | covered; needs self-contained negative case |
+| Not Beijing event | `goethe-venice-biennale-german-pavilion` | V4 corpus, eval | self-contained negative case |
 | QR present but not registration | `brazil-mouth-disease-recognition-news`, `japan-tsuda-umeko-biography`, `goethe-summer-language-course-signup` | eval | covered in labels; needs evidence-level fixture |
-| Capture blocked/login/captcha | typed failures discussed in architecture | none | missing; add fake capture fixtures first |
+| Capture blocked/login/captcha | `capture-fetch-blocked` | V4 corpus | self-contained typed failure |
 
 ## Cases The Operator May Still Need To Source
 
@@ -90,6 +97,18 @@ candidate set -> dedupe decision fixture test
 candidate + evidence + dedupe decision -> publish-policy table test
 fake modules -> pipeline orchestrator mock E2E
 ```
+
+The V4 corpus replay command validates the case contracts and runs a deterministic
+mock E2E path through `runArticlePipelineOnce`:
+
+```bash
+pnpm regression:replay -- --all
+```
+
+It loads `captured-bundle.json`, runs `validateCapturedArticleBundle`, extracts
+evidence with `extractEvidenceFromArticleBundle`, and injects fake
+extract/dedupe/publish adapters from `expected.json`. Capture-failure cases load
+`capture-result.json` and exercise the orchestrator capture failure path.
 
 Live evaluation remains separate:
 

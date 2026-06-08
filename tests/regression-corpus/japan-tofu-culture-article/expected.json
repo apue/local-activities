@@ -1,0 +1,15 @@
+{
+  "action": "exclude",
+  "eventCount": 0,
+  "publicEligibility": "not_public",
+  "requiresReservation": false,
+  "evidence": {
+    "posterCount": 0,
+    "qrCodeCount": 0,
+    "registrationUrlCount": 0,
+    "miniProgramActionCount": 0
+  },
+  "dedupe": { "decision": "reject" },
+  "publish": { "state": "rejected", "reasons": ["generic_not_event"] },
+  "eventDrafts": []
+}

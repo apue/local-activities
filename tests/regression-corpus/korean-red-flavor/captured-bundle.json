@@ -1,0 +1,33 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-korean-red-flavor",
+  "sourceId": "korean-red-flavor",
+  "sourceName": "Korean Cultural Center Beijing",
+  "provider": "local_fixture",
+  "sourceUrl": "https://mp.weixin.qq.com/s/korean-red-fixture",
+  "canonicalUrl": "https://mp.weixin.qq.com/s/korean-red-fixture",
+  "finalUrl": "https://mp.weixin.qq.com/s/korean-red-fixture",
+  "title": "Korean Culture Activity: Red Flavor",
+  "authorName": "Korean Cultural Center Beijing",
+  "publishedAt": "2026-06-01T00:00:00.000Z",
+  "capturedAt": "2026-06-01T00:00:00.000Z",
+  "languageHints": ["en", "zh"],
+  "captureMode": "text_complete",
+  "text": "Korean Culture Activity: Red Flavor\nPublic Korean cultural experience in Beijing.\nTime: 2026-06-20 15:00-17:00\nVenue: Korean Cultural Center Beijing\nAdmission is open to the public.",
+  "html": "<article><h1>Korean Culture Activity: Red Flavor</h1><p>Public Korean cultural experience in Beijing.</p></article>",
+  "images": [
+    {
+      "id": "poster",
+      "sourceUrl": "https://mmbiz.qpic.cn/regression/korean-red-flavor-poster.jpg",
+      "role": "poster",
+      "alt": "event poster",
+      "width": 900,
+      "height": 1200
+    }
+  ],
+  "links": [],
+  "miniPrograms": [],
+  "contentHash": "regression-korean-red-flavor",
+  "diagnostics": [{ "key": "promoted_from", "value": "fixtures/event-pipeline-v2/korean-red-flavor" }],
+  "captureWarnings": []
+}
