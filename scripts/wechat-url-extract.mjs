@@ -11,16 +11,15 @@ import {
 } from "./llm-extractor.mjs";
 import {
   articleBundleToArticleSnapshot,
-  articleBundleToExtractionInput,
   createCaptureFailureResult,
   createCaptureSuccessResult,
 } from "../src/capture/article-bundle.mjs";
+import { runArticlePipelineOnce } from "../src/collector/orchestrator/pipeline.mjs";
 import { storeImageEvidenceAssets } from "../src/collector/evidence/wechat-images.mjs";
 import { createUrlBrowserArticleBundle } from "../src/capture/source-adapters.mjs";
 
 const execFileAsync = promisify(execFile);
 const maxVisibleTextLength = 12_000;
-const collectorPayloadVersion = "2026-05-collector-v1";
 
 export function parseWechatUrlExtractionArgs(argv) {
   const args = {
@@ -109,16 +108,82 @@ export async function runWechatUrlExtractionOnce({
   storeImages,
   putPublicAsset,
   extract = runLlmExtractionOnce,
+  ingest,
 }) {
   if (!url) throw new Error("missing_url");
   const runId = `wechat-url-${now.toISOString().replace(/[^0-9]/g, "").slice(0, 14)}`;
+  const shouldStoreImages =
+    storeImages ?? Boolean(putPublicAsset || env.BLOB_READ_WRITE_TOKEN?.trim());
+
+  const pipelineReport = await runArticlePipelineOnce({
+    env,
+    sourceUrl: url,
+    runId,
+    now,
+    fetchImpl,
+    upload,
+    capture: async () => captureWechatUrlArticle({
+      url,
+      session,
+      keepOpen,
+      now,
+      readArticlePage,
+      readArticleText,
+    }),
+    storeEvidenceAssets: shouldStoreImages
+      ? async ({ evidenceAssets }) =>
+          storeImageEvidenceAssets({
+            evidenceAssets,
+            fetchImpl,
+            putPublicAsset,
+          })
+      : undefined,
+    extractEvents: async ({ articleSnapshot, evidenceAssets }) =>
+      extract({
+        env,
+        articleSnapshot,
+        evidenceAssets,
+        fetchImpl,
+        now,
+        runId,
+        upload: false,
+      }),
+    ingest,
+  });
+
+  const extraction = pipelineReport.ingest
+    ? { ...pipelineReport.extraction, ...pipelineReport.ingest }
+    : pipelineReport.extraction;
+
+  return {
+    url,
+    runId,
+    articleTitle: pipelineReport.articleTitle,
+    articleBundle: pipelineReport.articleBundle,
+    captureResult: pipelineReport.captureResult,
+    articleSnapshot: pipelineReport.articleSnapshot,
+    pipelineReport,
+    extraction,
+    draftSummaries: summarizeDrafts(extraction.eventDrafts ?? []),
+    failureSummaries: (extraction.failures ?? []).map((failure) => failure.payload),
+  };
+}
+
+async function captureWechatUrlArticle({
+  url,
+  session,
+  keepOpen,
+  now,
+  readArticlePage,
+  readArticleText,
+}) {
   let page;
   try {
     page = readArticleText
       ? { text: await readArticleText({ url, session, keepOpen }) }
       : await readArticlePage({ url, session, keepOpen });
   } catch (error) {
-    const captureResult = createCaptureFailureResult({
+    return createCaptureFailureResult({
       stage: error?.stage ?? "page_fetch",
       reason: error?.reason ?? mapCaptureErrorToFailureReason(error),
       message: error instanceof Error ? error.message : String(error),
@@ -126,15 +191,8 @@ export async function runWechatUrlExtractionOnce({
       sourceUrl: url,
       diagnostics: error?.diagnostics ?? [],
     });
-    const extraction = captureFailureExtractionResult({
-      env,
-      url,
-      runId,
-      now,
-      failure: captureResult.failure,
-    });
-    return failedCaptureRunResult({ url, runId, extraction, captureResult });
   }
+
   const captureFailure = detectWechatArticleCaptureFailure({
     url,
     finalUrl: page.finalUrl,
@@ -142,14 +200,7 @@ export async function runWechatUrlExtractionOnce({
     html: page.html,
   });
   if (captureFailure) {
-    const extraction = captureFailureExtractionResult({
-      env,
-      url,
-      runId,
-      now,
-      failure: captureFailure,
-    });
-    const captureResult = createCaptureFailureResult({
+    return createCaptureFailureResult({
       stage: "page_fetch",
       reason: captureFailure.reason,
       message: captureFailure.message,
@@ -168,9 +219,9 @@ export async function runWechatUrlExtractionOnce({
           : undefined,
       ].filter(Boolean),
     });
-    return failedCaptureRunResult({ url, runId, extraction, captureResult });
   }
-  const articleBundle = buildWechatArticleBundleFromPage({
+
+  const bundle = buildWechatArticleBundleFromPage({
     url,
     canonicalUrl: page.canonicalUrl,
     finalUrl: page.finalUrl,
@@ -185,46 +236,11 @@ export async function runWechatUrlExtractionOnce({
     captureWarnings: page.captureWarnings,
     now,
   });
-  const captureResult = createCaptureSuccessResult({
-    bundle: articleBundle,
+  return createCaptureSuccessResult({
+    bundle,
     diagnostics: page.diagnostics ?? [],
     captureWarnings: page.captureWarnings ?? [],
   });
-  const extractionInput = articleBundleToExtractionInput(articleBundle);
-  const shouldStoreImages =
-    storeImages ?? Boolean(putPublicAsset || env.BLOB_READ_WRITE_TOKEN?.trim());
-  const evidenceAssets =
-    shouldStoreImages && extractionInput.evidenceAssets.length
-      ? await storeImageEvidenceAssets({
-          evidenceAssets: extractionInput.evidenceAssets,
-          fetchImpl,
-          putPublicAsset,
-        })
-      : extractionInput.evidenceAssets;
-  const articleSnapshot = {
-    ...extractionInput.articleSnapshot,
-    evidenceAssetIds: evidenceAssets.map((asset) => asset.assetId),
-  };
-  const extraction = await extract({
-    env,
-    articleSnapshot,
-    evidenceAssets,
-    fetchImpl,
-    now,
-    runId,
-    upload,
-  });
-  return {
-    url,
-    runId,
-    articleTitle: articleSnapshot.title,
-    articleBundle,
-    captureResult,
-    articleSnapshot,
-    extraction,
-    draftSummaries: summarizeDrafts(extraction.eventDrafts ?? []),
-    failureSummaries: (extraction.failures ?? []).map((failure) => failure.payload),
-  };
 }
 
 export function detectWechatArticleCaptureFailure({ finalUrl, text, html }) {
@@ -427,20 +443,6 @@ function uniqueDiagnostics(entries) {
   });
 }
 
-function failedCaptureRunResult({ url, runId, extraction, captureResult }) {
-  return {
-    url,
-    runId,
-    articleTitle: undefined,
-    articleBundle: undefined,
-    captureResult,
-    articleSnapshot: undefined,
-    extraction,
-    draftSummaries: [],
-    failureSummaries: extraction.failures.map((failure) => failure.payload),
-  };
-}
-
 function mapCaptureErrorToFailureReason(error) {
   const message = String(error?.message ?? error ?? "").toLowerCase();
   if (message.includes("captcha") || message.includes("verify")) {
@@ -508,48 +510,6 @@ function cleanText(text) {
     .replace(/\r\n/g, "\n")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
-}
-
-function captureFailureExtractionResult({ env, url, runId, now, failure }) {
-  return {
-    kind: "failed",
-    runId,
-    eventDrafts: [],
-    evidenceAssets: [],
-    llmUsage: [],
-    failures: [
-      {
-        collectorId: clean(env.COLLECTOR_ID) ?? "unknown-collector",
-        runId,
-        observedAt: now.toISOString(),
-        payloadVersion: collectorPayloadVersion,
-        payload: removeUndefined({
-          articleUrl: url,
-          stage: "page_fetch",
-          reason: failure.reason,
-          message: failure.message,
-          retryable: failure.retryable ?? true,
-          diagnostics:
-            failure.diagnostics?.length
-              ? failure.diagnostics
-              : [
-                  failure.marker
-                    ? {
-                        key: "capture_failure_marker",
-                        value: failure.marker,
-                      }
-                    : undefined,
-                  failure.finalUrl
-                    ? {
-                        key: "final_url",
-                        value: failure.finalUrl,
-                      }
-                    : undefined,
-                ].filter(Boolean),
-        }),
-      },
-    ],
-  };
 }
 
 function isWechatCaptchaUrl(value) {

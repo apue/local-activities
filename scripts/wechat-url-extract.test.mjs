@@ -382,21 +382,52 @@ describe("single WeChat URL extractor", () => {
     });
   });
 
-  it("passes upload through only when explicitly requested", async () => {
+  it("uploads through pipeline ingest without passing upload to the extractor", async () => {
+    const extractCalls = [];
+    const ingestCalls = [];
     const result = await runWechatUrlExtractionOnce({
-      env: {},
+      env: { COLLECTOR_ID: "collector-1" },
       url: "https://mp.weixin.qq.com/s/example",
       upload: true,
       readArticleText: async () => "Title\nOrg\nBody",
-      extract: async (input) => ({
-        kind: input.upload ? "uploaded" : "drafts",
-        runId: input.runId,
-        eventDrafts: [],
-        failures: [],
-        uploadedEventDraftIds: [],
-      }),
+      extract: async (input) => {
+        extractCalls.push(input);
+        return {
+          kind: input.upload ? "uploaded" : "drafts",
+          runId: input.runId,
+          eventDrafts: [
+            {
+              payload: {
+                draftId: "draft-1",
+                title: "Title",
+                confidence: 0.9,
+              },
+            },
+          ],
+          failures: [],
+        };
+      },
+      ingest: async (input) => {
+        ingestCalls.push(input);
+        return {
+          sourceRunId: "source-run-1",
+          uploadedArticleSnapshotIds: ["snapshot-1"],
+          uploadedEventDraftCount: input.extractionResults[0].eventDrafts.length,
+        };
+      },
     });
 
-    expect(result.extraction.uploadedEventDraftIds).toEqual([]);
+    expect(extractCalls).toHaveLength(1);
+    expect(extractCalls[0].upload).toBe(false);
+    expect(ingestCalls).toHaveLength(1);
+    expect(ingestCalls[0].sourceRun.payload.status).toBe("success");
+    expect(ingestCalls[0].articleSnapshots).toHaveLength(1);
+    expect(result.pipelineReport.stageStatuses.ingest).toBe("success");
+    expect(result.extraction).toMatchObject({
+      kind: "drafts",
+      sourceRunId: "source-run-1",
+      uploadedArticleSnapshotIds: ["snapshot-1"],
+      uploadedEventDraftCount: 1,
+    });
   });
 });
