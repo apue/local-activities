@@ -191,6 +191,9 @@ type EvaluationRun = {
   schemaVersion: string;
   corpusVersion: string;
   status: "running" | "completed" | "failed";
+  validity: "valid" | "invalidated";
+  invalidatedReason?: string;
+  invalidatedAt?: string;
   startedAt: string;
   completedAt?: string;
   caseCount: number;

@@ -27,6 +27,7 @@ class MemoryAdminStore implements AdminStore {
   excludedArticles = new Map<string, AdminExcludedArticleRecord>();
   ledgerRows: AdminProcessingLedgerRecord[] = [];
   evaluationRuns: AdminEvaluationRunRecord[] = [];
+  evaluationRunsInput?: Parameters<AdminStore["listEvaluationRuns"]>[0];
   llmUsageInput?: Parameters<AdminStore["getLlmUsageSummary"]>[0];
   llmUsageSummary = {
     range: {
@@ -151,9 +152,13 @@ class MemoryAdminStore implements AdminStore {
 
   async listEvaluationRuns(input: {
     status?: AdminEvaluationRunRecord["status"];
+    validity?: AdminEvaluationRunRecord["validity"];
   }) {
+    this.evaluationRunsInput = input;
     return this.evaluationRuns.filter(
-      (run) => !input.status || run.status === input.status,
+      (run) =>
+        (!input.status || run.status === input.status) &&
+        (!input.validity || run.validity === input.validity),
     );
   }
 
@@ -469,6 +474,7 @@ describe("admin service", () => {
         parameters: { temperature: 0 },
         corpusVersion: "regression-2026-06",
         status: "completed",
+        validity: "valid",
         startedAt: "2026-06-08T01:00:00.000Z",
         completedAt: "2026-06-08T01:02:00.000Z",
         caseCount: 2,
@@ -505,6 +511,46 @@ describe("admin service", () => {
             passed: false,
           }),
         ],
+      }),
+    ]);
+    expect(store.evaluationRunsInput).toMatchObject({
+      status: "completed",
+      validity: "valid",
+    });
+  });
+
+  it("allows evaluation reports to be queried by explicit validity", async () => {
+    const store = new MemoryAdminStore();
+    store.evaluationRuns = [
+      {
+        runId: "eval-invalidated",
+        provider: "siliconflow",
+        model: "qwen",
+        promptVersion: "pre-288",
+        schemaVersion: "analysis-output-v1",
+        parameters: {},
+        corpusVersion: "regression-2026-06",
+        status: "failed",
+        validity: "invalidated",
+        invalidatedReason: "pre_288_live_eval_used_legacy_text_metadata_path",
+        invalidatedAt: "2026-06-09T07:00:00.000Z",
+        startedAt: "2026-06-09T03:00:00.000Z",
+        caseCount: 1,
+        passCount: 0,
+        failCount: 1,
+        summary: {},
+        caseResults: [],
+        createdAt: "2026-06-09T03:00:00.000Z",
+      },
+    ];
+
+    await expect(
+      listAdminEvaluationRuns({ validity: "invalidated" }, store),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        runId: "eval-invalidated",
+        validity: "invalidated",
+        invalidatedReason: "pre_288_live_eval_used_legacy_text_metadata_path",
       }),
     ]);
   });

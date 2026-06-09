@@ -93,6 +93,10 @@ const evaluationRunStatusSchema = z
   .enum(["running", "completed", "failed"])
   .optional();
 
+const evaluationRunValiditySchema = z
+  .enum(["valid", "invalidated"])
+  .default("valid");
+
 export async function handleAdminLogin(request: Request, env: AdminEnv) {
   const parsed = adminLoginSchema.safeParse(await parseJson(request));
   if (!parsed.success) return invalidRequestResponse(parsed.error);
@@ -236,10 +240,16 @@ export async function handleAdminListEvaluationRuns(
     url.searchParams.get("status") ?? undefined,
   );
   if (!parsedStatus.success) return invalidRequestResponse(parsedStatus.error);
+  const parsedValidity = evaluationRunValiditySchema.safeParse(
+    url.searchParams.get("validity") ?? undefined,
+  );
+  if (!parsedValidity.success) {
+    return invalidRequestResponse(parsedValidity.error);
+  }
 
   try {
     const evaluationRuns = await listAdminEvaluationRuns(
-      { status: parsedStatus.data },
+      { status: parsedStatus.data, validity: parsedValidity.data },
       store,
     );
     return Response.json(

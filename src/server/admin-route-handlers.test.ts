@@ -82,6 +82,7 @@ class RouteAdminStore implements AdminStore {
     parameters: { temperature: 0 },
     corpusVersion: "regression-2026-06",
     status: "completed",
+    validity: "valid",
     startedAt: "2026-06-04T02:00:00.000Z",
     completedAt: "2026-06-04T02:03:00.000Z",
     caseCount: 1,
@@ -103,6 +104,7 @@ class RouteAdminStore implements AdminStore {
     ],
     createdAt: "2026-06-04T02:00:00.000Z",
   };
+  evaluationRunsInput?: Parameters<AdminStore["listEvaluationRuns"]>[0];
   llmUsageSummary: AdminLlmUsageSummary = {
     range: {
       key: "today",
@@ -187,7 +189,10 @@ class RouteAdminStore implements AdminStore {
     return [this.ledger];
   }
 
-  async listEvaluationRuns(): Promise<AdminEvaluationRunRecord[]> {
+  async listEvaluationRuns(
+    input: Parameters<AdminStore["listEvaluationRuns"]>[0],
+  ): Promise<AdminEvaluationRunRecord[]> {
+    this.evaluationRunsInput = input;
     return [this.evaluationRun];
   }
 
@@ -436,6 +441,7 @@ describe("admin route handlers", () => {
   });
 
   it("lists evaluation runs with case results for admin reports", async () => {
+    const store = new RouteAdminStore();
     const response = await handleAdminListEvaluationRuns(
       new Request(
         "https://example.com/api/admin/evaluation-runs?status=completed",
@@ -443,7 +449,7 @@ describe("admin route handlers", () => {
           headers: { authorization: "Bearer admin-secret" },
         },
       ),
-      new RouteAdminStore(),
+      store,
       { ADMIN_ACCESS_TOKEN: "admin-secret" },
     );
 
@@ -463,6 +469,45 @@ describe("admin route handlers", () => {
           ],
         }),
       ],
+    });
+    expect(store.evaluationRunsInput).toMatchObject({
+      status: "completed",
+      validity: "valid",
+    });
+  });
+
+  it("passes explicit evaluation run validity filters to the admin store", async () => {
+    const store = new RouteAdminStore();
+    const response = await handleAdminListEvaluationRuns(
+      new Request(
+        "https://example.com/api/admin/evaluation-runs?validity=invalidated",
+        {
+          headers: { authorization: "Bearer admin-secret" },
+        },
+      ),
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(store.evaluationRunsInput).toMatchObject({
+      validity: "invalidated",
+    });
+  });
+
+  it("rejects invalid evaluation run validity filters", async () => {
+    const response = await handleAdminListEvaluationRuns(
+      new Request("https://example.com/api/admin/evaluation-runs?validity=old", {
+        headers: { authorization: "Bearer admin-secret" },
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: "invalid_request",
     });
   });
 

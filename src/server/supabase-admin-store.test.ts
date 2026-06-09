@@ -178,6 +178,7 @@ describe("supabase admin store", () => {
         provider: "dashscope",
         model: "qwen3-vl-plus",
         status: "completed",
+        validity: "valid",
         caseCount: 2,
         passCount: 1,
         failCount: 1,
@@ -224,7 +225,33 @@ describe("supabase admin store", () => {
     expect(JSON.stringify(evaluationRuns)).not.toContain("secret");
     expect(JSON.stringify(evaluationRuns)).not.toContain("Authorization");
     expect(calls).toContainEqual(["eq", "status", "completed"]);
+    expect(calls).toContainEqual(["eq", "validity", "valid"]);
     expect(calls).toContainEqual(["in", "run_id", ["eval-1"]]);
+  });
+
+  it("can list invalidated evaluation runs for audit", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(
+      supabaseClientForEvaluationRuns(calls, {
+        validity: "invalidated",
+        invalidated_reason: "pre_288_live_eval_used_legacy_text_metadata_path",
+        invalidated_at: "2026-06-09T07:00:00.000Z",
+      }),
+    );
+
+    const evaluationRuns = await store.listEvaluationRuns({
+      validity: "invalidated",
+    });
+
+    expect(evaluationRuns).toEqual([
+      expect.objectContaining({
+        runId: "eval-1",
+        validity: "invalidated",
+        invalidatedReason: "pre_288_live_eval_used_legacy_text_metadata_path",
+        invalidatedAt: "2026-06-09T07:00:00.000Z",
+      }),
+    ]);
+    expect(calls).toContainEqual(["eq", "validity", "invalidated"]);
   });
 
   it("maps collector job result fields for admin smoke verification", async () => {
@@ -752,7 +779,10 @@ function supabaseClientForProcessingLedger(calls: unknown[] = []) {
   } as never;
 }
 
-function supabaseClientForEvaluationRuns(calls: unknown[] = []) {
+function supabaseClientForEvaluationRuns(
+  calls: unknown[] = [],
+  runOverrides: Record<string, unknown> = {},
+) {
   const runRows = [
     {
       run_id: "eval-1",
@@ -770,6 +800,9 @@ function supabaseClientForEvaluationRuns(calls: unknown[] = []) {
       },
       corpus_version: "regression-2026-06",
       status: "completed",
+      validity: "valid",
+      invalidated_reason: null,
+      invalidated_at: null,
       started_at: "2026-06-08T01:00:00.000Z",
       completed_at: "2026-06-08T01:02:00.000Z",
       case_count: 2,
@@ -785,6 +818,7 @@ function supabaseClientForEvaluationRuns(calls: unknown[] = []) {
       artifact_bucket: "eval-artifacts",
       artifact_path: "runs/eval-1/report.json",
       created_at: "2026-06-08T01:00:00.000Z",
+      ...runOverrides,
     },
   ];
   const caseRows = [

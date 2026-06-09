@@ -150,6 +150,9 @@ type EvaluationRunRow = {
   parameters: Record<string, unknown> | null;
   corpus_version: string;
   status: AdminEvaluationRunRecord["status"];
+  validity: AdminEvaluationRunRecord["validity"] | null;
+  invalidated_reason: string | null;
+  invalidated_at: string | null;
   started_at: string;
   completed_at: string | null;
   case_count: number;
@@ -382,6 +385,7 @@ class SupabaseAdminStore implements AdminStore {
 
   async listEvaluationRuns(input: {
     status?: AdminEvaluationRunRecord["status"];
+    validity?: AdminEvaluationRunRecord["validity"];
   }): Promise<AdminEvaluationRunRecord[]> {
     let runQuery = this.client
       .from("evaluation_runs")
@@ -390,6 +394,7 @@ class SupabaseAdminStore implements AdminStore {
     if (input.status) {
       runQuery = runQuery.eq("status", input.status);
     }
+    runQuery = runQuery.eq("validity", input.validity ?? "valid");
 
     const { data: runData, error: runError } = await runQuery
       .order("started_at", { ascending: false })
@@ -898,6 +903,9 @@ function toEvaluationRunRecord(
     parameters: sanitizeJsonObject(row.parameters ?? {}),
     corpusVersion: row.corpus_version,
     status: row.status,
+    validity: row.validity ?? "valid",
+    invalidatedReason: row.invalidated_reason ?? undefined,
+    invalidatedAt: row.invalidated_at ?? undefined,
     startedAt: row.started_at,
     completedAt: row.completed_at ?? undefined,
     caseCount: row.case_count,

@@ -50,7 +50,7 @@ export async function loadAdminState({
       },
     ),
     adminApiRequest<{ evaluationRuns: unknown[] }>(
-      "/api/admin/evaluation-runs",
+      "/api/admin/evaluation-runs?validity=valid",
       {
         fetchImpl,
       },
