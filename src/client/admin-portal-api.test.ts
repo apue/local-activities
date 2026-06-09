@@ -79,7 +79,7 @@ describe("admin portal API client", () => {
           ledger: [{ id: "ledger-1" }],
         });
       }
-      if (url === "/api/admin/evaluation-runs") {
+      if (url === "/api/admin/evaluation-runs?validity=valid") {
         return jsonResponse(200, {
           ok: true,
           evaluationRuns: [{ runId: "eval-1" }],
@@ -108,7 +108,7 @@ describe("admin portal API client", () => {
       "GET /api/admin/llm-usage?range=all",
       "GET /api/admin/excluded-articles",
       "GET /api/admin/processing-ledger?mode=production",
-      "GET /api/admin/evaluation-runs",
+      "GET /api/admin/evaluation-runs?validity=valid",
     ]);
   });
 

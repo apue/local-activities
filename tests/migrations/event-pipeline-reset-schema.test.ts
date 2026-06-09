@@ -1,7 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+const migrationsDir = fileURLToPath(
+  new URL("../../supabase/migrations", import.meta.url),
+);
 const migrationPath = fileURLToPath(
   new URL(
     "../../supabase/migrations/20260608103000_event_pipeline_reset_schema.sql",
@@ -23,6 +27,11 @@ const snapshotResidueMigrationPath = fileURLToPath(
 const sql = readFileSync(migrationPath, "utf8");
 const residueSql = readFileSync(residueMigrationPath, "utf8");
 const snapshotResidueSql = readFileSync(snapshotResidueMigrationPath, "utf8");
+const allMigrationSql = readdirSync(migrationsDir)
+  .filter((fileName) => fileName.endsWith(".sql"))
+  .sort()
+  .map((fileName) => readFileSync(path.join(migrationsDir, fileName), "utf8"))
+  .join("\n");
 
 describe("event pipeline reset migration", () => {
   it("creates the reset database tables required by the pipeline", () => {
@@ -55,6 +64,16 @@ describe("event pipeline reset migration", () => {
     expect(sql).toContain("mode text not null default 'production' check");
     expect(sql).toContain("evaluation_case_results");
     expect(sql).toContain("references public.evaluation_runs(run_id)");
+  });
+
+  it("tracks evaluation run validity for obsolete live evals", () => {
+    expect(allMigrationSql).toContain("validity text not null default 'valid'");
+    expect(allMigrationSql).toContain(
+      "check (validity in ('valid', 'invalidated'))",
+    );
+    expect(allMigrationSql).toContain("invalidated_reason text");
+    expect(allMigrationSql).toContain("invalidated_at timestamptz");
+    expect(allMigrationSql).toContain("evaluation_runs_validity_started_idx");
   });
 
   it("does not reintroduce removed active collector and Vercel asset paths", () => {

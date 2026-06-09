@@ -216,6 +216,9 @@ export type AdminEvaluationRunRecord = {
   parameters: Record<string, unknown>;
   corpusVersion: string;
   status: "running" | "completed" | "failed";
+  validity: "valid" | "invalidated";
+  invalidatedReason?: string;
+  invalidatedAt?: string;
   startedAt: string;
   completedAt?: string;
   caseCount: number;
@@ -338,6 +341,7 @@ export type AdminStore = {
   }): Promise<AdminProcessingLedgerRecord[]>;
   listEvaluationRuns(input: {
     status?: AdminEvaluationRunRecord["status"];
+    validity?: AdminEvaluationRunRecord["validity"];
   }): Promise<AdminEvaluationRunRecord[]>;
   getLlmUsageSummary(input: {
     startsAt?: string;
@@ -379,10 +383,13 @@ export function listAdminProcessingLedger(
 }
 
 export function listAdminEvaluationRuns(
-  input: { status?: AdminEvaluationRunRecord["status"] },
+  input: {
+    status?: AdminEvaluationRunRecord["status"];
+    validity?: AdminEvaluationRunRecord["validity"];
+  },
   store: AdminStore,
 ) {
-  return store.listEvaluationRuns(input);
+  return store.listEvaluationRuns({ validity: "valid", ...input });
 }
 
 export function listAdminLlmUsageSummary(
