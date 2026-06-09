@@ -154,7 +154,7 @@ describe("evaluation runner", () => {
     ).toThrow("evaluation_live_pricing_required");
   });
 
-  it("uses the production analysis prompt and multimodal image inputs for live evaluation", async () => {
+  it("uses the production analysis prompt and declared analysis image assets for live evaluation", async () => {
     const requests = [];
     const variant = createConfiguredLiveVariant({
       env: {
@@ -193,16 +193,32 @@ describe("evaluation runner", () => {
     });
 
     await variant.analyze({
+      context: {
+        mode: "eval",
+        runId: "eval-test-run",
+      },
       caseItem: {
+        case: { id: "live-input-test", labels: [] },
+        expected: { action: "exclude", eventCount: 0, evidence: {} },
         bundle: {
           text: "Public activity. Scan the poster QR code to register.",
           html: "<article><img src=\"https://cdn.example/poster.jpg\"></article>",
           links: [],
           diagnostics: [],
           images: [{
-            sourceUrl: "https://mmbiz.qpic.cn/poster.jpg",
-            id: "poster-1",
+            sourceUrl: "https://upstream.example/poster.jpg",
+            id: "source-reference-only",
             role: "poster",
+          }, {
+            publicUrl: "https://cdn.example/assets/poster.jpg",
+            sourceUrl: "https://upstream.example/public-poster.jpg",
+            id: "public-poster",
+            role: "poster",
+          }, {
+            dataUrl: "data:image/png;base64,aGVsbG8=",
+            sourceUrl: "https://upstream.example/qr.jpg",
+            id: "data-url-qr",
+            role: "registration_qr",
           }],
         },
       },
@@ -215,15 +231,53 @@ describe("evaluation runner", () => {
     expect(requests[0].messages[0].content).not.toContain(
       "You evaluate a captured Beijing cultural activity article",
     );
-    expect(requests[0].messages[1].content).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "image_url",
-          image_url: { url: "https://mmbiz.qpic.cn/poster.jpg" },
-        }),
-      ]),
-    );
+    const imageUrls = requests[0].messages[1].content
+      .filter((part) => part.type === "image_url")
+      .map((part) => part.image_url.url);
+    expect(imageUrls).toEqual([
+      "https://cdn.example/assets/poster.jpg",
+      "data:image/png;base64,aGVsbG8=",
+    ]);
     expect(JSON.stringify(requests[0])).toContain("Image metadata:");
+  });
+
+  it("marks vision live eval cases without consumable assets invalid before provider calls", async () => {
+    const corpus = await loadRegressionCorpus();
+    const writer = createMemoryEvaluationWriter();
+    let fetchCount = 0;
+    const variant = createConfiguredLiveVariant({
+      env: {
+        ANALYSIS_LLM_BASE_URL: "https://provider.example/v1",
+        ANALYSIS_LLM_API_KEY: "test-key",
+        ANALYSIS_LLM_MODEL: "vision-model",
+        EVALUATION_INPUT_TOKEN_MICRO_CNY: "1",
+        EVALUATION_OUTPUT_TOKEN_MICRO_CNY: "1",
+      },
+      fetchImpl: async () => {
+        fetchCount += 1;
+        throw new Error("provider_should_not_be_called");
+      },
+    });
+
+    await runEvaluation({
+      corpus,
+      writer,
+      variants: [variant],
+      caseIds: ["qr-registration-poster"],
+      maxCostCny: 1,
+      now: new Date("2026-06-08T14:00:00.000Z"),
+    });
+
+    expect(fetchCount).toBe(0);
+    expect(writer.state.rows.evaluation_case_results[0]).toMatchObject({
+      actual_action: "failed",
+      passed: false,
+      errors: expect.arrayContaining([{ reason: "invalid_input" }]),
+    });
+    expect(writer.state.rows.llm_usage_ledger[0]).toMatchObject({
+      status: "failed",
+      total_tokens: 0,
+    });
   });
 
   it("marks a run failed when live budget checks abort after the run starts", async () => {

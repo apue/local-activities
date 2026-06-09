@@ -46,13 +46,18 @@ They must remain distinct even when they reference the same original image.
 ```text
 Wechat2RSS article
 -> ArticleBundle
+-> ContractCheck<ArticleBundle>
 -> Supabase Storage upload
 -> analyze-article-bundle Edge Function
+-> AnalysisInput
+-> ContractCheck<AnalysisInput>
 -> multimodal LLM request
 -> normalized extraction result
+-> ContractCheck<ExtractionResult>
 -> backend validation
 -> dedupe decision
 -> publish routing
+-> DbWritePlan
 -> ledger + drafts/events/evidence/usage
 -> admin/public surfaces
 ```
@@ -83,6 +88,8 @@ pnpm eval:run -- --variant live-configured --allow-live --max-cost-cny <n>
 | Contract | Purpose |
 | --- | --- |
 | `ArticleBundle` | raw captured HTML/text/images/links/metadata |
+| `PipelineContext` | required mode/run/source context for node validation and writes |
+| `AnalysisInput` | provider-ready article text, image metadata, and consumable image assets |
 | `AnalyzeArticleBundleRequest` | Edge Function trigger payload |
 | `ProcessingLedgerEntry` | full processing audit record for every article |
 | `EvidenceAsset` | poster, registration QR, article image, screenshot, or link evidence |
@@ -92,7 +99,21 @@ pnpm eval:run -- --variant live-configured --allow-live --max-cost-cny <n>
 | `ExtractorVariant` | provider, model, prompt version, schema version, and parameters |
 | `EvaluationRun` | one variant evaluated against one corpus version |
 
-Cross-process contracts must be schema validated.
+Cross-process contracts must be schema validated. Node outputs that cross module
+boundaries should also pass a local contract checker. The checker takes
+`nodeName`, `payload`, and `PipelineContext`; it starts with one enforced
+`AnalysisInput` rule and can grow without changing provider or writer call
+sites.
+
+The first enforced `AnalysisInput` rule is:
+
+```text
+provider image inputs must come from declared consumable assets
+raw capture references such as images[*].sourceUrl are metadata only
+```
+
+Every DB write path must carry context rather than using a separate
+implementation for production, eval, test, mock, or smoke data.
 
 ## Boundary Rules
 

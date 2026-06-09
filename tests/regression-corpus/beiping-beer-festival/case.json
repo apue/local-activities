@@ -9,5 +9,9 @@
     "fixtureId": "beiping-beer-festival",
     "url": "https://mp.weixin.qq.com/s/beiping-beer-fixture"
   },
+  "evaluation": {
+    "liveVisionEligible": false,
+    "liveVisionReason": "No committed real image asset; image metadata is for offline replay only."
+  },
   "rationale": "Available self-contained Beiping fixture exercises duplicate skip behavior. A second real operator-sourced paired article is not committed yet."
 }

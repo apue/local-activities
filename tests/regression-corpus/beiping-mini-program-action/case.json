@@ -8,5 +8,9 @@
     "type": "operator_investigation_reference",
     "url": "https://mp.weixin.qq.com/s/0Chl_ewq9yiDbjcBZmuwtQ"
   },
+  "evaluation": {
+    "liveVisionEligible": false,
+    "liveVisionReason": "No committed real poster asset; image metadata is for offline replay only."
+  },
   "rationale": "Represents the available Beiping article behavior where registration is exposed through WeChat action surfaces rather than a plain URL."
 }

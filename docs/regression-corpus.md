@@ -37,6 +37,15 @@ evidence expectations, duplicate/update result, and publish state. `assets/`
 stores small committed image fixtures only when they are necessary for QR,
 poster, or image-dominant regression behavior.
 
+Image references in `captured-bundle.json` are capture metadata, not provider
+inputs. `images[*].sourceUrl` may be an upstream URL or a Wechat2RSS proxy URL;
+it is still only a raw capture reference. Live vision evaluation must consume an
+`AnalysisInput` node output whose image inputs come from consumable assets such
+as `publicUrl`, `dataUrl`, or a Storage/local asset resolved to one of those
+forms. Fixture cases without real image assets must set
+`case.json.evaluation.liveVisionEligible` to `false` and remain mock/offline
+replay cases until real assets are added.
+
 Capture-failure cases use `capture-result.json` instead of
 `captured-bundle.json`. This mirrors the capture contract: a failed capture has
 a typed failure reason and diagnostics but no article bundle to validate or
@@ -113,6 +122,22 @@ Live evaluation remains separate:
 ```text
 captured bundle or live URL -> live model eval -> usage recorded under eval label
 ```
+
+Live evaluation uses the same analysis-input contract as production analysis:
+
+```text
+CapturedArticleBundle
+-> AnalysisInput
+-> ContractCheck<analysis_input>
+-> provider payload
+```
+
+`ContractCheck<analysis_input>` currently validates the first enforced rule:
+provider image inputs must not be raw capture references. A live vision case that
+needs image understanding but lacks consumable assets must fail as invalid eval
+input before any provider call. Do not create regression fixtures that pretend a
+nonexistent image is provider-downloadable; either attach a real asset or mark
+the case as not live-vision eligible.
 
 Production acceptance remains separate:
 

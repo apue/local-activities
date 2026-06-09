@@ -9,5 +9,9 @@
     "fixtureId": "goethe-sonic-exhibition",
     "url": "https://mp.weixin.qq.com/s/goethe-sonic-exhibition-fixture"
   },
+  "evaluation": {
+    "liveVisionEligible": false,
+    "liveVisionReason": "No committed real image asset; image metadata is for offline replay only."
+  },
   "rationale": "Long-running exhibition."
 }

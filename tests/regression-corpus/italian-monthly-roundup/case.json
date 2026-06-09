@@ -9,5 +9,9 @@
     "fixtureId": "italian-monthly-roundup",
     "url": "https://mp.weixin.qq.com/s/italian-monthly-fixture"
   },
+  "evaluation": {
+    "liveVisionEligible": false,
+    "liveVisionReason": "No committed real image asset; image metadata is for offline replay only."
+  },
   "rationale": "Multi-event article."
 }
