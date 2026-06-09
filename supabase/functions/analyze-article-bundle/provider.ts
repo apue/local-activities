@@ -98,45 +98,15 @@ export function createOpenAiCompatibleProvider({
     name: "openai-compatible",
     model,
     async analyze(input: ProviderInput): Promise<ProviderResponse> {
-      try {
-        return await requestOpenAiCompatible({
-          input,
-          baseUrl,
-          apiKey,
-          model,
-          maxOutputTokens,
-          timeoutMs,
-          fetchImpl,
-        });
-      } catch (error) {
-        if (
-          hasVisionImageUrl(input) &&
-          error instanceof Error &&
-          (/^provider_http_(400|403|413|500|502|503|504)/.test(
-            error.message,
-          ) || /^provider_timeout:/.test(error.message))
-        ) {
-          const textOnly = withoutVisionImageUrls(input);
-          const response = await requestOpenAiCompatible({
-            input: textOnly,
-            baseUrl,
-            apiKey,
-            model,
-            maxOutputTokens,
-            timeoutMs,
-            fetchImpl,
-          });
-          return {
-            ...response,
-            raw: {
-              response: response.raw,
-              fallback: "text_only_after_vision_http_error",
-              visionError: error.message,
-            },
-          };
-        }
-        throw error;
-      }
+      return await requestOpenAiCompatible({
+        input,
+        baseUrl,
+        apiKey,
+        model,
+        maxOutputTokens,
+        timeoutMs,
+        fetchImpl,
+      });
     },
   };
 }
@@ -253,17 +223,6 @@ function withTimeout<T>(
       setTimerId(id);
     }),
   ]);
-}
-
-function hasVisionImageUrl(input: ProviderInput): boolean {
-  return input.user.some((part) => part.type === "image_url");
-}
-
-function withoutVisionImageUrls(input: ProviderInput): ProviderInput {
-  return {
-    ...input,
-    user: input.user.filter((part) => part.type !== "image_url"),
-  };
 }
 
 export function parseProviderOutput(
