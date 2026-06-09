@@ -373,7 +373,27 @@ function validateCaseMeta({ caseMeta, manifestEntry, caseId }) {
     }
   }
   if (!caseMeta.source?.type) throw new Error(`regression_corpus_case_source_required:${caseId}`);
+  validateCaseEvaluationMeta({ caseMeta, caseId });
   if (!caseMeta.rationale) throw new Error(`regression_corpus_case_rationale_required:${caseId}`);
+}
+
+function validateCaseEvaluationMeta({ caseMeta, caseId }) {
+  if (caseMeta.evaluation === undefined) return;
+  if (!caseMeta.evaluation || typeof caseMeta.evaluation !== "object") {
+    throw new Error(`regression_corpus_case_evaluation_invalid:${caseId}`);
+  }
+  if (
+    caseMeta.evaluation.liveVisionEligible !== undefined &&
+    typeof caseMeta.evaluation.liveVisionEligible !== "boolean"
+  ) {
+    throw new Error(`regression_corpus_case_live_vision_eligible_invalid:${caseId}`);
+  }
+  if (
+    caseMeta.evaluation.liveVisionEligible === false &&
+    !String(caseMeta.evaluation.liveVisionReason ?? "").trim()
+  ) {
+    throw new Error(`regression_corpus_case_live_vision_reason_required:${caseId}`);
+  }
 }
 
 function validateExpected({ expected, caseId }) {

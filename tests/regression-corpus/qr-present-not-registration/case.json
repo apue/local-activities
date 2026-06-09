@@ -6,5 +6,9 @@
     "evalCaseId": "brazil-mouth-disease-recognition-news",
     "url": "https://mp.weixin.qq.com/s/qr-present-not-registration-fixture"
   },
+  "evaluation": {
+    "liveVisionEligible": false,
+    "liveVisionReason": "No committed real QR image asset; image metadata is for offline replay only."
+  },
   "rationale": "Article contains a QR code for following the official account, not event registration. The evidence extractor must not treat every QR as a registration channel."
 }

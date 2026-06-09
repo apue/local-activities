@@ -1,6 +1,15 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  analysisInputToLiveProviderParts,
+  buildEvaluationAnalysisInput,
+} from "./analysis-input.mjs";
+import {
+  checkPipelineContract,
+  isPipelineContractError,
+} from "../pipeline/contract-checker.mjs";
+
 const defaultArtifactBucket = "eval-artifacts";
 const productionTables = new Set([
   "canonical_events",
@@ -111,7 +120,7 @@ export function createConfiguredLiveVariant({
       inputTokenMicroCny,
       outputTokenMicroCny,
     },
-    async analyze({ caseItem }) {
+    async analyze({ caseItem, context }) {
       if (!caseItem.bundle) throw new Error("evaluation_live_bundle_required");
       return await analyzeWithOpenAiCompatibleProvider({
         baseUrl,
@@ -119,6 +128,7 @@ export function createConfiguredLiveVariant({
         model,
         caseItem,
         bundle: caseItem.bundle,
+        context,
         fetchImpl,
         maxOutputTokens: numberFromEnv(env.ANALYSIS_LLM_MAX_OUTPUT_TOKENS),
         timeoutMs: (numberFromEnv(env.ANALYSIS_LLM_TIMEOUT_SECONDS) ?? 60) * 1000,
@@ -201,7 +211,7 @@ export function scoreEvaluationCase({ caseItem, output, error } = {}) {
   const dedupeMatch = expectedEventCount === 0 || !expectedDedupe ||
     normalizeDedupeDecision(expectedDedupe) === actualDedupe;
   if (!dedupeMatch) errors.push("dedupe_mismatch");
-  if (error) errors.push("provider_error");
+  if (error) errors.push(isPipelineContractError(error) ? "invalid_input" : "provider_error");
 
   const falsePositive = ["exclude", "capture_failure"].includes(expectedAction) &&
     ["extract", "review"].includes(actualAction);
@@ -444,7 +454,16 @@ async function runEvaluationCase({
     if (caseItem.captureResult?.ok === false) {
       output = undefined;
     } else {
-      output = await variant.analyze({ caseItem, bundle: caseItem.bundle });
+      output = await variant.analyze({
+        caseItem,
+        bundle: caseItem.bundle,
+        context: {
+          mode: "eval",
+          runId,
+          datasetId: caseItem.case.id,
+          sourceProvider: caseItem.bundle?.provider ?? "unknown",
+        },
+      });
     }
   } catch (error) {
     providerError = error;
@@ -820,6 +839,7 @@ async function analyzeWithOpenAiCompatibleProvider({
   model,
   caseItem,
   bundle,
+  context,
   fetchImpl,
   maxOutputTokens,
   timeoutMs,
@@ -827,7 +847,13 @@ async function analyzeWithOpenAiCompatibleProvider({
   const started = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  const input = buildLiveProviderInput({ caseItem, bundle });
+  const analysisInput = buildEvaluationAnalysisInput({ caseItem, bundle });
+  checkPipelineContract({
+    nodeName: "analysis_input",
+    payload: analysisInput,
+    context,
+  });
+  const user = analysisInputToLiveProviderParts(analysisInput);
   try {
     const response = await fetchImpl(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
@@ -840,11 +866,11 @@ async function analyzeWithOpenAiCompatibleProvider({
         messages: [
           {
             role: "system",
-            content: input.system,
+            content: productionAnalysisSystemPrompt(),
           },
           {
             role: "user",
-            content: liveProviderContent(input.user),
+            content: liveProviderContent(user),
           },
         ],
         response_format: { type: "json_object" },
@@ -879,41 +905,6 @@ async function analyzeWithOpenAiCompatibleProvider({
   }
 }
 
-function buildLiveProviderInput({ caseItem, bundle }) {
-  const user = [
-    {
-      type: "text",
-      text: JSON.stringify({
-        sourceUrl: caseItem?.case?.source?.url ?? bundle.sourceUrl,
-        publishedAt: bundle.publishedAt,
-        sourceProvider: bundle.provider ?? bundle.manifest?.sourceProvider,
-        sourceName: bundle.sourceName ?? bundle.manifest?.sourceName,
-        articleText: String(bundle.text ?? "").slice(0, 24000),
-        articleHtmlSummary: summarizeHtml(String(bundle.html ?? "")),
-        links: bundle.links ?? [],
-        diagnostics: bundle.diagnostics ?? [],
-      }),
-    },
-  ];
-  for (const [index, image] of (bundle.images ?? []).entries()) {
-    const normalized = liveMetadataImage(image, index);
-    user.push({ type: "image_metadata", image: normalized });
-    const imageUrl = liveImageUrl(image);
-    if (imageUrl) {
-      user.push({
-        type: "image_url",
-        imageUrl,
-        imageId: normalized.imageId,
-      });
-    }
-  }
-  return {
-    system: productionAnalysisSystemPrompt(),
-    user,
-    responseFormat: "json",
-  };
-}
-
 function productionAnalysisSystemPrompt() {
   return [
     "You analyze official Beijing cultural activity articles. Return strict JSON only.",
@@ -937,36 +928,6 @@ function liveProviderContent(parts) {
       : `Image metadata: ${JSON.stringify(part.image)}`;
     return { type: "text", text };
   });
-}
-
-function liveMetadataImage(image, index) {
-  const publicUrl = clean(image.publicUrl);
-  return cleanObject({
-    imageId: clean(image.imageId) ?? clean(image.id) ??
-      `image-${String(index + 1).padStart(3, "0")}`,
-    storagePath: clean(image.storagePath) ?? clean(image.path),
-    sourceUrl: clean(image.sourceUrl),
-    publicUrl: publicUrl?.startsWith("data:") ? undefined : publicUrl,
-    contentType: clean(image.contentType),
-    contentHash: clean(image.contentHash),
-    width: integer(image.width),
-    height: integer(image.height),
-    altText: clean(image.altText) ?? clean(image.alt),
-    nearbyText: clean(image.nearbyText) ?? clean(image.textContent),
-    roleHint: clean(image.roleHint) ?? clean(image.role),
-  });
-}
-
-function liveImageUrl(image) {
-  return clean(image.publicUrl) ?? clean(image.imageUrl) ?? clean(image.sourceUrl);
-}
-
-function summarizeHtml(html) {
-  return String(html ?? "")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/\s+/g, " ")
-    .slice(0, 12000);
 }
 
 function mockUsageForCase(caseItem, overrides = {}) {
