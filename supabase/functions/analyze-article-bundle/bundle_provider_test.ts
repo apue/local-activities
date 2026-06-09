@@ -553,7 +553,7 @@ Deno.test("parseProviderOutput downgrades nonstandard event enums instead of fai
   );
 });
 
-Deno.test("openai-compatible provider retries text-only when vision image request is rejected", async () => {
+Deno.test("openai-compatible provider surfaces vision HTTP failures instead of retrying text-only", async () => {
   const bodies: unknown[] = [];
   const provider = createOpenAiCompatibleProvider({
     baseUrl: "https://llm.test/v1",
@@ -585,26 +585,28 @@ Deno.test("openai-compatible provider retries text-only when vision image reques
     },
   });
 
-  const response = await provider.analyze({
-    system: "system",
-    responseFormat: "json",
-    user: [
-      { type: "text", text: "article text" },
-      {
-        type: "image_url",
-        imageId: "image-1",
-        imageUrl: "data:image/jpeg;base64,AQID",
-      },
-    ],
-  });
+  await assertRejects(
+    () =>
+      provider.analyze({
+        system: "system",
+        responseFormat: "json",
+        user: [
+          { type: "text", text: "article text" },
+          {
+            type: "image_url",
+            imageId: "image-1",
+            imageUrl: "data:image/jpeg;base64,AQID",
+          },
+        ],
+      }),
+    "provider_http_403",
+  );
 
-  assertEquals(bodies.length, 2);
+  assertEquals(bodies.length, 1);
   assertEquals(JSON.stringify(bodies[0]).includes("image_url"), true);
-  assertEquals(JSON.stringify(bodies[1]).includes("image_url"), false);
-  assertEquals(response.usage?.totalTokens, 15);
 });
 
-Deno.test("openai-compatible provider retries text-only when vision image request gets provider 5xx", async () => {
+Deno.test("openai-compatible provider surfaces vision provider 5xx instead of retrying text-only", async () => {
   const bodies: unknown[] = [];
   const provider = createOpenAiCompatibleProvider({
     baseUrl: "https://llm.test/v1",
@@ -639,23 +641,25 @@ Deno.test("openai-compatible provider retries text-only when vision image reques
     },
   });
 
-  const response = await provider.analyze({
-    system: "system",
-    responseFormat: "json",
-    user: [
-      { type: "text", text: "article text" },
-      {
-        type: "image_url",
-        imageId: "image-1",
-        imageUrl: "data:image/jpeg;base64,AQID",
-      },
-    ],
-  });
+  await assertRejects(
+    () =>
+      provider.analyze({
+        system: "system",
+        responseFormat: "json",
+        user: [
+          { type: "text", text: "article text" },
+          {
+            type: "image_url",
+            imageId: "image-1",
+            imageUrl: "data:image/jpeg;base64,AQID",
+          },
+        ],
+      }),
+    "provider_http_500",
+  );
 
-  assertEquals(bodies.length, 2);
+  assertEquals(bodies.length, 1);
   assertEquals(JSON.stringify(bodies[0]).includes("image_url"), true);
-  assertEquals(JSON.stringify(bodies[1]).includes("image_url"), false);
-  assertEquals(response.usage?.totalTokens, 15);
 });
 
 Deno.test("openai-compatible provider times out even when fetch ignores abort signals", async () => {
@@ -681,7 +685,7 @@ Deno.test("openai-compatible provider times out even when fetch ignores abort si
   assertEquals(result, "provider_timeout:5");
 });
 
-Deno.test("openai-compatible provider retries text-only when vision image request times out", async () => {
+Deno.test("openai-compatible provider surfaces vision timeouts instead of retrying text-only", async () => {
   const bodies: unknown[] = [];
   const provider = createOpenAiCompatibleProvider({
     baseUrl: "https://llm.test/v1",
@@ -712,23 +716,25 @@ Deno.test("openai-compatible provider retries text-only when vision image reques
     },
   });
 
-  const response = await provider.analyze({
-    system: "system",
-    responseFormat: "json",
-    user: [
-      { type: "text", text: "article text" },
-      {
-        type: "image_url",
-        imageId: "image-1",
-        imageUrl: "data:image/jpeg;base64,AQID",
-      },
-    ],
-  });
+  await assertRejects(
+    () =>
+      provider.analyze({
+        system: "system",
+        responseFormat: "json",
+        user: [
+          { type: "text", text: "article text" },
+          {
+            type: "image_url",
+            imageId: "image-1",
+            imageUrl: "data:image/jpeg;base64,AQID",
+          },
+        ],
+      }),
+    "provider_timeout:5",
+  );
 
-  assertEquals(bodies.length, 2);
+  assertEquals(bodies.length, 1);
   assertEquals(JSON.stringify(bodies[0]).includes("image_url"), true);
-  assertEquals(JSON.stringify(bodies[1]).includes("image_url"), false);
-  assertEquals(response.usage?.totalTokens, 15);
 });
 
 function fakeStorage(

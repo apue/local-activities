@@ -154,6 +154,78 @@ describe("evaluation runner", () => {
     ).toThrow("evaluation_live_pricing_required");
   });
 
+  it("uses the production analysis prompt and multimodal image inputs for live evaluation", async () => {
+    const requests = [];
+    const variant = createConfiguredLiveVariant({
+      env: {
+        ANALYSIS_LLM_BASE_URL: "https://provider.example/v1",
+        ANALYSIS_LLM_API_KEY: "test-key",
+        ANALYSIS_LLM_MODEL: "vision-model",
+        EVALUATION_INPUT_TOKEN_MICRO_CNY: "1",
+        EVALUATION_OUTPUT_TOKEN_MICRO_CNY: "1",
+      },
+      fetchImpl: async (_url, init) => {
+        requests.push(JSON.parse(String(init?.body)));
+        return new Response(
+          JSON.stringify({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  decision: "excluded",
+                  reason: "Not a public event.",
+                  confidence: 0.9,
+                  events: [],
+                  excludedArticle: {
+                    triageDecision: "not_event",
+                    exclusionReason: "Not a public event.",
+                    publicSignals: [],
+                    exclusionSignals: [],
+                  },
+                  dedupe: { decision: "insufficient_info", confidence: 0.9 },
+                }),
+              },
+            }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    await variant.analyze({
+      caseItem: {
+        bundle: {
+          text: "Public activity. Scan the poster QR code to register.",
+          html: "<article><img src=\"https://cdn.example/poster.jpg\"></article>",
+          links: [],
+          diagnostics: [],
+          images: [{
+            sourceUrl: "https://mmbiz.qpic.cn/poster.jpg",
+            id: "poster-1",
+            role: "poster",
+          }],
+        },
+      },
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].messages[0].content).toContain(
+      "You analyze official Beijing cultural activity articles",
+    );
+    expect(requests[0].messages[0].content).not.toContain(
+      "You evaluate a captured Beijing cultural activity article",
+    );
+    expect(requests[0].messages[1].content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "image_url",
+          image_url: { url: "https://mmbiz.qpic.cn/poster.jpg" },
+        }),
+      ]),
+    );
+    expect(JSON.stringify(requests[0])).toContain("Image metadata:");
+  });
+
   it("marks a run failed when live budget checks abort after the run starts", async () => {
     const corpus = await loadRegressionCorpus();
     const writer = createMemoryEvaluationWriter();

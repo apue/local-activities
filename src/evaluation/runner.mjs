@@ -117,6 +117,7 @@ export function createConfiguredLiveVariant({
         baseUrl,
         apiKey,
         model,
+        caseItem,
         bundle: caseItem.bundle,
         fetchImpl,
         maxOutputTokens: numberFromEnv(env.ANALYSIS_LLM_MAX_OUTPUT_TOKENS),
@@ -817,6 +818,7 @@ async function analyzeWithOpenAiCompatibleProvider({
   baseUrl,
   apiKey,
   model,
+  caseItem,
   bundle,
   fetchImpl,
   maxOutputTokens,
@@ -825,6 +827,7 @@ async function analyzeWithOpenAiCompatibleProvider({
   const started = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const input = buildLiveProviderInput({ caseItem, bundle });
   try {
     const response = await fetchImpl(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
@@ -837,17 +840,11 @@ async function analyzeWithOpenAiCompatibleProvider({
         messages: [
           {
             role: "system",
-            content:
-              "You evaluate a captured Beijing cultural activity article. Return strict JSON matching the existing analysis-output-v1 schema.",
+            content: input.system,
           },
           {
             role: "user",
-            content: JSON.stringify({
-              articleText: String(bundle.text ?? "").slice(0, 24000),
-              html: String(bundle.html ?? "").slice(0, 12000),
-              links: bundle.links ?? [],
-              images: bundle.images ?? [],
-            }),
+            content: liveProviderContent(input.user),
           },
         ],
         response_format: { type: "json_object" },
@@ -880,6 +877,96 @@ async function analyzeWithOpenAiCompatibleProvider({
   } finally {
     clearTimeout(timer);
   }
+}
+
+function buildLiveProviderInput({ caseItem, bundle }) {
+  const user = [
+    {
+      type: "text",
+      text: JSON.stringify({
+        sourceUrl: caseItem?.case?.source?.url ?? bundle.sourceUrl,
+        publishedAt: bundle.publishedAt,
+        sourceProvider: bundle.provider ?? bundle.manifest?.sourceProvider,
+        sourceName: bundle.sourceName ?? bundle.manifest?.sourceName,
+        articleText: String(bundle.text ?? "").slice(0, 24000),
+        articleHtmlSummary: summarizeHtml(String(bundle.html ?? "")),
+        links: bundle.links ?? [],
+        diagnostics: bundle.diagnostics ?? [],
+      }),
+    },
+  ];
+  for (const [index, image] of (bundle.images ?? []).entries()) {
+    const normalized = liveMetadataImage(image, index);
+    user.push({ type: "image_metadata", image: normalized });
+    const imageUrl = liveImageUrl(image);
+    if (imageUrl) {
+      user.push({
+        type: "image_url",
+        imageUrl,
+        imageId: normalized.imageId,
+      });
+    }
+  }
+  return {
+    system: productionAnalysisSystemPrompt(),
+    user,
+    responseFormat: "json",
+  };
+}
+
+function productionAnalysisSystemPrompt() {
+  return [
+    "You analyze official Beijing cultural activity articles. Return strict JSON only.",
+    "Apply public event eligibility rules: public attendance or registration signals are required; internal/private/news-only/official visit articles must be excluded.",
+    "Do not return prose. Do not return an eligible boolean. Always return this JSON object shape:",
+    '{"decision":"published|needs_review|needs_info|excluded|duplicate","reason":"short reason","confidence":0.0,"events":[],"excludedArticle":{"triageDecision":"not_event|non_public_news|official_visit|internal_or_private|unsupported","exclusionReason":"why excluded","publicSignals":[],"exclusionSignals":[]},"dedupe":{"decision":"new_event|same_event|update_existing|cancel_existing|withdraw_existing|insufficient_info","confidence":0.0,"candidates":[],"reasoning":"short dedupe reasoning"}}',
+    "For non-events, set decision to excluded, events to [], and dedupe.decision to insufficient_info.",
+    "Support multi-event extraction.",
+    "For public events, include one event object per activity with title, organizer, startsAt, endsAt, timezone, city, venueName, venueAddress, reservationStatus, registrationAction, registrationUrl, scheduleText, summary, publicEligibility, triageDecision, triageAction, eventKind, scheduleKind, confidence, evidence, and publish.createCanonicalEvent.",
+    "Select poster/QR evidence from image metadata and never rely on remote source URLs as stable product assets.",
+  ].join(" ");
+}
+
+function liveProviderContent(parts) {
+  return parts.map((part) => {
+    if (part.type === "image_url") {
+      return { type: "image_url", image_url: { url: part.imageUrl } };
+    }
+    const text = part.type === "text"
+      ? part.text
+      : `Image metadata: ${JSON.stringify(part.image)}`;
+    return { type: "text", text };
+  });
+}
+
+function liveMetadataImage(image, index) {
+  const publicUrl = clean(image.publicUrl);
+  return cleanObject({
+    imageId: clean(image.imageId) ?? clean(image.id) ??
+      `image-${String(index + 1).padStart(3, "0")}`,
+    storagePath: clean(image.storagePath) ?? clean(image.path),
+    sourceUrl: clean(image.sourceUrl),
+    publicUrl: publicUrl?.startsWith("data:") ? undefined : publicUrl,
+    contentType: clean(image.contentType),
+    contentHash: clean(image.contentHash),
+    width: integer(image.width),
+    height: integer(image.height),
+    altText: clean(image.altText) ?? clean(image.alt),
+    nearbyText: clean(image.nearbyText) ?? clean(image.textContent),
+    roleHint: clean(image.roleHint) ?? clean(image.role),
+  });
+}
+
+function liveImageUrl(image) {
+  return clean(image.publicUrl) ?? clean(image.imageUrl) ?? clean(image.sourceUrl);
+}
+
+function summarizeHtml(html) {
+  return String(html ?? "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 12000);
 }
 
 function mockUsageForCase(caseItem, overrides = {}) {
