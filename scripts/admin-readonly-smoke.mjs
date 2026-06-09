@@ -84,7 +84,7 @@ export function buildAdminReadonlySmokeRequests({
     {
       name: "admin_processing_ledger_json",
       method: "GET",
-      path: "/api/admin/processing-ledger?mode=production",
+      path: "/api/admin/processing-ledger?dataClass=production",
       headers: buildCookieHeaders(adminCookie),
       validate: (response) => {
         expectStatus(response, 200);

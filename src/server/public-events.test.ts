@@ -225,41 +225,38 @@ describe("public event helpers", () => {
   });
 
   it("lists public canonical events with schedule, poster, and registration evidence", async () => {
+    const query = {
+      select() {
+        return query;
+      },
+      eq() {
+        return query;
+      },
+      or() {
+        return query;
+      },
+      order() {
+        return query;
+      },
+      async limit() {
+        return {
+          data: [
+            {
+              ...baseEvent,
+              registration_action: "扫码报名",
+              registration_qr_image_url:
+                "https://cdn.example.com/qr/register.png",
+              registration_qr_image_alt:
+                "Italian Design Weekend registration QR",
+            },
+          ],
+          error: null,
+        };
+      },
+    };
     const client = {
       from() {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  or() {
-                    return {
-                      order() {
-                        return {
-                          async limit() {
-                            return {
-                              data: [
-                                {
-                                  ...baseEvent,
-                                  registration_action: "扫码报名",
-                                  registration_qr_image_url:
-                                    "https://cdn.example.com/qr/register.png",
-                                  registration_qr_image_alt:
-                                    "Italian Design Weekend registration QR",
-                                },
-                              ],
-                              error: null,
-                            };
-                          },
-                        };
-                      },
-                    };
-                  },
-                };
-              },
-            };
-          },
-        };
+        return query;
       },
     } as unknown as PublicEventsClient;
 
@@ -276,6 +273,23 @@ describe("public event helpers", () => {
         registrationQrImageUrl: "https://cdn.example.com/qr/register.png",
       }),
     ]);
+  });
+
+  it("scopes public list and detail queries to production data", async () => {
+    const listCalls: Array<[string, unknown[]]> = [];
+    await listPublicUpcomingEventsFromClient(
+      fallbackListClient(listCalls),
+      new Date("2026-06-01T00:00:00.000Z"),
+    );
+    expect(listCalls).toContainEqual(["eq", ["data_class", "production"]]);
+
+    const detailCalls: Array<[string, unknown[]]> = [];
+    await getPublicEventFromClient(
+      fallbackSingleClient(detailCalls),
+      "event-1",
+      new Date("2026-06-01T00:00:00.000Z"),
+    );
+    expect(detailCalls).toContainEqual(["eq", ["data_class", "production"]]);
   });
 
   it("formats public reservation status without exposing unknown", () => {
@@ -317,32 +331,29 @@ describe("public event helpers", () => {
   });
 
   it("returns an empty public list when the backing store is temporarily unavailable", async () => {
+    const query = {
+      select() {
+        return query;
+      },
+      eq() {
+        return query;
+      },
+      or() {
+        return query;
+      },
+      order() {
+        return query;
+      },
+      async limit() {
+        return {
+          data: null,
+          error: { message: "relation missing" },
+        };
+      },
+    };
     const client = {
       from() {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  or() {
-                    return {
-                      order() {
-                        return {
-                          async limit() {
-                            return {
-                              data: null,
-                              error: { message: "relation missing" },
-                            };
-                          },
-                        };
-                      },
-                    };
-                  },
-                };
-              },
-            };
-          },
-        };
+        return query;
       },
     } as unknown as PublicEventsClient;
 
@@ -356,34 +367,31 @@ describe("public event helpers", () => {
 
   it("selects schedule fields in public queries", async () => {
     const calls: Array<[string, unknown[]]> = [];
+    const query = {
+      select(...selectArgs: unknown[]) {
+        calls.push(["select", selectArgs]);
+        return query;
+      },
+      eq() {
+        return query;
+      },
+      or() {
+        return query;
+      },
+      order() {
+        return query;
+      },
+      async limit() {
+        return {
+          data: [{ ...baseEvent, schedule_text: undefined }],
+          error: null,
+        };
+      },
+    };
     const client = {
       from(...args: unknown[]) {
         calls.push(["from", args]);
-        return {
-          select(...selectArgs: unknown[]) {
-            calls.push(["select", selectArgs]);
-            return {
-              eq() {
-                return {
-                  or() {
-                    return {
-                      order() {
-                        return {
-                          async limit() {
-                            return {
-                              data: [{ ...baseEvent, schedule_text: undefined }],
-                              error: null,
-                            };
-                          },
-                        };
-                      },
-                    };
-                  },
-                };
-              },
-            };
-          },
-        };
+        return query;
       },
     } as unknown as PublicEventsClient;
 

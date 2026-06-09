@@ -1,7 +1,9 @@
 # Event Pipeline Architecture
 
-This document defines the active event pipeline architecture. The execution
-contract for the reset is [Event Pipeline Reset Goal](event-pipeline-reset-goal.md).
+This document defines the active event pipeline architecture. Historical reset
+goals describe how the project reached this point, but this document and the
+current implementation docs are the source of truth for active runtime
+boundaries.
 
 ## Active Runtime Boundary
 
@@ -24,7 +26,7 @@ tables directly.
 | Runtime | Owns | Must Not Own |
 | --- | --- | --- |
 | Capture worker | Wechat2RSS health checks, article polling, bundle creation, Supabase Storage upload, Edge Function trigger | LLM calls, event publication decisions, direct event/draft/evidence DB writes |
-| Supabase Edge Functions | bundle analysis, provider calls, schema validation, dedupe, publish routing, ledger/evidence/draft/event/usage writes | WeChat crawling, browser automation, production event table writes from eval runs |
+| Supabase Edge Functions | bundle analysis, provider calls, schema validation, dedupe, publish routing, data-class-scoped ledger/evidence/draft/event/usage writes | WeChat crawling, browser automation, unscoped production writes |
 | Evaluation runner | extractor variant orchestration, scoring, local eval artifacts, explicit eval-scoped Supabase writes | production event publication, draft/evidence writes, live provider calls without an allow-live flag and budget |
 | Supabase Storage | raw bundles, event evidence assets, eval artifacts | mixed-purpose buckets that combine raw capture and published assets |
 | Supabase Postgres | sources, bundles, ledger, drafts, canonical events, evidence, usage, evaluations | unvalidated collector output as public state |
@@ -40,6 +42,29 @@ eval-artifacts         private evaluation reports and model outputs
 
 Raw bundle images are source material. Event evidence assets are product assets.
 They must remain distinct even when they reference the same original image.
+
+Storage paths are scoped by `data_class`:
+
+```text
+article-bundles/<data_class>/<bundle_id>/...
+event-evidence-assets/<data_class>/articles/<bundle_id>/<asset_id>...
+eval-artifacts/...
+```
+
+Only `event-evidence-assets/production/...` is public product evidence.
+
+## Data Class
+
+Product-shaped data uses one normalized scope field:
+
+```text
+data_class = production | eval | test | smoke
+```
+
+The same schema and write contracts are used for every data class. Public and
+admin production surfaces query `data_class='production'`. Evaluation, test, and
+smoke rows stay available for audit and debugging without polluting production
+catalog results.
 
 ## Pipeline
 
@@ -68,19 +93,20 @@ and `failed`.
 ## Evaluation Harness
 
 The evaluation harness is separate from the production publication pipeline. Its
-CI-safe path uses mocked variants and memory storage:
+CI-safe path uses mocked variants, memory storage, and an explicit corpus:
 
 ```bash
-pnpm eval:run -- --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
+pnpm eval:run -- --corpus-dir <path> --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
 ```
 
-Local artifact runs write to `tmp/evaluation-runs` by default. The Supabase
-writer is explicit with `--store supabase` and may write only
+Local artifact runs write to `tmp/evaluation-runs` by default. Evaluation runs
+must point to an explicit corpus directory. The Supabase writer is explicit with
+`--store supabase`, writes metadata with `data_class='eval'`, and may write only
 `evaluation_runs`, `evaluation_case_results`, `llm_usage_ledger`, and
 `eval-artifacts`. Live provider evaluation is opt-in:
 
 ```bash
-pnpm eval:run -- --variant live-configured --allow-live --max-cost-cny <n>
+pnpm eval:run -- --corpus-dir <path> --variant live-configured --allow-live --max-cost-cny <n>
 ```
 
 ## Module Contracts
@@ -88,7 +114,7 @@ pnpm eval:run -- --variant live-configured --allow-live --max-cost-cny <n>
 | Contract | Purpose |
 | --- | --- |
 | `ArticleBundle` | raw captured HTML/text/images/links/metadata |
-| `PipelineContext` | required mode/run/source context for node validation and writes |
+| `PipelineContext` | required `dataClass`, run, and source context for node validation and writes |
 | `AnalysisInput` | provider-ready article text, image metadata, and consumable image assets |
 | `AnalyzeArticleBundleRequest` | Edge Function trigger payload |
 | `ProcessingLedgerEntry` | full processing audit record for every article |
@@ -113,7 +139,7 @@ raw capture references such as images[*].sourceUrl are metadata only
 ```
 
 Every DB write path must carry context rather than using a separate
-implementation for production, eval, test, mock, or smoke data.
+implementation for production, eval, test, or smoke data.
 
 ## Boundary Rules
 
@@ -150,7 +176,7 @@ Each module should have deterministic tests:
 - Storage upload with mocked Supabase client
 - Edge Function analysis with mocked provider
 - ledger/publish/dedupe policy with fixtures
-- regression corpus replay
+- regression corpus replay with an explicit corpus directory
 - evaluation run with mocked variants
 - admin/public smoke tests
 

@@ -59,9 +59,43 @@ describe("event pipeline reset migration", () => {
     expect(sql).toContain("service role can manage event pipeline storage");
   });
 
-  it("keeps eval isolated from production event publication", () => {
-    expect(sql).toContain("mode text not null default 'production'");
-    expect(sql).toContain("mode text not null default 'production' check");
+  it("scopes every pipeline table with data_class instead of ad hoc fixture detection", () => {
+    for (const table of [
+      "source_channels",
+      "collector_jobs",
+      "source_runs",
+      "collector_failures",
+      "article_bundles",
+      "evidence_assets",
+      "event_drafts",
+      "canonical_events",
+      "excluded_articles",
+      "llm_usage_ledger",
+      "processing_ledger",
+      "dedupe_decisions",
+      "evaluation_runs",
+      "evaluation_case_results",
+    ]) {
+      expect(allMigrationSql).toMatch(
+        new RegExp(`alter table public\\.${table}[\\s\\S]*data_class`),
+      );
+    }
+    expect(allMigrationSql).toMatch(
+      /check \(data_class in \(''?production''?, ''?eval''?, ''?test''?, ''?smoke''?\)\)/,
+    );
+    expect(allMigrationSql).toContain("canonical_events_data_class_public_idx");
+    expect(allMigrationSql).toContain("event_drafts_data_class_review_created_idx");
+    expect(allMigrationSql).toContain("evidence_assets_data_class_asset_id_idx");
+  });
+
+  it("keeps eval/test isolated by scope while preserving product-shaped rows", () => {
+    expect(allMigrationSql).toContain(
+      "add column if not exists data_class text not null default %L",
+    );
+    expect(allMigrationSql).toContain("'production'");
+    expect(allMigrationSql).toContain("'eval'");
+    expect(allMigrationSql).toContain("unique (source_url, content_hash, data_class)");
+    expect(allMigrationSql).toContain("unique (run_id, case_id, data_class)");
     expect(sql).toContain("evaluation_case_results");
     expect(sql).toContain("references public.evaluation_runs(run_id)");
   });

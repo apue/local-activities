@@ -1,4 +1,4 @@
-const allowedModes = new Set(["production", "eval", "test", "mock", "smoke"]);
+const allowedDataClasses = new Set(["production", "eval", "test", "smoke"]);
 
 export class PipelineContractError extends Error {
   constructor({ nodeName, violations }) {
@@ -38,8 +38,11 @@ function contextViolations(context) {
   if (!context || typeof context !== "object") {
     return [{ reason: "contract_context_required" }];
   }
-  if (!allowedModes.has(context.mode)) {
-    violations.push({ reason: "contract_context_mode_invalid", value: context.mode });
+  if (!allowedDataClasses.has(context.dataClass)) {
+    violations.push({
+      reason: "contract_context_data_class_invalid",
+      value: context.dataClass,
+    });
   }
   if (!clean(context.runId)) {
     violations.push({ reason: "contract_context_run_id_required" });

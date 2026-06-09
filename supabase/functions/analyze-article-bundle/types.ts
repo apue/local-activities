@@ -1,4 +1,5 @@
-export type AnalyzeMode = "production" | "eval";
+export type AnalyzeDataClass = "production" | "eval" | "test" | "smoke";
+export type AnalyzeMode = AnalyzeDataClass;
 
 export type AnalyzeRequest = {
   sourceUrl: string;
@@ -9,7 +10,7 @@ export type AnalyzeRequest = {
   sourceProvider: string;
   sourceId?: string;
   sourceName?: string;
-  mode: AnalyzeMode;
+  dataClass: AnalyzeDataClass;
 };
 
 export type ArticleBundleWriteResult =
@@ -203,6 +204,6 @@ export type DatabaseWriter = {
   ): Promise<unknown[]>;
   findArticleBundle?(
     bundleId: string,
-    mode: AnalyzeMode,
+    dataClass: AnalyzeDataClass,
   ): Promise<{ status?: string } | null>;
 };

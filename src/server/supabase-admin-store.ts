@@ -12,7 +12,7 @@ import type {
   AdminLlmUsageRange,
   AdminLlmUsageRecord,
   AdminLlmUsageSummary,
-  AdminProcessingLedgerMode,
+  AdminDataClass,
   AdminProcessingLedgerRecord,
   AdminProcessingLedgerState,
   AdminReviewState,
@@ -135,7 +135,7 @@ type ProcessingLedgerRow = {
   draft_id: string | null;
   canonical_event_id: string | null;
   excluded_article_id: string | null;
-  mode: AdminProcessingLedgerMode;
+  data_class: AdminDataClass;
   error_details: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
@@ -186,7 +186,7 @@ type LlmUsageRow = {
   provider: string;
   model: string;
   status: AdminLlmUsageRecord["status"];
-  mode: AdminLlmUsageRecord["mode"] | null;
+  data_class: AdminLlmUsageRecord["dataClass"] | null;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
@@ -210,7 +210,7 @@ const LLM_USAGE_COLUMNS = [
   "provider",
   "model",
   "status",
-  "mode",
+  "data_class",
   "input_tokens",
   "output_tokens",
   "total_tokens",
@@ -253,6 +253,7 @@ class SupabaseAdminStore implements AdminStore {
     let query = this.client
       .from("event_drafts")
       .select("*")
+      .eq("data_class", "production")
       .order("created_at", { ascending: false })
       .limit(100);
 
@@ -269,6 +270,7 @@ class SupabaseAdminStore implements AdminStore {
     const { data, error } = await this.client
       .from("event_drafts")
       .select("*")
+      .eq("data_class", "production")
       .eq("draft_id", draftId)
       .maybeSingle<EventDraftRow>();
 
@@ -295,6 +297,7 @@ class SupabaseAdminStore implements AdminStore {
     const { data, error } = await this.client
       .from("event_drafts")
       .update(updatePayload)
+      .eq("data_class", "production")
       .eq("draft_id", draftId)
       .select("*")
       .maybeSingle<EventDraftRow>();
@@ -313,6 +316,7 @@ class SupabaseAdminStore implements AdminStore {
         ...toDraftPatchRow(patch),
         updated_at: new Date().toISOString(),
       })
+      .eq("data_class", "production")
       .eq("draft_id", draftId)
       .select("*")
       .maybeSingle<EventDraftRow>();
@@ -326,7 +330,8 @@ class SupabaseAdminStore implements AdminStore {
   }): Promise<AdminExcludedArticleRecord[]> {
     let query = this.client
       .from("excluded_articles")
-      .select("*");
+      .select("*")
+      .eq("data_class", "production");
 
     if (input.processingState) {
       query = query.eq("processing_state", input.processingState);
@@ -350,6 +355,7 @@ class SupabaseAdminStore implements AdminStore {
         promoted_at: promotedAt,
         updated_at: promotedAt,
       })
+      .eq("data_class", "production")
       .eq("excluded_article_id", excludedArticleId)
       .select("*")
       .maybeSingle<ExcludedArticleRow>();
@@ -360,19 +366,16 @@ class SupabaseAdminStore implements AdminStore {
 
   async listProcessingLedger(input: {
     state?: AdminProcessingLedgerState;
-    mode?: AdminProcessingLedgerMode;
+    dataClass?: AdminDataClass;
   }): Promise<AdminProcessingLedgerRecord[]> {
     let query = this.client
       .from("processing_ledger")
-      .select("*");
+      .select("*")
+      .eq("data_class", input.dataClass ?? "production");
 
     if (input.state) {
       query = query.eq("state", input.state);
     }
-    if (input.mode) {
-      query = query.eq("mode", input.mode);
-    }
-
     const { data, error } = await query
       .order("created_at", { ascending: false })
       .limit(200);
@@ -389,7 +392,8 @@ class SupabaseAdminStore implements AdminStore {
   }): Promise<AdminEvaluationRunRecord[]> {
     let runQuery = this.client
       .from("evaluation_runs")
-      .select("*");
+      .select("*")
+      .eq("data_class", "eval");
 
     if (input.status) {
       runQuery = runQuery.eq("status", input.status);
@@ -408,6 +412,7 @@ class SupabaseAdminStore implements AdminStore {
     const { data: caseData, error: caseError } = await this.client
       .from("evaluation_case_results")
       .select("*")
+      .eq("data_class", "eval")
       .in("run_id", runIds)
       .order("created_at", { ascending: true })
       .limit(1_000);
@@ -460,6 +465,7 @@ class SupabaseAdminStore implements AdminStore {
     publishedAt: string;
   }): Promise<PublishedAdminEvent> {
     const imageUrls = await resolveEvidenceAssetImageUrls(this.client, {
+      dataClass: "production",
       posterAssetId: input.draft.posterAssetId,
       registrationQrAssetId: input.draft.registrationQrAssetId,
       posterImageUrl: input.draft.posterImageUrl,
@@ -471,6 +477,7 @@ class SupabaseAdminStore implements AdminStore {
     const eventId = `event-${randomUUID()}`;
     const eventRow = {
       event_id: eventId,
+      data_class: "production",
       title: input.draft.title,
       organizer: input.draft.organizer ?? null,
       starts_at: input.draft.startsAt,
@@ -538,6 +545,7 @@ class SupabaseAdminStore implements AdminStore {
           review_state: "approved",
           updated_at: input.publishedAt,
         })
+        .eq("data_class", "production")
         .eq("draft_id", input.draft.id),
     );
 
@@ -694,11 +702,10 @@ function llmUsageWorkload(record: AdminLlmUsageRecord) {
 function llmUsageEnvironment(record: AdminLlmUsageRecord) {
   const environment = record.metadata.environment;
   if (typeof environment === "string" && environment) return environment;
-  if (record.mode === "eval") {
+  if (record.dataClass === "eval") {
     return `eval:${record.evaluationRunId ?? "unknown"}`;
   }
-  if (record.mode === "production") return "production";
-  return "unknown";
+  return record.dataClass ?? "unknown";
 }
 
 function llmUsageRunId(record: AdminLlmUsageRecord) {
@@ -718,7 +725,7 @@ function toLlmUsageRecord(row: LlmUsageRow): AdminLlmUsageRecord {
     provider: row.provider,
     model: row.model,
     status: row.status,
-    mode: row.mode ?? undefined,
+    dataClass: row.data_class ?? undefined,
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
     totalTokens: row.total_tokens,
@@ -881,7 +888,7 @@ function toProcessingLedgerRecord(
     draftId: row.draft_id ?? undefined,
     canonicalEventId: row.canonical_event_id ?? undefined,
     excludedArticleId: row.excluded_article_id ?? undefined,
-    mode: row.mode,
+    dataClass: row.data_class,
     errorDetails: row.error_details
       ? sanitizeJsonObject(row.error_details)
       : undefined,

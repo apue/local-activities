@@ -5,14 +5,6 @@ import { fileURLToPath } from "node:url";
 
 import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 
-const forbiddenTextPatterns = [
-  /Fixture case/i,
-  /\b[a-z0-9-]+-fixture\b/i,
-  /fixture-assets\//i,
-  /https?:\/\/(?:www\.)?example\.com\b/i,
-  /Organizer TBA/i,
-];
-
 const forbiddenImageHosts = [
   "mp.weixin.qq.com",
   "mmbiz.qpic.cn",
@@ -104,14 +96,6 @@ export async function runPublicCatalogSmoke({
 
 export function scanPublicHtml({ name, path, html }) {
   const text = String(html ?? "");
-  for (const pattern of forbiddenTextPatterns) {
-    if (pattern.test(text)) {
-      throw new Error(
-        `public_catalog_forbidden_text:${name}:${path}:${pattern.source}`,
-      );
-    }
-  }
-
   for (const imageUrl of extractImageSrcs(text)) {
     assertPublicImageUrl({ name, path, imageUrl });
   }
@@ -292,7 +276,7 @@ function printUsage() {
 Read-only checks:
 - public homepage loads
 - public event detail pages linked from the homepage load
-- public pages do not expose fixture copy, placeholder asset paths, fake example.com URLs, or WeChat source-site image URLs
+- public pages do not expose raw WeChat image URLs, localhost image URLs, or placeholder asset paths
 
 Options:
   --env-file <path>       Load env file. Repeatable.

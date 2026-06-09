@@ -30,8 +30,6 @@ export const requiredCoverageLabels = [
   "capture_failure",
 ];
 
-const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-const defaultCorpusDir = path.resolve(moduleDir, "../tests/regression-corpus");
 const manifestFileName = "manifest.json";
 const successCaseFiles = ["case.json", "captured-bundle.json", "expected.json"];
 const failureCaseFiles = ["case.json", "capture-result.json", "expected.json"];
@@ -49,7 +47,8 @@ export function assertOfflineReplayTarget({ target = "offline" } = {}) {
   return true;
 }
 
-export async function loadRegressionCorpus({ corpusDir = defaultCorpusDir } = {}) {
+export async function loadRegressionCorpus({ corpusDir } = {}) {
+  if (!corpusDir) throw new Error("regression_corpus_dir_required");
   const manifestPath = path.join(corpusDir, manifestFileName);
   const manifest = await readJson(manifestPath);
   validateManifest(manifest);
@@ -72,7 +71,7 @@ export async function loadRegressionCorpus({ corpusDir = defaultCorpusDir } = {}
 
 export async function replayRegressionCase({
   caseId,
-  corpusDir = defaultCorpusDir,
+  corpusDir,
   target = "offline",
 } = {}) {
   assertOfflineReplayTarget({ target });
@@ -88,7 +87,7 @@ export async function replayRegressionCase({
 export async function runRegressionReplay({
   all = false,
   caseId,
-  corpusDir = defaultCorpusDir,
+  corpusDir,
   target = "offline",
 } = {}) {
   assertOfflineReplayTarget({ target });
@@ -120,6 +119,7 @@ export function parseRegressionReplayArgs(argv = process.argv.slice(2)) {
     if (arg === "--") continue;
     if (arg === "--all") options.all = true;
     else if (arg === "--case") options.caseId = argv[++index];
+    else if (arg === "--corpus-dir") options.corpusDir = argv[++index];
     else if (arg === "--target") options.target = argv[++index];
     else throw new Error(`regression_replay_arg_unknown:${arg}`);
   }

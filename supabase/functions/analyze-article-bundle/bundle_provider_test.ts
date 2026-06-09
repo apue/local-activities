@@ -11,13 +11,13 @@ import {
 
 Deno.test("readArticleBundle reads manifest, article files, diagnostics, links, and image references", async () => {
   const storage = fakeStorage({
-    "bundle-1/manifest.json": JSON.stringify({
+    "production/bundle-1/manifest.json": JSON.stringify({
       bundleId: "bundle-1",
       sourceUrl: "https://mp.weixin.qq.com/s/example",
       images: [
         {
           imageId: "poster-1",
-          storagePath: "bundle-1/images/poster.jpg",
+          storagePath: "images/poster.jpg",
           sourceUrl: "https://mmbiz.qpic.cn/remote-poster",
           contentType: "image/jpeg",
           width: 1080,
@@ -28,16 +28,16 @@ Deno.test("readArticleBundle reads manifest, article files, diagnostics, links, 
       links: [{ href: "https://example.org/register", text: "Register" }],
       diagnostics: [{ reason: "ok" }],
     }),
-    "bundle-1/article.html": "<article><h1>Concert</h1></article>",
-    "bundle-1/article.txt": "Concert in Beijing",
-    "bundle-1/links.json": JSON.stringify([
+    "production/bundle-1/article.html": "<article><h1>Concert</h1></article>",
+    "production/bundle-1/article.txt": "Concert in Beijing",
+    "production/bundle-1/links.json": JSON.stringify([
       { href: "https://example.org/register", text: "Register" },
     ]),
-    "bundle-1/diagnostics.json": JSON.stringify([{ reason: "ok" }]),
-    "bundle-1/images.json": JSON.stringify([
+    "production/bundle-1/diagnostics.json": JSON.stringify([{ reason: "ok" }]),
+    "production/bundle-1/images.json": JSON.stringify([
       {
         imageId: "qr-1",
-        storagePath: "bundle-1/images/qr.png",
+        storagePath: "images/qr.png",
         sourceUrl: "https://mmbiz.qpic.cn/remote-qr",
         contentType: "image/png",
       },
@@ -45,7 +45,7 @@ Deno.test("readArticleBundle reads manifest, article files, diagnostics, links, 
   });
 
   const bundle = await readArticleBundle(storage, {
-    storagePrefix: "article-bundles/bundle-1",
+    storagePrefix: "article-bundles/production/bundle-1",
   });
 
   assertEquals(bundle.text, "Concert in Beijing");
@@ -62,7 +62,7 @@ Deno.test("readArticleBundle reads manifest, article files, diagnostics, links, 
 
 Deno.test("readArticleBundle accepts capture-worker links and diagnostics object files", async () => {
   const storage = fakeStorage({
-    "bundle-1/manifest.json": JSON.stringify({
+    "production/bundle-1/manifest.json": JSON.stringify({
       bundleId: "bundle-1",
       sourceUrl: "https://mp.weixin.qq.com/s/example",
       images: [
@@ -78,20 +78,20 @@ Deno.test("readArticleBundle accepts capture-worker links and diagnostics object
         },
       ],
     }),
-    "bundle-1/article.html": "<article><h1>Concert</h1></article>",
-    "bundle-1/article.txt": "Concert in Beijing",
-    "bundle-1/links.json": JSON.stringify({
+    "production/bundle-1/article.html": "<article><h1>Concert</h1></article>",
+    "production/bundle-1/article.txt": "Concert in Beijing",
+    "production/bundle-1/links.json": JSON.stringify({
       links: [{ href: "https://example.org/register", text: "Register" }],
       miniPrograms: [{ appId: "wx123", label: "报名" }],
     }),
-    "bundle-1/diagnostics.json": JSON.stringify({
+    "production/bundle-1/diagnostics.json": JSON.stringify({
       diagnostics: [{ reason: "ok" }],
       captureWarnings: [{ code: "image_reference_only", severity: "info" }],
     }),
   });
 
   const bundle = await readArticleBundle(storage, {
-    storagePrefix: "article-bundles/bundle-1",
+    storagePrefix: "article-bundles/production/bundle-1",
   });
 
   assertEquals(bundle.links.length, 2);
@@ -102,7 +102,7 @@ Deno.test("readArticleBundle accepts capture-worker links and diagnostics object
 
 Deno.test("readArticleBundle signs byte-backed bundle images for provider vision input", async () => {
   const storage = fakeStorage({
-    "bundle-1/manifest.json": JSON.stringify({
+    "production/bundle-1/manifest.json": JSON.stringify({
       bundleId: "bundle-1",
       sourceUrl: "https://mp.weixin.qq.com/s/example",
       images: [
@@ -115,38 +115,38 @@ Deno.test("readArticleBundle signs byte-backed bundle images for provider vision
         },
       ],
     }),
-    "bundle-1/article.html": "<article><h1>Concert</h1></article>",
-    "bundle-1/article.txt": "Concert in Beijing",
-    "bundle-1/links.json": JSON.stringify({ links: [], miniPrograms: [] }),
-    "bundle-1/diagnostics.json": JSON.stringify({
+    "production/bundle-1/article.html": "<article><h1>Concert</h1></article>",
+    "production/bundle-1/article.txt": "Concert in Beijing",
+    "production/bundle-1/links.json": JSON.stringify({ links: [], miniPrograms: [] }),
+    "production/bundle-1/diagnostics.json": JSON.stringify({
       diagnostics: [],
       captureWarnings: [],
     }),
   }, {
     signedUrls: {
-      "article-bundles/bundle-1/images/poster.jpg":
-        "https://supabase.test/storage/v1/object/sign/article-bundles/bundle-1/images/poster.jpg?token=signed",
+      "article-bundles/production/bundle-1/images/poster.jpg":
+        "https://supabase.test/storage/v1/object/sign/article-bundles/production/bundle-1/images/poster.jpg?token=signed",
     },
   });
 
   const bundle = await readArticleBundle(storage, {
-    storagePrefix: "article-bundles/bundle-1",
+    storagePrefix: "article-bundles/production/bundle-1",
   });
   const input = buildProviderInput({
     request: {
       sourceUrl: "https://mp.weixin.qq.com/s/example",
       bundleId: "bundle-1",
-      storagePrefix: "article-bundles/bundle-1",
+      storagePrefix: "article-bundles/production/bundle-1",
       contentHash: "sha256:abc",
       sourceProvider: "wechat2rss",
-      mode: "production",
+      dataClass: "production",
     },
     bundle,
   });
 
   assertEquals(
     bundle.images[0].bundleStoragePath,
-    "bundle-1/images/poster.jpg",
+    "production/bundle-1/images/poster.jpg",
   );
   assertEquals(bundle.images[0].publicUrl?.includes("token=signed"), true);
   assertEquals(
@@ -159,7 +159,7 @@ Deno.test("readArticleBundle signs byte-backed bundle images for provider vision
 
 Deno.test("readArticleBundle inlines byte-backed bundle images as data URLs when bytes are readable", async () => {
   const storage = fakeStorage({
-    "bundle-1/manifest.json": JSON.stringify({
+    "production/bundle-1/manifest.json": JSON.stringify({
       images: [
         {
           imageId: "poster-1",
@@ -169,16 +169,16 @@ Deno.test("readArticleBundle inlines byte-backed bundle images as data URLs when
         },
       ],
     }),
-    "bundle-1/article.html": "<article><h1>Concert</h1></article>",
-    "bundle-1/article.txt": "Concert in Beijing",
-    "bundle-1/links.json": JSON.stringify({ links: [], miniPrograms: [] }),
-    "bundle-1/diagnostics.json": JSON.stringify({
+    "production/bundle-1/article.html": "<article><h1>Concert</h1></article>",
+    "production/bundle-1/article.txt": "Concert in Beijing",
+    "production/bundle-1/links.json": JSON.stringify({ links: [], miniPrograms: [] }),
+    "production/bundle-1/diagnostics.json": JSON.stringify({
       diagnostics: [],
       captureWarnings: [],
     }),
   }, {
     bytes: {
-      "article-bundles/bundle-1/images/poster.jpg": new Uint8Array([
+      "article-bundles/production/bundle-1/images/poster.jpg": new Uint8Array([
         1,
         2,
         3,
@@ -187,16 +187,16 @@ Deno.test("readArticleBundle inlines byte-backed bundle images as data URLs when
   });
 
   const bundle = await readArticleBundle(storage, {
-    storagePrefix: "article-bundles/bundle-1",
+    storagePrefix: "article-bundles/production/bundle-1",
   });
   const input = buildProviderInput({
     request: {
       sourceUrl: "https://mp.weixin.qq.com/s/example",
       bundleId: "bundle-1",
-      storagePrefix: "article-bundles/bundle-1",
+      storagePrefix: "article-bundles/production/bundle-1",
       contentHash: "sha256:abc",
       sourceProvider: "wechat2rss",
-      mode: "production",
+      dataClass: "production",
     },
     bundle,
   });
@@ -214,7 +214,7 @@ Deno.test("readArticleBundle inlines byte-backed bundle images as data URLs when
 Deno.test("readArticleBundle tolerates missing byte-backed image objects", async () => {
   const bundle = await readArticleBundle(
     fakeStorage({
-      "bundle-1/manifest.json": JSON.stringify({
+      "production/bundle-1/manifest.json": JSON.stringify({
         images: [{
           imageId: "poster-1",
           path: "images/missing.jpg",
@@ -222,19 +222,19 @@ Deno.test("readArticleBundle tolerates missing byte-backed image objects", async
           contentType: "image/jpeg",
         }],
       }),
-      "bundle-1/article.html": "",
-      "bundle-1/article.txt": "Article text",
-      "bundle-1/links.json": JSON.stringify({ links: [], miniPrograms: [] }),
-      "bundle-1/diagnostics.json": JSON.stringify({
+      "production/bundle-1/article.html": "",
+      "production/bundle-1/article.txt": "Article text",
+      "production/bundle-1/links.json": JSON.stringify({ links: [], miniPrograms: [] }),
+      "production/bundle-1/diagnostics.json": JSON.stringify({
         diagnostics: [],
         captureWarnings: [],
       }),
     }, {
       missingBytePaths: new Set([
-        "article-bundles/bundle-1/images/missing.jpg",
+        "article-bundles/production/bundle-1/images/missing.jpg",
       ]),
     }),
-    { storagePrefix: "article-bundles/bundle-1" },
+    { storagePrefix: "article-bundles/production/bundle-1" },
   );
 
   assertEquals(bundle.images.length, 1);
@@ -246,10 +246,10 @@ Deno.test("buildProviderInput includes product rules and storage-backed image me
     request: {
       sourceUrl: "https://mp.weixin.qq.com/s/example",
       bundleId: "bundle-1",
-      storagePrefix: "article-bundles/bundle-1",
+      storagePrefix: "article-bundles/production/bundle-1",
       contentHash: "sha256:abc",
       sourceProvider: "wechat2rss",
-      mode: "production",
+      dataClass: "production",
     },
     bundle: {
       manifest: {},
@@ -260,7 +260,7 @@ Deno.test("buildProviderInput includes product rules and storage-backed image me
       images: [
         {
           imageId: "poster-1",
-          storagePath: "bundle-1/images/poster.jpg",
+          storagePath: "images/poster.jpg",
           sourceUrl: "https://mmbiz.qpic.cn/remote-poster",
           contentType: "image/jpeg",
         },
@@ -274,7 +274,7 @@ Deno.test("buildProviderInput includes product rules and storage-backed image me
   assert(
     input.user.some((part: { type: string }) => part.type === "image_metadata"),
   );
-  assert(JSON.stringify(input).includes("bundle-1/images/poster.jpg"));
+  assert(JSON.stringify(input).includes("images/poster.jpg"));
 });
 
 Deno.test("mock provider returns strict JSON that validates", async () => {

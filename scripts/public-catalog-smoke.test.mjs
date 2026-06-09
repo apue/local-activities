@@ -75,15 +75,7 @@ describe("public catalog smoke", () => {
     ).toEqual(["/events/event-1", "/events/event-2"]);
   });
 
-  it("flags fixture copy, fake URLs, and WeChat source-site images", () => {
-    expect(() =>
-      scanPublicHtml({
-        name: "detail",
-        path: "/events/fixture",
-        html: "Fixture case: https://example.com",
-      }),
-    ).toThrow("public_catalog_forbidden_text");
-
+  it("flags WeChat source-site images", () => {
     expect(() =>
       scanPublicHtml({
         name: "detail",

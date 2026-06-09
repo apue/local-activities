@@ -1,5 +1,10 @@
 # Event Pipeline Reset Goal
 
+This is a historical implementation goal. Use
+[Event Pipeline Architecture](event-pipeline-architecture.md),
+[Regression Corpus](regression-corpus.md), and the current code as the active
+source of truth for data scope, storage namespace, and evaluation behavior.
+
 This document is the execution contract for replacing the previous local
 collector/extractor pipeline with the new automated capture-to-analysis
 architecture. Do not rely on older Event Pipeline V2/V3/V4 goal packs as active
@@ -167,17 +172,18 @@ selection.
   "sourceUrl": "https://mp.weixin.qq.com/s/example",
   "publishedAt": "2026-06-08T10:00:00+08:00",
   "bundleId": "bundle_...",
-  "storagePrefix": "article-bundles/bundle_...",
+  "storagePrefix": "article-bundles/production/bundle_...",
   "contentHash": "sha256...",
   "sourceProvider": "wechat2rss",
   "sourceId": "optional",
   "sourceName": "optional",
-  "mode": "production"
+  "dataClass": "production"
 }
 ```
 
-`mode=eval` writes evaluation outputs and usage but must not write production
-draft/event rows.
+`dataClass` scopes product-shaped writes. Public production surfaces read only
+`dataClass=production` / `data_class='production'`; eval, test, and smoke data
+use the same schema while remaining isolated from the public catalog.
 
 ### Ledger
 
@@ -254,8 +260,8 @@ registration QR assets when available.
 
 ## Regression Corpus
 
-Build a 15-25 case corpus from the local Wechat2RSS cache and existing fixtures.
-It must include:
+Build a trusted corpus from real captured bundles or explicit capture-failure
+results. It should include:
 
 - ordinary public event
 - registration-required event

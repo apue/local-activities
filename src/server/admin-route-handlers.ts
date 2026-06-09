@@ -80,8 +80,8 @@ const processingLedgerStateSchema = z
   ])
   .optional();
 
-const processingLedgerModeSchema = z
-  .enum(["production", "eval"])
+const dataClassSchema = z
+  .enum(["production", "eval", "test", "smoke"])
   .optional()
   .default("production");
 
@@ -201,14 +201,14 @@ export async function handleAdminListProcessingLedger(
     url.searchParams.get("state") ?? undefined,
   );
   if (!parsedState.success) return invalidRequestResponse(parsedState.error);
-  const parsedMode = processingLedgerModeSchema.safeParse(
-    url.searchParams.get("mode") ?? undefined,
+  const parsedDataClass = dataClassSchema.safeParse(
+    url.searchParams.get("dataClass") ?? undefined,
   );
-  if (!parsedMode.success) return invalidRequestResponse(parsedMode.error);
+  if (!parsedDataClass.success) return invalidRequestResponse(parsedDataClass.error);
 
   try {
     const ledger = await listAdminProcessingLedger(
-      { state: parsedState.data, mode: parsedMode.data },
+      { state: parsedState.data, dataClass: parsedDataClass.data },
       store,
     );
     return Response.json(

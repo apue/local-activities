@@ -90,6 +90,7 @@ export function createSupabaseDatabaseWriter({
     ) {
       const bySource = await client.from("canonical_events")
         .select("event_id,title,starts_at,source_url")
+        .eq("data_class", request.dataClass)
         .eq("source_url", request.sourceUrl)
         .limit(5);
       if (bySource.error) throw bySource.error;
@@ -97,17 +98,18 @@ export function createSupabaseDatabaseWriter({
       if (!event.startsAt) return [];
       const byTitle = await client.from("canonical_events")
         .select("event_id,title,starts_at,source_url")
+        .eq("data_class", request.dataClass)
         .eq("title", event.title)
         .eq("starts_at", event.startsAt)
         .limit(5);
       if (byTitle.error) throw byTitle.error;
       return byTitle.data ?? [];
     },
-    async findArticleBundle(bundleId, mode) {
+    async findArticleBundle(bundleId, dataClass) {
       const { data, error } = await client.from("article_bundles")
         .select("status")
         .eq("bundle_id", bundleId)
-        .eq("mode", mode)
+        .eq("data_class", dataClass)
         .maybeSingle();
       if (error) throw error;
       return data;

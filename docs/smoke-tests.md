@@ -33,8 +33,8 @@ must not create drafts, events, bundles, or usage rows.
 pnpm smoke:public-catalog --env-file .env.local
 ```
 
-This checks public pages and guards against fixture/test copy, fake source URLs,
-and remote WeChat image URLs appearing in public output.
+This checks public pages and guards against raw WeChat image URLs, localhost
+image URLs, and other non-product evidence URLs appearing in public output.
 
 ## Wechat2RSS Source Smoke
 

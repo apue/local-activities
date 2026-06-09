@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   defaultArticleBundlesBucket,
   edgePayloadFromManifest,
+  normalizeDataClass,
 } from "./bundle-files.mjs";
 
 const defaultAnalyzeFunctionName = "analyze-article-bundle";
@@ -20,13 +21,14 @@ export function createSupabaseCaptureAdapter({
   if (!client) throw new Error("supabase_client_required");
 
   return {
-    async findExistingBundle({ sourceUrl, contentHash, mode = "production" }) {
+    async findExistingBundle({ sourceUrl, contentHash, dataClass }) {
+      const resolvedDataClass = normalizeDataClass(dataClass);
       const { data, error } = await client
         .from("article_bundles")
         .select("bundle_id, storage_prefix, status")
         .eq("source_url", sourceUrl)
         .eq("content_hash", contentHash)
-        .eq("mode", mode)
+        .eq("data_class", resolvedDataClass)
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;

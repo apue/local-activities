@@ -43,7 +43,7 @@ export async function runAnalysisPipeline({
   const model = env?.model ?? provider.model;
   const existingBundle = await db.findArticleBundle?.(
     request.bundleId,
-    request.mode,
+    request.dataClass,
   );
   if (existingBundle?.status === "processed") {
     return { status: "processed", ledgerState: "processed" };
@@ -124,7 +124,7 @@ export async function runAnalysisPipeline({
       prompt_version: promptVersion,
       schema_version: schemaVersion,
       usage_id: usageId,
-      mode: request.mode,
+      data_class: request.dataClass,
       error_details: errorDetails(error),
       metadata: { storagePrefix: request.storagePrefix },
     }, "ledger_id");
@@ -176,25 +176,24 @@ async function writeAnalysisOutput({
 }): Promise<{ state: string }> {
   if (output.decision === "excluded" || output.events.length === 0) {
     const excludedId = id("excluded", request.bundleId);
-    if (request.mode === "production") {
-      await writeUnique(db, "excluded_articles", {
-        excluded_article_id: excludedId,
-        article_url: request.sourceUrl,
-        bundle_id: request.bundleId,
-        triage_decision: output.excludedArticle?.triageDecision ?? "not_event",
-        triage_action: "exclude",
-        confidence: output.confidence,
-        public_signals: output.excludedArticle?.publicSignals ?? [],
-        exclusion_signals: output.excludedArticle?.exclusionSignals ?? [],
-        exclusion_reason: output.excludedArticle?.exclusionReason ??
-          output.reason,
-        evidence_asset_ids: [],
-        prompt_version: promptVersion,
-        schema_version: schemaVersion,
-        provider: providerName,
-        model,
-      }, "excluded_article_id");
-    }
+    await writeUnique(db, "excluded_articles", {
+      excluded_article_id: excludedId,
+      data_class: request.dataClass,
+      article_url: request.sourceUrl,
+      bundle_id: request.bundleId,
+      triage_decision: output.excludedArticle?.triageDecision ?? "not_event",
+      triage_action: "exclude",
+      confidence: output.confidence,
+      public_signals: output.excludedArticle?.publicSignals ?? [],
+      exclusion_signals: output.excludedArticle?.exclusionSignals ?? [],
+      exclusion_reason: output.excludedArticle?.exclusionReason ??
+        output.reason,
+      evidence_asset_ids: [],
+      prompt_version: promptVersion,
+      schema_version: schemaVersion,
+      provider: providerName,
+      model,
+    }, "excluded_article_id");
     await writeLedger(db, {
       request,
       output,
@@ -212,18 +211,16 @@ async function writeAnalysisOutput({
   let firstCanonicalEventId: string | undefined;
   for (let index = 0; index < output.events.length; index += 1) {
     const event = output.events[index];
-    const evidenceAssetIds = request.mode === "production"
-      ? await writeEvidenceAssets({
-        db,
-        storage,
-        request,
-        bundle,
-        event,
-        providerName,
-        model,
-        eventIndex: index,
-      })
-      : [];
+    const evidenceAssetIds = await writeEvidenceAssets({
+      db,
+      storage,
+      request,
+      bundle,
+      event,
+      providerName,
+      model,
+      eventIndex: index,
+    });
     const draftId = id(`draft-${index + 1}`, request.bundleId);
     draftIds.push(draftId);
     const poster = evidenceAssetIds.find((asset) => asset.role === "poster");
@@ -237,57 +234,56 @@ async function writeAnalysisOutput({
     let eventCanonicalEventId: string | undefined;
     const shouldCreateCanonicalEvent =
       dedupeDecision === "new_event" && canCreateCanonicalEvent(event);
-    if (request.mode === "production") {
+    await writeUnique(
+      db,
+      "event_drafts",
+      draftPayload({
+        draftId,
+        request,
+        event,
+        evidenceAssetIds: evidenceAssetIds.map((asset) => asset.assetId),
+        poster,
+        qr,
+        providerName,
+        model,
+        dedupeDecision,
+        shouldCreateCanonicalEvent,
+      }),
+      "draft_id",
+    );
+    if (shouldCreateCanonicalEvent) {
+      eventCanonicalEventId = id(`event-${index + 1}`, request.bundleId);
+      firstCanonicalEventId ??= eventCanonicalEventId;
       await writeUnique(
         db,
-        "event_drafts",
-        draftPayload({
-          draftId,
+        "canonical_events",
+        canonicalPayload({
+          eventId: eventCanonicalEventId,
           request,
           event,
-          evidenceAssetIds: evidenceAssetIds.map((asset) => asset.assetId),
           poster,
           qr,
-          providerName,
-          model,
-          dedupeDecision,
-          shouldCreateCanonicalEvent,
         }),
-        "draft_id",
+        "event_id",
       );
-      if (shouldCreateCanonicalEvent) {
-        eventCanonicalEventId = id(`event-${index + 1}`, request.bundleId);
-        firstCanonicalEventId ??= eventCanonicalEventId;
-        await writeUnique(
-          db,
-          "canonical_events",
-          canonicalPayload({
-            eventId: eventCanonicalEventId,
-            request,
-            event,
-            poster,
-            qr,
-          }),
-          "event_id",
-        );
-      }
-      await writeUnique(db, "dedupe_decisions", {
-        dedupe_id: id(`dedupe-${index + 1}`, request.bundleId),
-        article_bundle_id: request.bundleId,
-        draft_id: draftId,
-        canonical_event_id: eventCanonicalEventId,
-        decision: dedupeDecision,
-        confidence: output.dedupe.confidence ?? event.confidence ??
-          output.confidence,
-        candidate_count: candidates.length,
-        candidates,
-        reasoning: output.dedupe.reasoning,
-        provider: providerName,
-        model,
-        prompt_version: promptVersion,
-        schema_version: schemaVersion,
-      }, "dedupe_id");
     }
+    await writeUnique(db, "dedupe_decisions", {
+      dedupe_id: id(`dedupe-${index + 1}`, request.bundleId),
+      data_class: request.dataClass,
+      article_bundle_id: request.bundleId,
+      draft_id: draftId,
+      canonical_event_id: eventCanonicalEventId,
+      decision: dedupeDecision,
+      confidence: output.dedupe.confidence ?? event.confidence ??
+        output.confidence,
+      candidate_count: candidates.length,
+      candidates,
+      reasoning: output.dedupe.reasoning,
+      provider: providerName,
+      model,
+      prompt_version: promptVersion,
+      schema_version: schemaVersion,
+    }, "dedupe_id");
   }
 
   const ledgerState = firstCanonicalEventId
@@ -387,7 +383,7 @@ async function writeArticleBundle(
     image_count: bundle?.images.length ?? 0,
     link_count: bundle?.links.length ?? 0,
     diagnostics: bundle?.diagnostics ?? [],
-    mode: request.mode,
+    data_class: request.dataClass,
     status,
   };
   if (db.writeArticleBundle) {
@@ -442,7 +438,7 @@ async function writeUsage(
     reasoning_output_tokens: usage.reasoningOutputTokens ?? 0,
     latency_ms: usage.latencyMs,
     article_bundle_id: request.bundleId,
-    mode: request.mode,
+    data_class: request.dataClass,
     metadata,
   }, "usage_id");
 }
@@ -484,6 +480,7 @@ async function writeEvidenceAssets({
     });
     await writeUnique(db, "evidence_assets", {
       asset_id: assetId,
+      data_class: request.dataClass,
       article_url: request.sourceUrl,
       bundle_id: request.bundleId,
       role: selection.role,
@@ -612,6 +609,7 @@ function draftPayload({
 }) {
   return {
     draft_id: draftId,
+    data_class: request.dataClass,
     article_url: request.sourceUrl,
     bundle_id: request.bundleId,
     title: event.title,
@@ -675,6 +673,7 @@ function canonicalPayload({
 }) {
   return {
     event_id: eventId,
+    data_class: request.dataClass,
     title: event.title,
     organizer: event.organizer,
     starts_at: event.startsAt,
@@ -751,7 +750,7 @@ async function writeLedger(
     draft_id: draftId,
     canonical_event_id: canonicalEventId,
     excluded_article_id: excludedArticleId,
-    mode: request.mode,
+    data_class: request.dataClass,
     metadata: {
       storagePrefix: request.storagePrefix,
       dedupe: output.dedupe,
@@ -791,6 +790,7 @@ async function stableEvidenceLocation({
   const bytes = await storage.downloadBytes(articleBundleBucket, sourcePath);
   if (!bytes) throw new Error(`evidence_image_bytes_missing:${sourcePath}`);
   const targetPath = evidenceStoragePath({
+    dataClass: request.dataClass,
     bundleId: request.bundleId,
     assetId,
     contentType: image.contentType,
@@ -806,16 +806,18 @@ async function stableEvidenceLocation({
 }
 
 function evidenceStoragePath({
+  dataClass,
   bundleId,
   assetId,
   contentType,
 }: {
+  dataClass: string;
   bundleId: string;
   assetId: string;
   contentType?: string;
 }): string {
   const extension = extensionFromContentType(contentType);
-  return `articles/${safePathSegment(bundleId)}/${assetId}${
+  return `${safePathSegment(dataClass)}/articles/${safePathSegment(bundleId)}/${assetId}${
     extension ? `.${extension}` : ""
   }`;
 }

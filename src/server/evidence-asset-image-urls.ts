@@ -4,11 +4,13 @@ type EvidenceAssetImageRow = {
   asset_id: string;
   role: string;
   storage_path: string | null;
+  public_url: string | null;
   source_url: string | null;
   text_content: string | null;
 };
 
 export type EvidenceAssetImageInput = {
+  dataClass?: "production" | "eval" | "test" | "smoke";
   posterAssetId?: string;
   registrationQrAssetId?: string;
   posterImageUrl?: string;
@@ -38,7 +40,8 @@ export async function resolveEvidenceAssetImageUrls(
 
   const { data, error } = await client
     .from("evidence_assets")
-    .select("asset_id,role,storage_path,source_url,text_content")
+    .select("asset_id,role,storage_path,public_url,source_url,text_content")
+    .eq("data_class", input.dataClass ?? "production")
     .in("asset_id", assetIds);
 
   if (error) throw new Error("evidence_asset_lookup_failed");
@@ -56,7 +59,8 @@ export function resolveEvidenceAssetImageUrlsFromRows(
   const posterRow = rows.find(
     (row) => row.asset_id === input.posterAssetId && row.role === "poster",
   );
-  const posterUrl = publicEvidenceStorageUrl(posterRow?.storage_path);
+  const posterUrl = publicEvidenceStorageUrl(posterRow?.public_url) ??
+    publicEvidenceStorageUrl(posterRow?.storage_path);
   if (!result.posterImageUrl && posterUrl) {
     result.posterImageUrl = posterUrl;
     result.posterImageAlt = input.posterImageAlt ?? posterRow?.text_content ?? undefined;
@@ -70,8 +74,9 @@ export function resolveEvidenceAssetImageUrlsFromRows(
       ["registration", "qr"].includes(row.role),
   );
   const qrUrl = publicEvidenceStorageUrl(qrRow?.storage_path);
-  if (!result.registrationQrImageUrl && qrUrl) {
-    result.registrationQrImageUrl = qrUrl;
+  const resolvedQrUrl = publicEvidenceStorageUrl(qrRow?.public_url) ?? qrUrl;
+  if (!result.registrationQrImageUrl && resolvedQrUrl) {
+    result.registrationQrImageUrl = resolvedQrUrl;
     result.registrationQrImageAlt =
       input.registrationQrImageAlt ?? qrRow?.text_content ?? "Registration QR";
   }
@@ -99,7 +104,7 @@ function existingImageUrls(input: EvidenceAssetImageInput): EvidenceAssetImageUr
 
 function publicEvidenceStorageUrl(value: string | null | undefined) {
   const text = value?.trim();
-  if (!text || text.startsWith("fixture-assets/")) return undefined;
+  if (!text) return undefined;
   try {
     const url = new URL(text);
     if (!["http:", "https:"].includes(url.protocol)) return undefined;

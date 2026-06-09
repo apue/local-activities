@@ -167,7 +167,7 @@ export type AdminProcessingLedgerState =
   | "duplicate"
   | "failed";
 
-export type AdminProcessingLedgerMode = "production" | "eval";
+export type AdminDataClass = "production" | "eval" | "test" | "smoke";
 
 export type AdminProcessingLedgerRecord = {
   id: string;
@@ -186,7 +186,7 @@ export type AdminProcessingLedgerRecord = {
   draftId?: string;
   canonicalEventId?: string;
   excludedArticleId?: string;
-  mode: AdminProcessingLedgerMode;
+  dataClass: AdminDataClass;
   errorDetails?: Record<string, unknown>;
   metadata: Record<string, unknown>;
   createdAt: string;
@@ -240,7 +240,7 @@ export type AdminLlmUsageRecord = {
   provider: string;
   model: string;
   status: AdminLlmUsageStatus;
-  mode?: "production" | "eval";
+  dataClass?: AdminDataClass;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
@@ -337,7 +337,7 @@ export type AdminStore = {
   ): Promise<AdminExcludedArticleRecord | null>;
   listProcessingLedger(input: {
     state?: AdminProcessingLedgerState;
-    mode?: AdminProcessingLedgerMode;
+    dataClass?: AdminDataClass;
   }): Promise<AdminProcessingLedgerRecord[]>;
   listEvaluationRuns(input: {
     status?: AdminEvaluationRunRecord["status"];
@@ -375,7 +375,7 @@ export function listAdminExcludedArticles(
 export function listAdminProcessingLedger(
   input: {
     state?: AdminProcessingLedgerState;
-    mode?: AdminProcessingLedgerMode;
+    dataClass?: AdminDataClass;
   },
   store: AdminStore,
 ) {

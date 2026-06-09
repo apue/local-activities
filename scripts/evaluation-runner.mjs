@@ -23,6 +23,7 @@ export async function runEvaluationCli(argv = process.argv.slice(2), env = proce
     return undefined;
   }
   loadEnvFiles(args.envFiles, env);
+  if (!args.corpusDir) throw new Error("evaluation_corpus_dir_required");
   const corpus = await loadRegressionCorpus({ corpusDir: args.corpusDir });
   const writer = await writerForArgs({ args, env });
   const result = await runEvaluation({
@@ -148,8 +149,9 @@ function requiredValue(argv, index, arg) {
 
 function helpText() {
   return [
-    "Usage: pnpm eval:run -- [--store local|memory|supabase] [--variant mock-expected-v1] [--variant mock-overfilter-v1]",
+    "Usage: pnpm eval:run -- --corpus-dir <path> [--store local|memory|supabase] [--variant mock-expected-v1] [--variant mock-overfilter-v1]",
     "",
+    "Requires an explicit regression corpus directory.",
     "Defaults to local artifacts under tmp/evaluation-runs and never calls live providers.",
     "Use --store supabase only when eval table/storage writes are intended.",
     "Use --variant live-configured --allow-live --max-cost-cny <n> for an optional configured live provider smoke.",

@@ -4,10 +4,11 @@ import { deriveWechat2RssHealth } from "../collector/source-providers/wechat2rss
 import {
   buildArticleBundleFiles,
   edgePayloadFromManifest,
+  normalizeDataClass,
 } from "./bundle-files.mjs";
 import { hydrateArticleBundleImages } from "./image-hydration.mjs";
 
-const defaultMode = "production";
+const defaultDataClass = "production";
 const defaultLookbackDays = 7;
 
 export async function runWechat2RssCaptureOnce({
@@ -15,7 +16,7 @@ export async function runWechat2RssCaptureOnce({
   supabase,
   idempotency = supabase,
   now = new Date(),
-  mode = defaultMode,
+  dataClass,
   dryRun = true,
   lookbackDays = defaultLookbackDays,
   limit,
@@ -29,6 +30,7 @@ export async function runWechat2RssCaptureOnce({
   if (limit !== undefined && !isPositiveInteger(limit)) {
     throw new Error(`invalid_limit:${limit}`);
   }
+  const resolvedDataClass = normalizeDataClass(dataClass ?? defaultDataClass);
 
   let logins;
   try {
@@ -38,7 +40,7 @@ export async function runWechat2RssCaptureOnce({
       reason: mapRuntimeErrorToCaptureFailureReason(error),
       message: errorMessage(error),
       diagnostics: [{ key: "wechat2rss_error", value: errorMessage(error) }],
-      mode,
+      dataClass: resolvedDataClass,
       dryRun,
     });
   }
@@ -52,7 +54,7 @@ export async function runWechat2RssCaptureOnce({
         { key: "wechat2rss_health_status", value: health.healthStatus },
         { key: "wechat2rss_accounts", value: logins.accounts },
       ],
-      mode,
+      dataClass: resolvedDataClass,
       dryRun,
     });
   }
@@ -69,14 +71,14 @@ export async function runWechat2RssCaptureOnce({
       reason: mapRuntimeErrorToCaptureFailureReason(error),
       message: errorMessage(error),
       diagnostics: [{ key: "wechat2rss_error", value: errorMessage(error) }],
-      mode,
+      dataClass: resolvedDataClass,
       dryRun,
     });
   }
 
   const result = {
     ok: true,
-    mode,
+    dataClass: resolvedDataClass,
     dryRun,
     after,
     ...(limit !== undefined ? { limit } : {}),
@@ -103,7 +105,7 @@ export async function runWechat2RssCaptureOnce({
       const existing = await idempotency.findExistingBundle({
         sourceUrl: bundle.sourceUrl,
         contentHash: bundle.contentHash,
-        mode,
+        dataClass: resolvedDataClass,
       });
       if (existing) {
         result.skippedCount += 1;
@@ -125,7 +127,7 @@ export async function runWechat2RssCaptureOnce({
         : bundle;
       const bundleFiles = buildArticleBundleFiles({
         bundle: analysisBundle,
-        mode,
+        dataClass: resolvedDataClass,
       });
       const edgePayload = edgePayloadFromManifest({
         manifest: bundleFiles.manifest,
@@ -164,7 +166,7 @@ function sourceFailureResult({
   reason,
   message,
   diagnostics,
-  mode,
+  dataClass,
   dryRun,
 }) {
   const captureResult = createCaptureFailureResult({
@@ -176,7 +178,7 @@ function sourceFailureResult({
   });
   return {
     ok: false,
-    mode,
+    dataClass,
     dryRun,
     checkedCount: 0,
     bundledCount: 0,

@@ -43,14 +43,14 @@ Deno.test("authenticateCollector rejects missing or mismatched tokens", () => {
   );
 });
 
-Deno.test("parseAnalyzeRequest defaults mode to production and keeps optional fields", async () => {
+Deno.test("parseAnalyzeRequest defaults data class to production and keeps optional fields", async () => {
   const request = new Request("https://example.test", {
     method: "POST",
     body: JSON.stringify({
       sourceUrl: "https://mp.weixin.qq.com/s/example",
       publishedAt: "2026-06-08T10:00:00+08:00",
       bundleId: "bundle-1",
-      storagePrefix: "article-bundles/bundle-1",
+      storagePrefix: "article-bundles/production/bundle-1",
       contentHash: "sha256:abc",
       sourceProvider: "wechat2rss",
       sourceId: "embassy-feed",
@@ -60,12 +60,12 @@ Deno.test("parseAnalyzeRequest defaults mode to production and keeps optional fi
 
   const parsed = await parseAnalyzeRequest(request);
 
-  assertEquals(parsed.mode, "production");
+  assertEquals(parsed.dataClass, "production");
   assertEquals(parsed.sourceName, "Example Embassy");
-  assertEquals(parsed.storagePrefix, "article-bundles/bundle-1");
+  assertEquals(parsed.storagePrefix, "article-bundles/production/bundle-1");
 });
 
-Deno.test("parseAnalyzeRequest rejects invalid mode and missing required fields", async () => {
+Deno.test("parseAnalyzeRequest rejects invalid data class and missing required fields", async () => {
   await assertRejects(
     () =>
       parseAnalyzeRequest(
@@ -74,14 +74,14 @@ Deno.test("parseAnalyzeRequest rejects invalid mode and missing required fields"
           body: JSON.stringify({
             sourceUrl: "https://mp.weixin.qq.com/s/example",
             bundleId: "bundle-1",
-            storagePrefix: "article-bundles/bundle-1",
+            storagePrefix: "article-bundles/production/bundle-1",
             contentHash: "sha256:abc",
             sourceProvider: "wechat2rss",
-            mode: "preview",
+            dataClass: "preview",
           }),
         }),
       ),
-    "invalid_mode",
+    "invalid_data_class",
   );
 
   await assertRejects(
@@ -105,7 +105,7 @@ Deno.test("parseAnalyzeRequest rejects non-string request fields", async () => {
           body: JSON.stringify({
             sourceUrl: { href: "https://mp.weixin.qq.com/s/example" },
             bundleId: "bundle-1",
-            storagePrefix: "article-bundles/bundle-1",
+            storagePrefix: "article-bundles/production/bundle-1",
             contentHash: "sha256:abc",
             sourceProvider: "wechat2rss",
           }),
@@ -123,7 +123,7 @@ Deno.test("parseAnalyzeRequest rejects non-string request fields", async () => {
             sourceUrl: "https://mp.weixin.qq.com/s/example",
             publishedAt: 123,
             bundleId: "bundle-1",
-            storagePrefix: "article-bundles/bundle-1",
+            storagePrefix: "article-bundles/production/bundle-1",
             contentHash: "sha256:abc",
             sourceProvider: "wechat2rss",
           }),

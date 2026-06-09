@@ -9,7 +9,8 @@ mutation.
 ## General Rules
 
 - Prefer small, focused tests around module contracts.
-- Use fixtures and replay for capture, analysis, dedupe, publication, and UI.
+- Use explicit fixture or replay corpora for capture, analysis, dedupe,
+  publication, and UI.
 - Record validation commands in PRs and issue handoffs.
 - Keep production-mutating commands explicit and logged.
 - Preserve known failures as regression cases.
@@ -44,7 +45,8 @@ Test focus:
 - model output parsing and validation.
 - ledger writes for published, review, excluded, duplicate, and failed outcomes.
 - evidence asset selection and Storage path handling.
-- production/eval write isolation.
+- `data_class` write isolation across `production`, `eval`, `test`, and
+  `smoke`.
 
 Expected checks:
 
@@ -57,17 +59,31 @@ Expected checks:
 
 ## Regression Corpus
 
-The 15-case self-contained corpus should include ordinary events,
-registration-required events, QR registration, image-dominant articles,
-multi-event articles, long-running exhibitions, recurring events,
-duplicate/update pairs, non-public official items, non-events/news, not-Beijing
-posts, false QR evidence, and sparse-info review cases.
+There is currently no trusted committed product corpus in
+`tests/regression-corpus`. The previous corpus was removed because several cases
+contained incomplete or fake image assets and therefore could not validate live
+vision behavior.
 
-Replay must run without network/provider/production writes.
+Replay remains available, but every run must point to an explicit corpus
+directory:
 
-Promoting future bad cases must use already captured JSON through
-`pnpm regression:promote`; promotion must not call live WeChat, live LLM
-providers, hosted Supabase, or production write paths.
+```bash
+pnpm regression:replay -- --corpus-dir <path> --all
+```
+
+Unit tests for the replay loader and evaluation runner may create temporary
+contract-valid corpora at runtime. Those temporary corpora verify the harness
+itself; they are not product acceptance data.
+
+A future trusted corpus should include ordinary events, registration-required
+events, QR registration, image-dominant articles, multi-event articles,
+long-running exhibitions, recurring events, duplicate/update pairs, non-public
+official items, non-events/news, not-Beijing posts, false QR evidence, and
+sparse-info review cases.
+
+Replay must run without network/provider/production writes. New corpus cases are
+added by reviewed PRs with real captured bundles or explicit capture-failure
+results; there is no active promotion CLI.
 
 ## Evaluation
 
@@ -78,15 +94,16 @@ runner:
 provider + model + promptVersion + schemaVersion + parameters
 ```
 
-CI-safe validation uses mocked variants and memory storage:
+CI-safe validation uses mocked variants, memory storage, and an explicit corpus:
 
 ```bash
-pnpm eval:run -- --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
+pnpm eval:run -- --corpus-dir <path> --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
 ```
 
 Local artifact runs write to `tmp/evaluation-runs` by default. Hosted writes are
 explicit with `--store supabase` and are limited to `evaluation_runs`,
 `evaluation_case_results`, `llm_usage_ledger`, and the `eval-artifacts` bucket.
+Hosted evaluation metadata must use `data_class='eval'`.
 
 Expected checks:
 
@@ -96,9 +113,11 @@ Expected checks:
 - usage/cost aggregation tests
 - optional live model comparison with budget guard
 
-Evaluation must never write production drafts or canonical events. The default
-evaluation path must not call live LLM providers; live variants require
-`--variant live-configured --allow-live --max-cost-cny <n>`.
+The evaluation runner must never write production drafts or canonical events.
+Use the Supabase Edge Function with `dataClass=eval`, `test`, or `smoke` only
+when intentionally testing product-shaped analysis writes outside production.
+The default evaluation path must not call live LLM providers; live variants
+require `--variant live-configured --allow-live --max-cost-cny <n>`.
 
 ## Admin/Public UI
 
@@ -108,7 +127,7 @@ Public checks:
 - event cards and detail pages
 - poster and registration QR rendering
 - no admin diagnostics on public pages
-- fixture/test copy is absent from production pages
+- raw WeChat or localhost image URLs are absent from public pages
 
 Admin checks:
 
