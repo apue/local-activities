@@ -1,0 +1,22 @@
+{
+  "id": "turkey-president-meeting-news",
+  "labels": [
+    "official_visit_non_public_news",
+    "generic_not_event"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "土耳其驻北京大使馆",
+    "url": "https://mp.weixin.qq.com/s?__biz=MzU4NTkxOTEwMg==&mid=2247538954&idx=1&sn=1c33aab773a850cff7b61dfc757e63a8",
+    "publishedAt": "2026-06-09T10:05:00.000Z"
+  },
+  "rationale": "Official diplomatic meeting news with no public attendance path.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}

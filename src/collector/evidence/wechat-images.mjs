@@ -57,7 +57,7 @@ export function classifyImageCandidate(candidate) {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
-  if (/二维码|扫码|报名|预约|registration|register|sign\s*up|reserve/.test(labelText)) {
+  if (/二维码|扫码|报名|预约|qr\s*code|qrcode|registration|register|sign\s*up|reserve/.test(labelText)) {
     return "qr";
   }
   const posterText = `${labelText} ${candidate.url ?? ""}`.toLowerCase();

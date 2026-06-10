@@ -1,0 +1,46 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-5ab6b0a39286d9a36c40e93b",
+  "sourceId": "3550320948",
+  "sourceName": "北平机器",
+  "provider": "wechat2rss_public_safe_excerpt",
+  "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518666&idx=1&sn=2b07a8ccba4da28aa88aaed8530470f0",
+  "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518666&idx=1&sn=2b07a8ccba4da28aa88aaed8530470f0",
+  "finalUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518666&idx=1&sn=2b07a8ccba4da28aa88aaed8530470f0",
+  "title": "北平机器友谊万岁精酿啤酒节终极指南！",
+  "authorName": "北平机器",
+  "publishedAt": "2026-06-09T07:02:00.000Z",
+  "capturedAt": "2026-06-10T00:00:00.000Z",
+  "languageHints": [
+    "zh",
+    "en"
+  ],
+  "captureMode": "text_complete",
+  "text": "Title: 北平机器友谊万岁精酿啤酒节终极指南！\nSource: 北平机器\nPublished at: 2026-06-09T07:02:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518666&idx=1&sn=2b07a8ccba4da28aa88aaed8530470f0\nExpected action: extract\nRationale: Large public festival guide with mini-program actions, free entry, paid tokens, and dense schedule text.\nEvent: 北平机器友谊万岁精酿啤酒节\nOrganizer: 北平机器\nStarts: 2026-06-12T15:00:00+08:00\nEnds: 2026-06-14T23:00:00+08:00\nSchedule: 2026.06.12-06.14 15:00-23:00\nVenue: 友谊花园\nAddress: 北京市建国门外大街17号\nRegistration action: mini_program\nSummary: Three-day craft beer festival with beer, food, games, music, and free entry.\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
+  "html": "<article><p>Title: 北平机器友谊万岁精酿啤酒节终极指南！</p><p>Source: 北平机器</p><p>Published at: 2026-06-09T07:02:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&amp;mid=2247518666&amp;idx=1&amp;sn=2b07a8ccba4da28aa88aaed8530470f0</p><p>Expected action: extract</p><p>Rationale: Large public festival guide with mini-program actions, free entry, paid tokens, and dense schedule text.</p><p>Event: 北平机器友谊万岁精酿啤酒节</p><p>Organizer: 北平机器</p><p>Starts: 2026-06-12T15:00:00+08:00</p><p>Ends: 2026-06-14T23:00:00+08:00</p><p>Schedule: 2026.06.12-06.14 15:00-23:00</p><p>Venue: 友谊花园</p><p>Address: 北京市建国门外大街17号</p><p>Registration action: mini_program</p><p>Summary: Three-day craft beer festival with beer, food, games, music, and free entry.</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "images": [],
+  "links": [],
+  "miniPrograms": [
+    {
+      "appId": "wx4d1258677af59f5c",
+      "path": "lib/item/dist/pages/index/index?itemId=7757438697",
+      "actionType": "mini_program",
+      "source": "html"
+    },
+    {
+      "appId": "wx8a4a2160a8553c51",
+      "path": "pages/placeDetail/placeDetail?scene=6a057ff16edb0150abb7bc8d&amp;from=share",
+      "actionType": "mini_program",
+      "source": "html"
+    }
+  ],
+  "contentHash": "915631cf5ec621bd8409f6375b54efac231f687942ec48cafe35d01cb4901465",
+  "diagnostics": [],
+  "captureWarnings": [
+    {
+      "code": "public_safe_curated_excerpt",
+      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
+      "severity": "info"
+    }
+  ]
+}

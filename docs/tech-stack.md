@@ -65,7 +65,7 @@ The default CI-safe command uses memory storage, mocked variants, and an
 explicit corpus:
 
 ```bash
-pnpm eval:run -- --corpus-dir <path> --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
+pnpm eval:run -- --corpus-dir tests/regression-corpus --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
 ```
 
 Local artifact runs write to `tmp/evaluation-runs` by default. Supabase writes
@@ -74,8 +74,12 @@ require `--store supabase` and are limited to `evaluation_runs`,
 provider runs are opt-in:
 
 ```bash
-pnpm eval:run -- --corpus-dir <path> --variant live-configured --allow-live --max-cost-cny <n>
+pnpm eval:run -- --corpus-dir tests/regression-corpus --variant live-configured --allow-live --max-cost-cny <n>
 ```
+
+The committed corpus is public-safe and text-derived. Use it for live provider
+wiring smoke checks, not poster/QR vision quality. Vision evaluation requires a
+private local corpus directory with consumable image assets.
 
 ## Map And Geocoding
 

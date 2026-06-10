@@ -1,0 +1,66 @@
+{
+  "action": "review",
+  "eventCount": 6,
+  "evidence": {},
+  "eventDrafts": [
+    {
+      "draftId": "iic-cucina-francesco",
+      "title": "与Francesco Magni一起做饭",
+      "organizer": "IICPechino",
+      "startsAt": "2026-06-08T19:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "意大利驻华使馆文化中心"
+    },
+    {
+      "draftId": "iic-simone-pieranni",
+      "title": "Lo sguardo della Cina sugli Stati Uniti 新书介绍",
+      "organizer": "IICPechino",
+      "startsAt": "2026-06-15T19:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "意大利驻华使馆文化中心"
+    },
+    {
+      "draftId": "iic-leopardi-june-plan",
+      "title": "Giulia Poeta 朗读与演绎莱奥帕尔迪诗作",
+      "organizer": "IICPechino",
+      "startsAt": "2026-06-16T19:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "意大利驻华使馆文化中心"
+    },
+    {
+      "draftId": "iic-mining-memories",
+      "title": "Mining Memories Digging Words Elisa Biagini",
+      "organizer": "IICPechino",
+      "startsAt": "2026-05-13T10:00:00+08:00",
+      "endsAt": "2026-06-13T18:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "意大利驻华使馆文化中心"
+    },
+    {
+      "draftId": "iic-antonella-gioli",
+      "title": "系列讲座“艺术的生命”：法尔内塞盘——穿越时间与空间的旅程",
+      "organizer": "IICPechino",
+      "startsAt": "2026-06-17T09:00:00+08:00",
+      "endsAt": "2026-06-17T11:30:00+08:00",
+      "city": "Beijing",
+      "venueName": "北京师范大学主楼C区5049"
+    },
+    {
+      "draftId": "iic-emma-dante-tsinghua",
+      "title": "Emma Dante presents L'angelo del focolare",
+      "organizer": "IICPechino",
+      "startsAt": "2026-06-24T18:30:00+08:00",
+      "city": "Beijing",
+      "venueName": "清华大学美术学院C528报告厅"
+    }
+  ],
+  "dedupe": {
+    "decision": "new_event"
+  },
+  "publish": {
+    "state": "needs_review",
+    "reasons": [
+      "information_sparse_requires_review"
+    ]
+  }
+}

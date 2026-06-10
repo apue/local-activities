@@ -155,6 +155,62 @@ describe("EvidenceExtractor", () => {
     ]);
   });
 
+  it("does not let poster heuristics override explicit QR roles", () => {
+    const evidence = extractEvidenceFromArticleBundle(
+      bundle({
+        text: "Public event. Please scan the QRCode.",
+        images: [
+          {
+            id: "event-qrcode",
+            sourceUrl: "https://mmbiz.qpic.cn/event-qrcode.jpg",
+            role: "qr",
+            width: 320,
+            height: 320,
+            alt: "QRCode for embassy event",
+          },
+        ],
+      }),
+    );
+
+    expect(evidence.posters).toEqual([]);
+    expect(evidence.qrCodes).toEqual([
+      expect.objectContaining({
+        kind: "qr_code",
+        sourceImageId: "event-qrcode",
+      }),
+    ]);
+  });
+
+  it("treats explicit registration_qr roles as registration evidence", () => {
+    const evidence = extractEvidenceFromArticleBundle(
+      bundle({
+        text: "Public event registration.",
+        images: [
+          {
+            id: "explicit-registration-qr",
+            sourceUrl: "https://mmbiz.qpic.cn/registration-qrcode.jpg",
+            role: "registration_qr",
+            width: 320,
+            height: 320,
+            alt: "Event code",
+          },
+        ],
+      }),
+    );
+
+    expect(evidence.qrCodes).toEqual([
+      expect.objectContaining({
+        kind: "qr_code",
+        sourceImageId: "explicit-registration-qr",
+        evidenceRole: "registration",
+        registrationLikely: true,
+      }),
+    ]);
+    expect(evidence.assetRequests).toEqual([
+      expect.objectContaining({ role: "registration_qr" }),
+    ]);
+  });
+
   it("labels footer/share QR-like images as non-registration evidence", () => {
     const evidence = extractEvidenceFromArticleBundle(
       bundle({

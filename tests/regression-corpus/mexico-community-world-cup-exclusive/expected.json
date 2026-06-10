@@ -1,0 +1,15 @@
+{
+  "action": "exclude",
+  "eventCount": 0,
+  "evidence": {},
+  "eventDrafts": [],
+  "dedupe": {
+    "decision": "insufficient_info"
+  },
+  "publish": {
+    "state": "rejected",
+    "reasons": [
+      "not_general_public"
+    ]
+  }
+}

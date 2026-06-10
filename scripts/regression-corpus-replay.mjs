@@ -59,14 +59,21 @@ export async function loadRegressionCorpus({ corpusDir } = {}) {
   }
 
   const coverageLabels = [...new Set(cases.flatMap((item) => item.case.labels ?? []))].sort();
-  const missingCoverage = requiredCoverageLabels.filter(
+  const manifestRequiredCoverageLabels = manifest.requiredCoverageLabels ?? requiredCoverageLabels;
+  const missingCoverage = manifestRequiredCoverageLabels.filter(
     (label) => !coverageLabels.includes(label),
   );
   if (missingCoverage.length) {
     throw new Error(`regression_corpus_coverage_missing:${missingCoverage.join(",")}`);
   }
 
-  return { manifest, cases, coverageLabels };
+  return {
+    manifest,
+    cases,
+    coverageLabels,
+    requiredCoverageLabels: manifestRequiredCoverageLabels,
+    knownCoverageGaps: manifest.knownCoverageGaps ?? [],
+  };
 }
 
 export async function replayRegressionCase({
@@ -159,9 +166,60 @@ async function loadRegressionCase({ caseId, corpusDir, manifestEntry }) {
     return { case: caseMeta, expected, captureResult };
   }
 
-  const bundle = await readJson(path.join(caseDir, "captured-bundle.json"));
+  const bundle = await resolveCaseLocalImageAssets({
+    bundle: await readJson(path.join(caseDir, "captured-bundle.json")),
+    caseDir,
+    caseId,
+  });
   validateCapturedArticleBundle(bundle);
   return { case: caseMeta, expected, bundle };
+}
+
+async function resolveCaseLocalImageAssets({ bundle, caseDir, caseId }) {
+  if (!Array.isArray(bundle.images) || bundle.images.length === 0) return bundle;
+  const images = [];
+  for (const image of bundle.images) {
+    images.push(await resolveCaseLocalImageAsset({ image, caseDir, caseId }));
+  }
+  return { ...bundle, images };
+}
+
+async function resolveCaseLocalImageAsset({ image, caseDir, caseId }) {
+  if (image.dataUrl || image.publicUrl) return image;
+  const imagePath = String(image.path ?? "").trim();
+  if (!imagePath.startsWith("assets/")) return image;
+  if (path.isAbsolute(imagePath) || imagePath.split(/[\\/]+/).includes("..")) {
+    throw new Error(`regression_corpus_asset_path_invalid:${caseId}:${image.id ?? imagePath}`);
+  }
+  const resolvedPath = path.resolve(caseDir, imagePath);
+  const resolvedCaseDir = path.resolve(caseDir);
+  if (!resolvedPath.startsWith(`${resolvedCaseDir}${path.sep}`)) {
+    throw new Error(`regression_corpus_asset_path_invalid:${caseId}:${image.id ?? imagePath}`);
+  }
+  let bytes;
+  try {
+    bytes = await readFile(resolvedPath);
+  } catch {
+    throw new Error(`regression_corpus_asset_missing:${caseId}:${imagePath}`);
+  }
+  const contentType = image.contentType ?? contentTypeFromPath(imagePath);
+  if (!contentType) {
+    throw new Error(`regression_corpus_asset_content_type_required:${caseId}:${imagePath}`);
+  }
+  return {
+    ...image,
+    contentType,
+    dataUrl: `data:${contentType};base64,${bytes.toString("base64")}`,
+  };
+}
+
+function contentTypeFromPath(filePath) {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".gif")) return "image/gif";
+  return undefined;
 }
 
 async function replayLoadedCase(item) {
@@ -360,6 +418,28 @@ function validateManifest(manifest) {
       throw new Error(`regression_corpus_manifest_case_labels_required:${entry.id}`);
     }
   }
+  if (manifest.requiredCoverageLabels !== undefined) {
+    validateStringArray(
+      manifest.requiredCoverageLabels,
+      "regression_corpus_manifest_required_coverage_invalid",
+    );
+  }
+  if (manifest.knownCoverageGaps !== undefined) {
+    if (!Array.isArray(manifest.knownCoverageGaps)) {
+      throw new Error("regression_corpus_manifest_known_gaps_invalid");
+    }
+    for (const gap of manifest.knownCoverageGaps) {
+      if (!clean(gap?.label) || !clean(gap?.reason)) {
+        throw new Error("regression_corpus_manifest_known_gap_invalid");
+      }
+    }
+  }
+}
+
+function validateStringArray(value, errorCode) {
+  if (!Array.isArray(value) || value.some((item) => !clean(item))) {
+    throw new Error(errorCode);
+  }
 }
 
 function validateCaseMeta({ caseMeta, manifestEntry, caseId }) {
@@ -423,6 +503,11 @@ function eventDraftEnvelope({ payload, runId, index }) {
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+function clean(value) {
+  const text = String(value ?? "").trim();
+  return text || undefined;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

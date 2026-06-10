@@ -1,0 +1,22 @@
+{
+  "id": "iic-save-the-date-june",
+  "labels": [
+    "multi_event_article",
+    "information_sparse_requires_review"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "IICPechino",
+    "url": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917370&idx=1&sn=aff12ae5c5adde82f5fea7395f6de25e",
+    "publishedAt": "2026-06-05T08:43:00.000Z"
+  },
+  "rationale": "Dense monthly event listing; useful as a review-required multi-event hard case.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}

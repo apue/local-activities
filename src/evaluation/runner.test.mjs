@@ -63,6 +63,62 @@ describe("evaluation runner", () => {
     });
   });
 
+  it("scores only evidence counters declared by the expected case", async () => {
+    const corpus = await loadEvaluationCorpus();
+    const positive = corpus.cases.find((item) => item.case.id === "korean-red-flavor");
+    const caseItem = {
+      ...positive,
+      expected: {
+        ...positive.expected,
+        evidence: { qrCodeCount: 1 },
+        publish: { state: "public" },
+      },
+    };
+
+    expect(
+      scoreEvaluationCase({
+        caseItem,
+        output: {
+          decision: "published",
+          reason: "ok",
+          confidence: 0.9,
+          events: [
+            {
+              title: "Korean red flavor",
+              evidence: [{ role: "registration_qr", imageId: "qr-1" }],
+              registrationUrl: "https://example.com/register",
+            },
+          ],
+          dedupe: { decision: "new_event" },
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        },
+      }),
+    ).toMatchObject({
+      passed: true,
+      scores: {
+        evidenceMatch: true,
+        expectedEvidence: { qrCodeCount: 1 },
+      },
+    });
+
+    expect(
+      scoreEvaluationCase({
+        caseItem,
+        output: {
+          decision: "published",
+          reason: "missing evidence",
+          confidence: 0.9,
+          events: [{ title: "Korean red flavor" }],
+          dedupe: { decision: "new_event" },
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        },
+      }),
+    ).toMatchObject({
+      passed: false,
+      errors: expect.arrayContaining(["evidence_mismatch"]),
+    });
+  });
+
   it("compares two deterministic mock extractor variants without production writes", async () => {
     const corpus = await loadEvaluationCorpus();
     const writer = createMemoryEvaluationWriter();

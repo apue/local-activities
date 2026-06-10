@@ -59,31 +59,35 @@ Expected checks:
 
 ## Regression Corpus
 
-There is currently no trusted committed product corpus in
-`tests/regression-corpus`. The previous corpus was removed because several cases
-contained incomplete or fake image assets and therefore could not validate live
-vision behavior.
+The trusted committed product corpus lives in `tests/regression-corpus`. It was
+rebuilt as public-safe derived bundles from real locally captured Wechat2RSS
+article bundles. It includes public events, registration-required cases,
+multi-event and long-running cases, recurring occurrences, and negative
+news/non-public/not-Beijing cases.
+
+The committed corpus does not include full third-party article mirrors or copied
+article images. It is suitable for deterministic replay, mocked evaluation, and
+pipeline contract regression. Live vision checks for posters or registration QR
+codes require a private local corpus rebuilt from Wechat2RSS and kept outside
+the public repository.
 
 Replay remains available, but every run must point to an explicit corpus
 directory:
 
 ```bash
-pnpm regression:replay -- --corpus-dir <path> --all
+pnpm regression:replay -- --corpus-dir tests/regression-corpus --all
 ```
 
 Unit tests for the replay loader and evaluation runner may create temporary
 contract-valid corpora at runtime. Those temporary corpora verify the harness
 itself; they are not product acceptance data.
 
-A future trusted corpus should include ordinary events, registration-required
-events, QR registration, image-dominant articles, multi-event articles,
-long-running exhibitions, recurring events, duplicate/update pairs, non-public
-official items, non-events/news, not-Beijing posts, false QR evidence, and
-sparse-info review cases.
-
 Replay must run without network/provider/production writes. New corpus cases are
-added by reviewed PRs with real captured bundles or explicit capture-failure
-results; there is no active promotion CLI.
+added by reviewed PRs with public-safe derived captured bundles or explicit
+capture-failure results; there is no active promotion CLI. Coverage gaps such as
+poster/QR vision assets, stateful duplicate/update cases, and real capture
+failures are recorded in
+`tests/regression-corpus/manifest.json`.
 
 ## Evaluation
 
@@ -97,7 +101,7 @@ provider + model + promptVersion + schemaVersion + parameters
 CI-safe validation uses mocked variants, memory storage, and an explicit corpus:
 
 ```bash
-pnpm eval:run -- --corpus-dir <path> --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
+pnpm eval:run -- --corpus-dir tests/regression-corpus --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
 ```
 
 Local artifact runs write to `tmp/evaluation-runs` by default. Hosted writes are
@@ -117,7 +121,9 @@ The evaluation runner must never write production drafts or canonical events.
 Use the Supabase Edge Function with `dataClass=eval`, `test`, or `smoke` only
 when intentionally testing product-shaped analysis writes outside production.
 The default evaluation path must not call live LLM providers; live variants
-require `--variant live-configured --allow-live --max-cost-cny <n>`.
+require `--variant live-configured --allow-live --max-cost-cny <n>`. Live vision
+variants should use a private local corpus directory that includes consumable
+image assets, not the public-safe committed corpus.
 
 ## Admin/Public UI
 

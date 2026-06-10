@@ -96,7 +96,7 @@ The evaluation harness is separate from the production publication pipeline. Its
 CI-safe path uses mocked variants, memory storage, and an explicit corpus:
 
 ```bash
-pnpm eval:run -- --corpus-dir <path> --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
+pnpm eval:run -- --corpus-dir tests/regression-corpus --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
 ```
 
 Local artifact runs write to `tmp/evaluation-runs` by default. Evaluation runs
@@ -106,8 +106,13 @@ must point to an explicit corpus directory. The Supabase writer is explicit with
 `eval-artifacts`. Live provider evaluation is opt-in:
 
 ```bash
-pnpm eval:run -- --corpus-dir <path> --variant live-configured --allow-live --max-cost-cny <n>
+pnpm eval:run -- --corpus-dir tests/regression-corpus --variant live-configured --allow-live --max-cost-cny <n>
 ```
+
+The committed corpus is public-safe and text-derived. Use it for smoke-testing
+live provider wiring and schema handling. For poster or registration QR quality,
+point `--corpus-dir` at a private local corpus rebuilt from Wechat2RSS with
+consumable image assets.
 
 ## Module Contracts
 

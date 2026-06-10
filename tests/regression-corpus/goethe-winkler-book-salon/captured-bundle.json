@@ -1,0 +1,33 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-b613e3d4891e7aa6c7dfcb30",
+  "sourceId": "3082366806",
+  "sourceName": "德国印象",
+  "provider": "wechat2rss_public_safe_excerpt",
+  "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MjM2NjgwNg==&mid=2653297153&idx=1&sn=97cb4709559a45365956ba44980b239a",
+  "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MjM2NjgwNg==&mid=2653297153&idx=1&sn=97cb4709559a45365956ba44980b239a",
+  "finalUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MjM2NjgwNg==&mid=2653297153&idx=1&sn=97cb4709559a45365956ba44980b239a",
+  "title": "“走向西方”意味着什么？顾彬x李雪涛：温克勒代表作《德意志史》新书沙龙",
+  "authorName": "德国印象",
+  "publishedAt": "2026-06-09T03:02:00.000Z",
+  "capturedAt": "2026-06-10T00:00:00.000Z",
+  "languageHints": [
+    "zh",
+    "en"
+  ],
+  "captureMode": "text_complete",
+  "text": "Title: “走向西方”意味着什么？顾彬x李雪涛：温克勒代表作《德意志史》新书沙龙\nSource: 德国印象\nPublished at: 2026-06-09T03:02:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MzA4MjM2NjgwNg==&mid=2653297153&idx=1&sn=97cb4709559a45365956ba44980b239a\nExpected action: extract\nRationale: Goethe/embassy book salon with a clear public cultural-program format.\nReview/exclusion reasons: source_text_needs_human_schedule_confirmation\nEvent: “走向西方”意味着什么？顾彬x李雪涛新书沙龙\nOrganizer: 北京德国文化中心·歌德学院\nStarts: 2026-06-15T19:00:00+08:00\nVenue: 北京德国文化中心·歌德学院\nRegistration action: unknown\nSummary: Book salon about Heinrich August Winkler’s history of Germany.\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
+  "html": "<article><p>Title: “走向西方”意味着什么？顾彬x李雪涛：温克勒代表作《德意志史》新书沙龙</p><p>Source: 德国印象</p><p>Published at: 2026-06-09T03:02:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MzA4MjM2NjgwNg==&amp;mid=2653297153&amp;idx=1&amp;sn=97cb4709559a45365956ba44980b239a</p><p>Expected action: extract</p><p>Rationale: Goethe/embassy book salon with a clear public cultural-program format.</p><p>Review/exclusion reasons: source_text_needs_human_schedule_confirmation</p><p>Event: “走向西方”意味着什么？顾彬x李雪涛新书沙龙</p><p>Organizer: 北京德国文化中心·歌德学院</p><p>Starts: 2026-06-15T19:00:00+08:00</p><p>Venue: 北京德国文化中心·歌德学院</p><p>Registration action: unknown</p><p>Summary: Book salon about Heinrich August Winkler’s history of Germany.</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "images": [],
+  "links": [],
+  "miniPrograms": [],
+  "contentHash": "841ba9b8eabd0374c707c9d247256decf56d099d74402cbfd643bcda8ddf56d6",
+  "diagnostics": [],
+  "captureWarnings": [
+    {
+      "code": "public_safe_curated_excerpt",
+      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
+      "severity": "info"
+    }
+  ]
+}

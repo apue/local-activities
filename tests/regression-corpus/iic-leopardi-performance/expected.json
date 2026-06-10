@@ -1,0 +1,28 @@
+{
+  "action": "extract",
+  "eventCount": 1,
+  "requiresReservation": true,
+  "evidence": {},
+  "eventDrafts": [
+    {
+      "draftId": "iic-leopardi-performance",
+      "title": "莱奥帕尔迪——走向无限",
+      "organizer": "Istituto Italiano di Cultura di Pechino",
+      "startsAt": "2026-06-16T19:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "意大利驻华使馆文化中心",
+      "registrationAction": "unknown",
+      "scheduleText": "2026年6月16日 19:00",
+      "summary": "Reading and music performance about Giacomo Leopardi."
+    }
+  ],
+  "dedupe": {
+    "decision": "new_event"
+  },
+  "publish": {
+    "state": "needs_review",
+    "reasons": [
+      "registration_or_capacity_details_need_review"
+    ]
+  }
+}

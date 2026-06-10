@@ -1,0 +1,24 @@
+{
+  "action": "extract",
+  "eventCount": 1,
+  "evidence": {},
+  "eventDrafts": [
+    {
+      "draftId": "spanish-nantang-lecture",
+      "title": "讲座《北京南堂的文化交流》",
+      "organizer": "西班牙驻华大使馆文化处",
+      "startsAt": "2026-06-10T18:30:00+08:00",
+      "city": "Beijing",
+      "venueName": "北京南堂庞迪我会议室",
+      "venueAddress": "北京市西城区前门西大街141号",
+      "scheduleText": "2026年6月10日 18:30",
+      "summary": "Free Spanish-language lecture with Chinese simultaneous interpretation."
+    }
+  ],
+  "dedupe": {
+    "decision": "new_event"
+  },
+  "publish": {
+    "state": "public"
+  }
+}

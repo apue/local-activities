@@ -1,0 +1,21 @@
+{
+  "id": "mexico-football-fest-recap",
+  "labels": [
+    "generic_not_event"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "墨西哥驻华大使馆",
+    "url": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743962&idx=1&sn=d46542c5361bef6d4d475078df3d5068",
+    "publishedAt": "2026-06-04T09:56:00.000Z"
+  },
+  "rationale": "Recap/news article about a completed event, not an actionable upcoming activity listing.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}

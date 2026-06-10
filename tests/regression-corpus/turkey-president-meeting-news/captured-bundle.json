@@ -1,0 +1,33 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-72cd3d8618398c4d51806f31",
+  "sourceId": "3585919102",
+  "sourceName": "土耳其驻北京大使馆",
+  "provider": "wechat2rss_public_safe_excerpt",
+  "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MzU4NTkxOTEwMg==&mid=2247538954&idx=1&sn=1c33aab773a850cff7b61dfc757e63a8",
+  "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MzU4NTkxOTEwMg==&mid=2247538954&idx=1&sn=1c33aab773a850cff7b61dfc757e63a8",
+  "finalUrl": "https://mp.weixin.qq.com/s?__biz=MzU4NTkxOTEwMg==&mid=2247538954&idx=1&sn=1c33aab773a850cff7b61dfc757e63a8",
+  "title": "土耳其总统埃尔多安与委内瑞拉代总统罗德里格斯会谈，共商双边关系及国际议题",
+  "authorName": "土耳其驻北京大使馆",
+  "publishedAt": "2026-06-09T10:05:00.000Z",
+  "capturedAt": "2026-06-10T00:00:00.000Z",
+  "languageHints": [
+    "zh",
+    "en"
+  ],
+  "captureMode": "text_complete",
+  "text": "Title: 土耳其总统埃尔多安与委内瑞拉代总统罗德里格斯会谈，共商双边关系及国际议题\nSource: 土耳其驻北京大使馆\nPublished at: 2026-06-09T10:05:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MzU4NTkxOTEwMg==&mid=2247538954&idx=1&sn=1c33aab773a850cff7b61dfc757e63a8\nExpected action: exclude\nRationale: Official diplomatic meeting news with no public attendance path.\nReview/exclusion reasons: official_visit_non_public_news\nThis case is retained as a negative product judgment. The original article content is not mirrored in the public repository.",
+  "html": "<article><p>Title: 土耳其总统埃尔多安与委内瑞拉代总统罗德里格斯会谈，共商双边关系及国际议题</p><p>Source: 土耳其驻北京大使馆</p><p>Published at: 2026-06-09T10:05:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MzU4NTkxOTEwMg==&amp;mid=2247538954&amp;idx=1&amp;sn=1c33aab773a850cff7b61dfc757e63a8</p><p>Expected action: exclude</p><p>Rationale: Official diplomatic meeting news with no public attendance path.</p><p>Review/exclusion reasons: official_visit_non_public_news</p><p>This case is retained as a negative product judgment. The original article content is not mirrored in the public repository.</p></article>",
+  "images": [],
+  "links": [],
+  "miniPrograms": [],
+  "contentHash": "2f8eaa0846c05a192795b85ecb3a7eee18a1f4e9c99fd667a3946fc33dc4f378",
+  "diagnostics": [],
+  "captureWarnings": [
+    {
+      "code": "public_safe_curated_excerpt",
+      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
+      "severity": "info"
+    }
+  ]
+}

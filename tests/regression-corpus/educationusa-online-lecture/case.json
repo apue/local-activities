@@ -1,0 +1,22 @@
+{
+  "id": "educationusa-online-lecture",
+  "labels": [
+    "ordinary_public_event",
+    "registration_required"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "美国驻华大使馆",
+    "url": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=8&sn=26be446b238cd64db05f3658ca82963b",
+    "publishedAt": "2026-06-09T10:30:00.000Z"
+  },
+  "rationale": "Public online EducationUSA lecture with a registration link.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}

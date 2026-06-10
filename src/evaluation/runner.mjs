@@ -195,7 +195,7 @@ export function scoreEvaluationCase({ caseItem, output, error } = {}) {
   const actualPublishState = publishStateFromOutput(output, actualAction);
   const expectedDedupe = expected.dedupe?.decision;
   const actualDedupe = output?.dedupe?.decision;
-  const expectedEvidence = actionableEvidence(expected.evidence ?? {});
+  const expectedEvidence = expectedEvidenceCounts(expected.evidence ?? {});
   const actualEvidence = actionableEvidence(evidenceCountsFromOutput(output));
 
   const errors = [];
@@ -762,7 +762,11 @@ function evidenceCountsFromOutput(output) {
   for (const event of output?.events ?? []) {
     for (const selection of event.evidence ?? []) {
       if (selection.role === "poster") counts.posterCount += 1;
-      if (selection.role === "qr" || selection.role === "registration") {
+      if (
+        selection.role === "qr" ||
+        selection.role === "registration" ||
+        selection.role === "registration_qr"
+      ) {
         counts.qrCodeCount += 1;
       }
     }
@@ -781,6 +785,20 @@ function actionableEvidence(value) {
     registrationUrlCount: integer(value.registrationUrlCount),
     miniProgramActionCount: integer(value.miniProgramActionCount),
   };
+}
+
+function expectedEvidenceCounts(value) {
+  const allowedKeys = [
+    "posterCount",
+    "qrCodeCount",
+    "registrationUrlCount",
+    "miniProgramActionCount",
+  ];
+  return Object.fromEntries(
+    allowedKeys
+      .filter((key) => Object.prototype.hasOwnProperty.call(value, key))
+      .map((key) => [key, integer(value[key])]),
+  );
 }
 
 function evidenceCountsMatch(expected, actual) {

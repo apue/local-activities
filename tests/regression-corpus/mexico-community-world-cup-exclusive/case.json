@@ -1,0 +1,22 @@
+{
+  "id": "mexico-community-world-cup-exclusive",
+  "labels": [
+    "not_general_public",
+    "registration_required"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "墨西哥驻华大使馆",
+    "url": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743873&idx=1&sn=be1ad3f8b02d04a0eb3ce542df95343f",
+    "publishedAt": "2026-06-03T04:00:00.000Z"
+  },
+  "rationale": "Embassy event in Beijing but explicitly exclusive to the Mexican community in China.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}
