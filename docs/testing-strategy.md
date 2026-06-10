@@ -112,10 +112,10 @@ replay artifacts, so model/prompt comparisons inspect the same packet,
 extraction, validation, editor, usage, and publish-trace records as the active
 pipeline.
 
-Until that V5 evaluation runner exists, model evaluation is not an active
-package command. Any future live provider comparison must remain explicit,
-budgeted, data-class scoped, and must not write production drafts or canonical
-events.
+Phase 2 implements this as `pipeline:v5:eval`. The default path must use mocked
+variants, memory/local artifacts, and no hosted writes. Any live provider
+comparison must remain explicit, budgeted, data-class scoped, and must not write
+production drafts or canonical events.
 
 ## Admin/Public UI
 
