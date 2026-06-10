@@ -222,10 +222,10 @@ export function planDataHygieneActions(rows, audit = summarizeDataAudit(rows)) {
 
   for (const draft of eventDrafts.filter((draft) => !draft.triage_decision)) {
     actions.push({
-      action: "retriage_legacy_draft",
+      action: "review_incomplete_pipeline_metadata",
       table: "event_drafts",
       id: draft.id,
-      reason: "Draft predates reset analysis fields or has null triage_decision.",
+      reason: "Draft is missing required pipeline metadata: triage_decision.",
       applySupported: false,
     });
   }
@@ -332,7 +332,7 @@ export function formatDataAuditMarkdown(audit) {
     "",
     "| Signal | Count |",
     "| --- | ---: |",
-    `| missing triage drafts | ${audit.dirtySignals.missingTriageDraftCount} |`,
+    `| incomplete pipeline metadata drafts | ${audit.dirtySignals.missingTriageDraftCount} |`,
     `| duplicate draft groups | ${audit.dirtySignals.duplicateDraftGroupCount} |`,
     `| likely negative drafts | ${audit.dirtySignals.likelyNegativeDraftCount} |`,
     `| invalid data_class rows | ${audit.dirtySignals.invalidDataClassRowCount} |`,

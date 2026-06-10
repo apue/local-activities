@@ -183,8 +183,6 @@ Before closing #309 and #302, run:
 ```bash
 pnpm test
 pnpm typecheck
-pnpm regression:replay -- --corpus-dir tests/regression-corpus --all
-pnpm eval:run -- --corpus-dir tests/regression-corpus --store memory
 pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store memory
 ```
 

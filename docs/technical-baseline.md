@@ -91,7 +91,6 @@ acceptance checks.
 
 ## Active References
 
-- [Event Pipeline Reset Goal](event-pipeline-reset-goal.md)
 - [Event Pipeline Architecture](event-pipeline-architecture.md)
 - [Regression Corpus](regression-corpus.md)
 - [Testing Strategy](testing-strategy.md)

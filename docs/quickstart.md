@@ -115,6 +115,5 @@ Do not use removed local extractor or legacy write commands as production paths.
 
 See:
 
-- [Event Pipeline Reset Goal](event-pipeline-reset-goal.md)
 - [Event Pipeline Architecture](event-pipeline-architecture.md)
 - [Smoke Tests](smoke-tests.md)
