@@ -100,10 +100,12 @@ pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store me
 
 V5 replay is separate from the production publication pipeline. It uses the
 committed corpus, mock providers, memory or local artifacts, and no hosted
-writes. The reset-era evaluation runner has been removed as an active
-entrypoint. The next model-evaluation surface should consume V5 node artifacts
-and preserve the same explicit data-class, budget, and no-production-write
-boundaries.
+writes. Phase 2 model evaluation consumes V5 node artifacts and preserves the
+same explicit data-class, budget, and no-production-write boundaries:
+
+```bash
+pnpm pipeline:v5:eval -- --corpus-dir tests/regression-corpus --all --store memory
+```
 
 The committed corpus is public-safe and text-derived. For poster or
 registration QR quality, use a private local corpus rebuilt from Wechat2RSS with

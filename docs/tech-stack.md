@@ -55,18 +55,18 @@ Configuration uses:
 
 ## Evaluation
 
-V5 model evaluation is not an active package command after the cleanup. The next
-evaluation implementation should run on V5 replay artifacts and compare
-extractor/editor variants through the same contracts used by the pipeline:
+V5 model evaluation runs on V5 replay artifacts and compares extractor/editor
+variants through the same contracts used by the pipeline:
 
 ```text
 provider + model + promptVersion + schemaVersion + parameters
 ```
 
-Future live provider comparisons must be explicit, budgeted, data-class scoped,
-and must not write production drafts or canonical events. The committed corpus
-is public-safe and text-derived; poster/QR quality checks require a private
-local corpus directory with consumable image assets.
+The default command is `pipeline:v5:eval` with mocked variants and memory/local
+artifacts. Live provider comparisons must be explicit, budgeted, data-class
+scoped, and must not write production drafts or canonical events. The committed
+corpus is public-safe and text-derived; poster/QR quality checks require a
+private local corpus directory with consumable image assets.
 
 ## Map And Geocoding
 
@@ -89,5 +89,6 @@ the MVP reset.
 ## Active References
 
 - [Event Pipeline Architecture](event-pipeline-architecture.md)
+- [Event Pipeline V5 Phase 2 Goal](event-pipeline-v5-phase2-goal.md)
 - [Technical Baseline](technical-baseline.md)
 - [Testing Strategy](testing-strategy.md)
