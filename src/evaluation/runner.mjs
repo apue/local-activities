@@ -312,13 +312,13 @@ export async function createSupabaseEvaluationWriter({
         supabase,
         "evaluation_case_results",
         row,
-        "run_id,case_id",
+        "run_id,case_id,data_class",
       );
     },
     async writeUsage(row) {
       const usageRow = cleanObject(row);
-      if (usageRow.mode !== "eval") {
-        throw new Error("evaluation_usage_mode_required");
+      if (usageRow.data_class !== "eval") {
+        throw new Error("evaluation_usage_data_class_required");
       }
       if (!clean(usageRow.evaluation_run_id)) {
         throw new Error("evaluation_usage_run_id_required");
@@ -356,6 +356,7 @@ async function runVariantEvaluation({
   let accumulatedCostMicroCny = 0;
   const runBase = {
     run_id: runId,
+    data_class: "eval",
     provider: variant.provider,
     model: variant.model,
     prompt_version: variant.promptVersion,
@@ -458,7 +459,7 @@ async function runEvaluationCase({
         caseItem,
         bundle: caseItem.bundle,
         context: {
-          mode: "eval",
+          dataClass: "eval",
           runId,
           datasetId: caseItem.case.id,
           sourceProvider: caseItem.bundle?.provider ?? "unknown",
@@ -493,7 +494,7 @@ async function runEvaluationCase({
     cost_micro_cny: costMicroCny,
     latency_ms: usage.latencyMs,
     evaluation_run_id: runId,
-    mode: "eval",
+    data_class: "eval",
     metadata: {
       caseId: caseItem.case.id,
       variantId: variant.id,
@@ -519,6 +520,7 @@ async function runEvaluationCase({
 
   const caseResult = {
     result_id: `eval-result-${runId}-${safeId(caseItem.case.id)}`,
+    data_class: "eval",
     run_id: runId,
     case_id: caseItem.case.id,
     expected_action: score.expectedAction,

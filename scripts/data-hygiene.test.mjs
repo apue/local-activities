@@ -16,6 +16,7 @@ function fixtureRows() {
     eventDrafts: [
       {
         id: 1,
+        data_class: "production",
         article_url: "https://mp.weixin.qq.com/s/real-event",
         title: "北平机器·友谊万岁精酿啤酒节",
         review_state: "pending",
@@ -26,6 +27,7 @@ function fixtureRows() {
       },
       {
         id: 2,
+        data_class: "production",
         article_url: "https://mp.weixin.qq.com/s/real-event",
         title: " 北平机器·友谊万岁精酿啤酒节 ",
         review_state: "pending",
@@ -36,6 +38,7 @@ function fixtureRows() {
       },
       {
         id: 3,
+        data_class: "production",
         article_url: "https://mp.weixin.qq.com/s/official-visit",
         title: "德国联邦经济和能源部长卡特琳娜·赖希北京访问行程",
         review_state: "pending",
@@ -46,8 +49,9 @@ function fixtureRows() {
       },
       {
         id: 4,
-        article_url: "https://mp.weixin.qq.com/s/beiping-fixture",
-        title: "Smoke fixture event",
+        data_class: "production",
+        article_url: "https://mp.weixin.qq.com/s/real-long-running",
+        title: "长期展览样本",
         review_state: "pending",
         processing_state: "ready_for_review",
         triage_decision: "event",
@@ -58,6 +62,7 @@ function fixtureRows() {
     excludedArticles: [
       {
         id: 10,
+        data_class: "production",
         article_url: "https://mp.weixin.qq.com/s/news",
         triage_decision: "not_public_event",
         confidence: 0.96,
@@ -68,46 +73,55 @@ function fixtureRows() {
     evidenceAssets: [
       {
         id: 30,
+        data_class: "production",
         article_url: "https://mp.weixin.qq.com/s/real-event",
         role: "poster",
+        storage_bucket: "event-evidence-assets",
+        storage_path: "production/articles/bundle-real/asset-poster.png",
         source_url: "https://mmbiz.qpic.cn/mmbiz_png/poster",
         created_at: "2026-06-04T05:00:00.000Z",
       },
       {
         id: 31,
+        data_class: "production",
         article_url: "https://mp.weixin.qq.com/s/real-event",
         role: "qr_code",
+        storage_bucket: "event-evidence-assets",
+        storage_path: "production/articles/bundle-real/asset-broken.png",
         source_url: "https://mp.weixin.qq.com/&#34;http://127.0.0.1:4000/img-proxy/?k=bad",
         created_at: "2026-06-04T06:00:00.000Z",
       },
       {
         id: 32,
+        data_class: "production",
         article_url: "https://mp.weixin.qq.com/s/real-event",
         role: "registration_qr",
         source_url: "http://localhost:4000/img-proxy/?k=local",
-        storage_path: "fixture-assets/qr-registration-poster/asset-qr.png",
+        storage_bucket: "event-evidence-assets",
+        storage_path: "articles/bundle-real/asset-qr.png",
         created_at: "2026-06-04T07:00:00.000Z",
       },
     ],
     canonicalEvents: [
       {
         id: 40,
-        event_id: "event-fixture",
-        title: "Fixture case goethe-sonic-exhibition.",
-        source_url: "https://mp.weixin.qq.com/s/goethe-sonic-fixture",
+        data_class: "production",
+        event_id: "event-real",
+        title: "真实活动样本",
+        source_url: "https://mp.weixin.qq.com/s/real-event",
         created_at: "2026-06-04T08:00:00.000Z",
       },
     ],
     articleBundles: [
       {
         id: 45,
-        bundle_id: "bundle-fixture",
+        data_class: "production",
+        bundle_id: "bundle-real",
         source_url: "https://mp.weixin.qq.com/s/real-event",
         canonical_url: "https://mp.weixin.qq.com/s/real-event",
         content_hash: "sha256:bundle",
         storage_bucket: "article-bundles",
-        storage_prefix: "wechat2rss/bundle-fixture",
-        mode: "production",
+        storage_prefix: "wechat2rss/bundle-real",
         status: "processed",
         created_at: "2026-06-04T08:10:00.000Z",
       },
@@ -115,8 +129,9 @@ function fixtureRows() {
     processingLedger: [
       {
         id: 46,
-        ledger_id: "ledger-fixture",
-        article_bundle_id: "bundle-fixture",
+        data_class: "production",
+        ledger_id: "ledger-real",
+        article_bundle_id: "bundle-real",
         source_url: "https://mp.weixin.qq.com/s/real-event",
         state: "needs_review",
         decision: "possible_public_activity",
@@ -126,9 +141,10 @@ function fixtureRows() {
     dedupeDecisions: [
       {
         id: 47,
-        dedupe_id: "dedupe-fixture",
-        draft_id: "draft-fixture",
-        canonical_event_id: "event-fixture",
+        data_class: "production",
+        dedupe_id: "dedupe-real",
+        draft_id: "draft-real",
+        canonical_event_id: "event-real",
         decision: "same_event",
         created_at: "2026-06-04T08:12:00.000Z",
       },
@@ -136,7 +152,8 @@ function fixtureRows() {
     llmUsageLedger: [
       {
         id: 48,
-        usage_id: "usage-fixture",
+        data_class: "production",
+        usage_id: "usage-real",
         operation: "event_extraction",
         provider: "dashscope",
         model: "qwen3-vl-plus",
@@ -148,7 +165,8 @@ function fixtureRows() {
     evaluationRuns: [
       {
         id: 49,
-        run_id: "eval-run-fixture",
+        data_class: "eval",
+        run_id: "eval-run-real",
         provider: "dashscope",
         model: "qwen3-vl-plus",
         status: "completed",
@@ -158,8 +176,9 @@ function fixtureRows() {
     evaluationCaseResults: [
       {
         id: 51,
-        result_id: "eval-result-fixture",
-        run_id: "eval-run-fixture",
+        data_class: "eval",
+        result_id: "eval-result-real",
+        run_id: "eval-run-real",
         case_id: "qr-registration-poster",
         created_at: "2026-06-04T08:15:00.000Z",
       },
@@ -167,10 +186,11 @@ function fixtureRows() {
     sourceChannels: [
       {
         id: 52,
-        source_id: "source-fixture",
+        data_class: "production",
+        source_id: "source-real",
         source_provider: "wechat2rss",
-        source_name: "Fixture Source",
-        source_url: "https://mp.weixin.qq.com/s/source-fixture",
+        source_name: "Real Source",
+        source_url: "https://mp.weixin.qq.com/s/source-real",
         status: "active",
         created_at: "2026-06-04T08:16:00.000Z",
       },
@@ -178,9 +198,10 @@ function fixtureRows() {
     sourceRuns: [
       {
         id: 50,
-        run_id: "run-fixture",
+        data_class: "production",
+        run_id: "run-real",
         status: "success",
-        seed_url: "https://mp.weixin.qq.com/s/beiping-fixture",
+        seed_url: "https://mp.weixin.qq.com/s/real-event",
         started_at: "2026-06-04T08:00:00.000Z",
         finished_at: "2026-06-04T08:01:00.000Z",
         created_at: "2026-06-04T08:00:00.000Z",
@@ -189,8 +210,9 @@ function fixtureRows() {
     collectorFailures: [
       {
         id: 60,
-        failure_id: "failure-fixture",
-        article_url: "https://mp.weixin.qq.com/s/failure-fixture",
+        data_class: "production",
+        failure_id: "failure-real",
+        article_url: "https://mp.weixin.qq.com/s/failure-real",
         stage: "analysis",
         reason: "analysis_response_invalid_schema",
         created_at: "2026-06-04T09:00:00.000Z",
@@ -199,8 +221,9 @@ function fixtureRows() {
     collectorJobs: [
       {
         id: 70,
-        job_id: "job-fixture",
-        seed_url: "https://mp.weixin.qq.com/s/job-fixture",
+        data_class: "production",
+        job_id: "job-real",
+        seed_url: "https://mp.weixin.qq.com/s/job-real",
         state: "completed",
         requested_at: "2026-06-04T09:00:00.000Z",
         finished_at: "2026-06-04T09:01:00.000Z",
@@ -227,7 +250,8 @@ describe("data hygiene audit", () => {
       missingTriageDraftCount: 1,
       duplicateDraftGroupCount: 1,
       likelyNegativeDraftCount: 1,
-      likelyTestRowCount: 3,
+      invalidDataClassRowCount: 0,
+      storageNamespaceMismatchCount: 2,
       brokenEvidenceUrlCount: 1,
       localProxyEvidenceUrlCount: 1,
       excludedArticleCount: 1,
@@ -259,7 +283,7 @@ describe("data hygiene audit", () => {
     expect(actionNames).toContain("review_possible_negative_draft");
     expect(actionNames).toContain("repair_or_drop_broken_evidence_url");
     expect(actionNames).toContain("recapture_or_upload_local_proxy_evidence");
-    expect(actionNames).toContain("review_likely_test_row");
+    expect(actionNames).toContain("repair_storage_namespace_mismatch");
     expect(actions.every((action) => action.applySupported === false)).toBe(true);
     expect(actions.find((action) => action.action === "review_duplicate_draft")).toMatchObject({
       id: 1,

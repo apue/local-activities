@@ -7,7 +7,7 @@ describe("Wechat2RSS capture worker", () => {
     const queries = [];
     const result = await runWechat2RssCaptureOnce({
       now: new Date("2026-06-08T12:00:00.000Z"),
-      mode: "production",
+      dataClass: "production",
       dryRun: true,
       wechat2rss: fakeWechat2Rss({
         accounts: [{ status: "healthy", name: "account" }],
@@ -20,7 +20,7 @@ describe("Wechat2RSS capture worker", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      mode: "production",
+      dataClass: "production",
       dryRun: true,
       checkedCount: 1,
       bundledCount: 1,
@@ -33,13 +33,13 @@ describe("Wechat2RSS capture worker", () => {
     expect(result.bundles[0]).toMatchObject({
       sourceUrl: "https://mp.weixin.qq.com/s/dry-run",
       sourceProvider: "wechat2rss",
-      storagePrefix: expect.stringMatching(/^article-bundles\/bundle_[a-f0-9]{24}$/),
+      storagePrefix: expect.stringMatching(/^article-bundles\/production\/bundle_[a-f0-9]{24}$/),
       edgePayload: {
         sourceUrl: "https://mp.weixin.qq.com/s/dry-run",
         sourceProvider: "wechat2rss",
         sourceId: "source-dry-run",
         sourceName: "Source dry-run",
-        mode: "production",
+        dataClass: "production",
       },
     });
     expect(queries).toEqual([{ after: "20260601", content: true }]);
@@ -67,7 +67,7 @@ describe("Wechat2RSS capture worker", () => {
             sourceProvider: input.manifest.sourceProvider,
             sourceId: input.manifest.sourceId,
             sourceName: input.manifest.sourceName,
-            mode: input.manifest.mode,
+            dataClass: input.manifest.dataClass,
           };
         },
       },
@@ -198,7 +198,7 @@ describe("Wechat2RSS capture worker", () => {
       idempotency: fakeIdempotency({
         existing: {
           bundleId: "bundle_existing",
-          storagePrefix: "article-bundles/bundle_existing",
+          storagePrefix: "article-bundles/production/bundle_existing",
           status: "processed",
         },
       }),
@@ -221,7 +221,7 @@ describe("Wechat2RSS capture worker", () => {
         reason: "already_processed",
         existing: {
           bundleId: "bundle_existing",
-          storagePrefix: "article-bundles/bundle_existing",
+          storagePrefix: "article-bundles/production/bundle_existing",
           status: "processed",
         },
       },

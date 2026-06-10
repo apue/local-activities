@@ -4,17 +4,23 @@ import { validateCapturedArticleBundle } from "../capture/article-bundle.mjs";
 
 export const articleBundleFileVersion = "article-bundle-v1";
 export const defaultArticleBundlesBucket = "article-bundles";
+export const allowedDataClasses = new Set(["production", "eval", "test", "smoke"]);
 
 export function buildArticleBundleFiles({
   bundle,
-  mode = "production",
+  dataClass,
   bucket = defaultArticleBundlesBucket,
-  bundleId = createArticleBundleId({ bundle, mode }),
+  bundleId,
 }) {
   validateCapturedArticleBundle(bundle);
-  const storagePrefix = `${bucket}/${bundleId}`;
+  const resolvedDataClass = normalizeDataClass(dataClass);
+  const resolvedBundleId = bundleId ?? createArticleBundleId({
+    bundle,
+    dataClass: resolvedDataClass,
+  });
+  const storagePrefix = `${bucket}/${resolvedDataClass}/${resolvedBundleId}`;
   const images = (bundle.images ?? []).map((image) =>
-    imageManifestRecord({ image, bundleId }),
+    imageManifestRecord({ image, bundleId: resolvedBundleId }),
   );
   const links = bundle.links ?? [];
   const diagnostics = [
@@ -29,7 +35,7 @@ export function buildArticleBundleFiles({
   const manifest = removeUndefined({
     bundleVersion: articleBundleFileVersion,
     capturedBundleVersion: bundle.version,
-    bundleId,
+    bundleId: resolvedBundleId,
     captureId: bundle.captureId,
     sourceProvider: bundle.provider,
     sourceId: bundle.sourceId,
@@ -44,7 +50,7 @@ export function buildArticleBundleFiles({
     contentHash: bundle.contentHash,
     captureMode: bundle.captureMode,
     languageHints: bundle.languageHints ?? [],
-    mode,
+    dataClass: resolvedDataClass,
     images,
     links,
     miniPrograms: bundle.miniPrograms ?? [],
@@ -67,7 +73,7 @@ export function buildArticleBundleFiles({
   ];
 
   return {
-    bundleId,
+    bundleId: resolvedBundleId,
     bucket,
     storagePrefix,
     manifest,
@@ -75,9 +81,10 @@ export function buildArticleBundleFiles({
   };
 }
 
-export function createArticleBundleId({ bundle, mode = "production" }) {
+export function createArticleBundleId({ bundle, dataClass }) {
   validateCapturedArticleBundle(bundle);
-  return `bundle_${hashText(`${bundle.sourceUrl}\n${bundle.contentHash}\n${mode}`).slice(0, 24)}`;
+  const resolvedDataClass = normalizeDataClass(dataClass);
+  return `bundle_${hashText(`${bundle.sourceUrl}\n${bundle.contentHash}\n${resolvedDataClass}`).slice(0, 24)}`;
 }
 
 export function edgePayloadFromManifest({ manifest, storagePrefix }) {
@@ -90,7 +97,7 @@ export function edgePayloadFromManifest({ manifest, storagePrefix }) {
     sourceProvider: manifest.sourceProvider,
     sourceId: manifest.sourceId,
     sourceName: manifest.sourceName,
-    mode: manifest.mode,
+    dataClass: manifest.dataClass,
   });
 }
 
@@ -162,6 +169,12 @@ function hashText(value) {
 function clean(value) {
   const text = String(value ?? "").trim();
   return text || undefined;
+}
+
+export function normalizeDataClass(value = "production") {
+  const text = clean(value) ?? "production";
+  if (!allowedDataClasses.has(text)) throw new Error(`invalid_data_class:${text}`);
+  return text;
 }
 
 function removeUndefined(input) {

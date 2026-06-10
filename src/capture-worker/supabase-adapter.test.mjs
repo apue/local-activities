@@ -6,7 +6,7 @@ import {
 } from "./supabase-adapter.mjs";
 
 describe("capture worker Supabase adapter", () => {
-  it("checks idempotency by source URL, content hash, and mode", async () => {
+  it("checks idempotency by source URL, content hash, and data class", async () => {
     const calls = [];
     const adapter = createSupabaseCaptureAdapter({
       client: fakeSupabaseClient({
@@ -14,7 +14,7 @@ describe("capture worker Supabase adapter", () => {
         selectResult: {
           data: {
             bundle_id: "bundle_existing",
-            storage_prefix: "article-bundles/bundle_existing",
+            storage_prefix: "article-bundles/production/bundle_existing",
             status: "processed",
           },
           error: null,
@@ -25,12 +25,12 @@ describe("capture worker Supabase adapter", () => {
     const result = await adapter.findExistingBundle({
       sourceUrl: "https://mp.weixin.qq.com/s/existing",
       contentHash: "hash-existing",
-      mode: "production",
+      dataClass: "production",
     });
 
     expect(result).toEqual({
       bundleId: "bundle_existing",
-      storagePrefix: "article-bundles/bundle_existing",
+      storagePrefix: "article-bundles/production/bundle_existing",
       status: "processed",
     });
     expect(calls).toEqual([
@@ -38,7 +38,7 @@ describe("capture worker Supabase adapter", () => {
       ["select", "bundle_id, storage_prefix, status"],
       ["eq", "source_url", "https://mp.weixin.qq.com/s/existing"],
       ["eq", "content_hash", "hash-existing"],
-      ["eq", "mode", "production"],
+      ["eq", "data_class", "production"],
       ["maybeSingle"],
     ]);
   });
@@ -77,16 +77,16 @@ describe("capture worker Supabase adapter", () => {
         images: [{ id: "image-001" }],
         links: [{ url: "https://example.com/signup" }],
         diagnostics: [{ key: "runner", value: "test" }],
-        mode: "production",
+        dataClass: "production",
       },
-      storagePrefix: "article-bundles/bundle_abc123",
+      storagePrefix: "article-bundles/production/bundle_abc123",
     });
 
     expect(calls).toEqual([
       ["storage.from", "article-bundles"],
       [
         "upload",
-        "bundle_abc123/manifest.json",
+        "production/bundle_abc123/manifest.json",
         "{\"ok\":true}",
         {
           contentType: "application/json",
@@ -97,7 +97,7 @@ describe("capture worker Supabase adapter", () => {
       ["storage.from", "article-bundles"],
       [
         "upload",
-        "bundle_abc123/article.txt",
+        "production/bundle_abc123/article.txt",
         "Article text",
         {
           contentType: "text/plain; charset=utf-8",
@@ -113,12 +113,12 @@ describe("capture worker Supabase adapter", () => {
             sourceUrl: "https://mp.weixin.qq.com/s/upload",
             publishedAt: "2026-06-08T10:00:00.000Z",
             bundleId: "bundle_abc123",
-            storagePrefix: "article-bundles/bundle_abc123",
+            storagePrefix: "article-bundles/production/bundle_abc123",
             contentHash: "hash-upload",
             sourceProvider: "wechat2rss",
             sourceId: "source-1",
             sourceName: "Source One",
-            mode: "production",
+            dataClass: "production",
           },
           headers: {
             "x-collector-edge-token": "collector-edge-secret",
@@ -133,12 +133,12 @@ describe("capture worker Supabase adapter", () => {
       sourceUrl: "https://mp.weixin.qq.com/s/upload",
       publishedAt: "2026-06-08T10:00:00.000Z",
       bundleId: "bundle_abc123",
-      storagePrefix: "article-bundles/bundle_abc123",
+      storagePrefix: "article-bundles/production/bundle_abc123",
       contentHash: "hash-upload",
       sourceProvider: "wechat2rss",
       sourceId: "source-1",
       sourceName: "Source One",
-      mode: "production",
+      dataClass: "production",
     });
   });
 
@@ -164,14 +164,14 @@ describe("capture worker Supabase adapter", () => {
         canonicalUrl: "https://mp.weixin.qq.com/s/retry",
         capturedAt: "2026-06-08T11:00:00.000Z",
         contentHash: "hash-retry",
-        mode: "production",
+        dataClass: "production",
       },
-      storagePrefix: "article-bundles/bundle_retry",
+      storagePrefix: "article-bundles/production/bundle_retry",
     });
 
     expect(calls).toContainEqual([
       "upload",
-      "bundle_retry/manifest.json",
+      "production/bundle_retry/manifest.json",
       "{\"retry\":true}",
       {
         contentType: "application/json",
@@ -217,9 +217,9 @@ describe("capture worker Supabase adapter", () => {
         canonicalUrl: "https://mp.weixin.qq.com/s/local-function",
         capturedAt: "2026-06-08T11:00:00.000Z",
         contentHash: "hash-local",
-        mode: "production",
+        dataClass: "production",
       },
-      storagePrefix: "article-bundles/bundle_local",
+      storagePrefix: "article-bundles/production/bundle_local",
     });
 
     expect(calls.some((call) => call[0] === "functions.invoke")).toBe(false);
@@ -238,10 +238,10 @@ describe("capture worker Supabase adapter", () => {
     expect(JSON.parse(fetchCalls[0][1].body)).toMatchObject({
       sourceUrl: "https://mp.weixin.qq.com/s/local-function",
       bundleId: "bundle_local",
-      storagePrefix: "article-bundles/bundle_local",
+      storagePrefix: "article-bundles/production/bundle_local",
       contentHash: "hash-local",
       sourceProvider: "wechat2rss",
-      mode: "production",
+      dataClass: "production",
     });
   });
 
@@ -269,9 +269,9 @@ describe("capture worker Supabase adapter", () => {
           canonicalUrl: "https://mp.weixin.qq.com/s/timeout",
           capturedAt: "2026-06-08T11:00:00.000Z",
           contentHash: "hash-timeout",
-          mode: "production",
+          dataClass: "production",
         },
-        storagePrefix: "article-bundles/bundle_timeout",
+        storagePrefix: "article-bundles/production/bundle_timeout",
       }),
     ).rejects.toThrow("analyze_function_url_timeout");
   });
@@ -295,9 +295,9 @@ describe("capture worker Supabase adapter", () => {
           canonicalUrl: "https://mp.weixin.qq.com/s/timeout-ignored-abort",
           capturedAt: "2026-06-08T11:00:00.000Z",
           contentHash: "hash-timeout-ignored-abort",
-          mode: "production",
+          dataClass: "production",
         },
-        storagePrefix: "article-bundles/bundle_timeout_ignored_abort",
+        storagePrefix: "article-bundles/production/bundle_timeout_ignored_abort",
       }).catch((error) => error instanceof Error ? error.message : String(error)),
       delay(30).then(() => "still_pending"),
     ]);
@@ -320,9 +320,9 @@ describe("capture worker Supabase adapter", () => {
           canonicalUrl: "https://mp.weixin.qq.com/s/missing-token",
           capturedAt: "2026-06-08T11:00:00.000Z",
           contentHash: "hash-missing-token",
-          mode: "production",
+          dataClass: "production",
         },
-        storagePrefix: "article-bundles/bundle_missing_token",
+        storagePrefix: "article-bundles/production/bundle_missing_token",
       }),
     ).rejects.toThrow("collector_edge_token_required");
   });

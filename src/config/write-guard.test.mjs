@@ -26,41 +26,30 @@ describe("write guard", () => {
   it("refuses hosted writes unless explicitly allowed", () => {
     expect(() =>
       assertHostedWriteAllowed({
-        command: "fixture_upload",
+        command: "hosted_write",
         baseUrl: "https://branch-app.vercel.app",
       }),
-    ).toThrow("fixture_upload_requires_allow_hosted_write");
+    ).toThrow("hosted_write_requires_allow_hosted_write");
 
     expect(
       assertHostedWriteAllowed({
-        command: "fixture_upload",
+        command: "hosted_write",
         baseUrl: "https://branch-app.vercel.app",
         allowHostedWrite: true,
       }).kind,
     ).toBe("preview");
   });
 
-  it("requires explicit public fixture data approval for production fixture publication", () => {
-    expect(() =>
-      assertHostedWriteAllowed({
-        command: "e2e_fixture_smoke",
-        baseUrl: "https://whatsinfor.me",
-        allowHostedWrite: true,
-        requiresPublicFixtureData: true,
-      }),
-    ).toThrow("e2e_fixture_smoke_refuses_production_public_fixture_data");
-  });
-
   it("formats target summaries without secrets", () => {
     const summary = writeTargetSummary({
-      command: "fixture_upload",
+      command: "data_hygiene",
       target: classifyWriteTarget("https://branch-app.vercel.app"),
       runId: "run-1",
       writeMode: "collector_upload",
       usageEnvironment: "eval:local",
     });
 
-    expect(summary).toContain("command=fixture_upload");
+    expect(summary).toContain("command=data_hygiene");
     expect(summary).toContain("target=preview");
     expect(summary).toContain("baseUrl=https://branch-app.vercel.app");
     expect(summary).not.toContain("secret");

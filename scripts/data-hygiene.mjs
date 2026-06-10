@@ -18,36 +18,35 @@ const resetStorageBuckets = [
   "eval-artifacts",
 ];
 const resetTableSpecs = [
-  ["evaluation_case_results", "id", "id,result_id,run_id,case_id,created_at"],
-  ["evaluation_runs", "id", "id,run_id,provider,model,status,created_at"],
-  ["dedupe_decisions", "id", "id,dedupe_id,draft_id,canonical_event_id,decision,created_at"],
-  ["processing_ledger", "id", "id,ledger_id,article_bundle_id,source_url,state,decision,created_at"],
-  ["llm_usage_ledger", "id", "id,usage_id,operation,provider,model,status,recorded_at,created_at"],
-  ["canonical_events", "id", "id,event_id,title,summary,source_url,status,created_at"],
+  ["evaluation_case_results", "id", "id,data_class,result_id,run_id,case_id,created_at"],
+  ["evaluation_runs", "id", "id,data_class,run_id,provider,model,status,created_at"],
+  ["dedupe_decisions", "id", "id,data_class,dedupe_id,draft_id,canonical_event_id,decision,created_at"],
+  ["processing_ledger", "id", "id,data_class,ledger_id,article_bundle_id,source_url,state,decision,created_at"],
+  ["llm_usage_ledger", "id", "id,data_class,usage_id,operation,provider,model,status,recorded_at,created_at"],
+  ["canonical_events", "id", "id,data_class,event_id,title,summary,source_url,status,created_at"],
   [
     "event_drafts",
     "id",
-    "id,draft_id,article_url,title,summary,review_state,processing_state,triage_decision,triage_action,public_eligibility,confidence,created_at,poster_asset_id,qr_asset_id,registration_qr_asset_id",
+    "id,data_class,draft_id,article_url,title,summary,review_state,processing_state,triage_decision,triage_action,public_eligibility,confidence,created_at,poster_asset_id,qr_asset_id,registration_qr_asset_id",
   ],
   [
     "excluded_articles",
     "id",
-    "id,article_url,triage_decision,exclusion_reason,confidence,processing_state,created_at",
+    "id,data_class,article_url,triage_decision,exclusion_reason,confidence,processing_state,created_at",
   ],
-  ["evidence_assets", "id", "id,article_url,role,media_type,source_url,storage_path,created_at"],
+  ["evidence_assets", "id", "id,data_class,article_url,role,media_type,source_url,storage_bucket,storage_path,public_url,created_at"],
   [
     "article_bundles",
     "id",
-    "id,bundle_id,source_url,canonical_url,content_hash,storage_bucket,storage_prefix,mode,status,created_at",
+    "id,data_class,bundle_id,source_url,canonical_url,content_hash,storage_bucket,storage_prefix,status,created_at",
   ],
-  ["collector_failures", "id", "id,failure_id,article_url,stage,reason,created_at"],
-  ["source_runs", "id", "id,run_id,status,seed_url,started_at,finished_at,created_at"],
-  ["collector_jobs", "id", "id,job_id,seed_url,state,requested_at,finished_at,created_at"],
-  ["source_channels", "id", "id,source_id,source_provider,source_name,source_url,status,created_at"],
+  ["collector_failures", "id", "id,data_class,failure_id,article_url,stage,reason,created_at"],
+  ["source_runs", "id", "id,data_class,run_id,status,seed_url,started_at,finished_at,created_at"],
+  ["collector_jobs", "id", "id,data_class,job_id,seed_url,state,requested_at,finished_at,created_at"],
+  ["source_channels", "id", "id,data_class,source_id,source_provider,source_name,source_url,status,created_at"],
 ];
 
-const likelyTestPattern =
-  /\/s\/(example|local|job|text|activity|agent-smoke|e2e-fixture|[^/?#]*fixture)|example\.com|activities\.example|fixture case|fixture-assets\/|fixture-/i;
+const allowedDataClasses = new Set(["production", "eval", "test", "smoke"]);
 const likelyNegativeDraftPattern =
   /部长|访问|会见|声明|认可|无口蹄疫|食品展|回顾|新闻|president|minister|official visit|statement|trade/i;
 
@@ -127,42 +126,25 @@ export function summarizeDataAudit(rows) {
   const likelyNegativeDrafts = eventDrafts.filter((draft) =>
     likelyNegativeDraftPattern.test(`${draft.title ?? ""} ${draft.article_url ?? ""}`),
   );
-  const likelyTestRows = [
-    ...eventDrafts
-      .filter((draft) =>
-        isLikelyTestRow(draft.article_url, draft.title, draft.summary),
-      )
-      .map((draft) => ({ table: "event_drafts", id: draft.id, url: draft.article_url })),
-    ...excludedArticles
-      .filter((article) =>
-        isLikelyTestRow(
-          article.article_url,
-          article.triage_decision,
-          article.exclusion_reason,
-        ),
-      )
-      .map((article) => ({
-        table: "excluded_articles",
-        id: article.id,
-        url: article.article_url,
+  const invalidDataClassRows = scopedRows(rows).filter(
+    (row) => !allowedDataClasses.has(row.dataClass),
+  );
+  const storageNamespaceMismatches = [
+    ...articleBundles
+      .filter((bundle) => !validBundleStorageNamespace(bundle))
+      .map((bundle) => ({
+        table: "article_bundles",
+        id: bundle.id,
+        dataClass: bundle.data_class,
+        storagePrefix: bundle.storage_prefix,
       })),
     ...evidenceAssets
-      .filter((asset) =>
-        isLikelyTestRow(asset.article_url, asset.source_url, asset.storage_path),
-      )
+      .filter((asset) => !validEvidenceStorageNamespace(asset))
       .map((asset) => ({
         table: "evidence_assets",
         id: asset.id,
-        url: asset.article_url,
-      })),
-    ...canonicalEvents
-      .filter((event) =>
-        isLikelyTestRow(event.source_url, event.title, event.summary, event.event_id),
-      )
-      .map((event) => ({
-        table: "canonical_events",
-        id: event.id,
-        url: event.source_url,
+        dataClass: asset.data_class,
+        storagePath: asset.storage_path,
       })),
   ];
   const brokenEvidenceUrls = evidenceAssets.filter((asset) =>
@@ -202,14 +184,16 @@ export function summarizeDataAudit(rows) {
     duplicateDraftGroups,
     missingTriageDrafts: summarizeRows(missingTriageDrafts),
     likelyNegativeDrafts: summarizeRows(likelyNegativeDrafts),
-    likelyTestRows,
+    invalidDataClassRows,
+    storageNamespaceMismatches,
     brokenEvidenceUrls: summarizeRows(brokenEvidenceUrls),
     localProxyEvidenceUrls: summarizeRows(localProxyEvidenceUrls),
     dirtySignals: {
       missingTriageDraftCount: missingTriageDrafts.length,
       duplicateDraftGroupCount: duplicateDraftGroups.length,
       likelyNegativeDraftCount: likelyNegativeDrafts.length,
-      likelyTestRowCount: likelyTestRows.length,
+      invalidDataClassRowCount: invalidDataClassRows.length,
+      storageNamespaceMismatchCount: storageNamespaceMismatches.length,
       brokenEvidenceUrlCount: brokenEvidenceUrls.length,
       localProxyEvidenceUrlCount: localProxyEvidenceUrls.length,
       excludedArticleCount: excludedArticles.length,
@@ -226,7 +210,6 @@ export function summarizeDataAudit(rows) {
     },
     preservationCandidates: buildPreservationCandidates(rows, {
       likelyNegativeDrafts,
-      likelyTestRows,
       canonicalEvents,
     }),
   };
@@ -299,12 +282,22 @@ export function planDataHygieneActions(rows, audit = summarizeDataAudit(rows)) {
     });
   }
 
-  for (const row of audit.likelyTestRows) {
+  for (const row of audit.invalidDataClassRows) {
     actions.push({
-      action: "review_likely_test_row",
+      action: "repair_invalid_data_class",
       table: row.table,
       id: row.id,
-      reason: "URL looks like fixture/smoke/test data.",
+      reason: `Row has missing or invalid data_class: ${row.dataClass ?? "missing"}.`,
+      applySupported: false,
+    });
+  }
+
+  for (const row of audit.storageNamespaceMismatches) {
+    actions.push({
+      action: "repair_storage_namespace_mismatch",
+      table: row.table,
+      id: row.id,
+      reason: "Storage path/prefix is not namespaced by the row data_class.",
       applySupported: false,
     });
   }
@@ -342,7 +335,8 @@ export function formatDataAuditMarkdown(audit) {
     `| missing triage drafts | ${audit.dirtySignals.missingTriageDraftCount} |`,
     `| duplicate draft groups | ${audit.dirtySignals.duplicateDraftGroupCount} |`,
     `| likely negative drafts | ${audit.dirtySignals.likelyNegativeDraftCount} |`,
-    `| likely test rows | ${audit.dirtySignals.likelyTestRowCount} |`,
+    `| invalid data_class rows | ${audit.dirtySignals.invalidDataClassRowCount} |`,
+    `| storage namespace mismatches | ${audit.dirtySignals.storageNamespaceMismatchCount} |`,
     `| broken evidence URLs | ${audit.dirtySignals.brokenEvidenceUrlCount} |`,
     `| local proxy evidence URLs | ${audit.dirtySignals.localProxyEvidenceUrlCount} |`,
     "",
@@ -922,10 +916,6 @@ function normalizeTitle(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-function isLikelyTestRow(...values) {
-  return values.some((value) => likelyTestPattern.test(String(value ?? "")));
-}
-
 function buildPreservationCandidates(rows, context) {
   const candidates = new Map();
   for (const draft of context.likelyNegativeDrafts) {
@@ -935,25 +925,6 @@ function buildPreservationCandidates(rows, context) {
       title: draft.title,
       table: "event_drafts",
       id: draft.id,
-    });
-  }
-  for (const event of context.canonicalEvents.filter((row) =>
-    isLikelyTestRow(row.source_url, row.title, row.summary, row.event_id),
-  )) {
-    addPreservationCandidate(candidates, {
-      reason: "published_test_or_fixture_event",
-      articleUrl: event.source_url,
-      title: event.title,
-      table: "canonical_events",
-      id: event.id,
-    });
-  }
-  for (const row of context.likelyTestRows) {
-    addPreservationCandidate(candidates, {
-      reason: "likely_test_row",
-      articleUrl: row.url,
-      table: row.table,
-      id: row.id,
     });
   }
   for (const article of rows.excludedArticles ?? []) {
@@ -966,6 +937,47 @@ function buildPreservationCandidates(rows, context) {
     });
   }
   return [...candidates.values()];
+}
+
+function scopedRows(rows) {
+  return [
+    ["event_drafts", rows.eventDrafts],
+    ["excluded_articles", rows.excludedArticles],
+    ["evidence_assets", rows.evidenceAssets],
+    ["canonical_events", rows.canonicalEvents],
+    ["article_bundles", rows.articleBundles],
+    ["processing_ledger", rows.processingLedger],
+    ["dedupe_decisions", rows.dedupeDecisions],
+    ["llm_usage_ledger", rows.llmUsageLedger],
+    ["evaluation_runs", rows.evaluationRuns],
+    ["evaluation_case_results", rows.evaluationCaseResults],
+    ["source_channels", rows.sourceChannels],
+    ["source_runs", rows.sourceRuns],
+    ["collector_failures", rows.collectorFailures],
+    ["collector_jobs", rows.collectorJobs],
+  ].flatMap(([table, tableRows]) =>
+    (tableRows ?? []).map((row) => ({
+      table,
+      id: row.id,
+      dataClass: row.data_class,
+    }))
+  );
+}
+
+function validBundleStorageNamespace(bundle) {
+  const dataClass = String(bundle.data_class ?? "").trim();
+  const bucket = String(bundle.storage_bucket ?? "article-bundles").trim();
+  const prefix = String(bundle.storage_prefix ?? "").trim();
+  if (!allowedDataClasses.has(dataClass)) return false;
+  return prefix.startsWith(`${bucket}/${dataClass}/`);
+}
+
+function validEvidenceStorageNamespace(asset) {
+  const dataClass = String(asset.data_class ?? "").trim();
+  const path = String(asset.storage_path ?? "").trim();
+  if (!path) return true;
+  if (!allowedDataClasses.has(dataClass)) return false;
+  return path.startsWith(`${dataClass}/`);
 }
 
 function addPreservationCandidate(candidates, candidate) {

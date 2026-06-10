@@ -25,21 +25,12 @@ export function assertHostedWriteAllowed({
   command,
   baseUrl,
   allowHostedWrite = false,
-  allowPublicFixtureData = false,
-  requiresPublicFixtureData = false,
 }) {
   const target = classifyWriteTarget(baseUrl);
   if (target.kind === "missing") throw new Error(`${command}_missing_target_base_url`);
   const hosted = ["hosted", "preview", "production"].includes(target.kind);
   if (hosted && !allowHostedWrite) {
     throw new Error(`${command}_requires_allow_hosted_write`);
-  }
-  if (
-    requiresPublicFixtureData &&
-    target.kind === "production" &&
-    !allowPublicFixtureData
-  ) {
-    throw new Error(`${command}_refuses_production_public_fixture_data`);
   }
   return target;
 }

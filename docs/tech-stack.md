@@ -61,10 +61,11 @@ Evaluation runs from the Node.js runner and compares extractor variants:
 provider + model + promptVersion + schemaVersion + parameters
 ```
 
-The default CI-safe command uses memory storage and mocked variants:
+The default CI-safe command uses memory storage, mocked variants, and an
+explicit corpus:
 
 ```bash
-pnpm eval:run -- --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
+pnpm eval:run -- --corpus-dir <path> --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
 ```
 
 Local artifact runs write to `tmp/evaluation-runs` by default. Supabase writes
@@ -73,7 +74,7 @@ require `--store supabase` and are limited to `evaluation_runs`,
 provider runs are opt-in:
 
 ```bash
-pnpm eval:run -- --variant live-configured --allow-live --max-cost-cny <n>
+pnpm eval:run -- --corpus-dir <path> --variant live-configured --allow-live --max-cost-cny <n>
 ```
 
 ## Map And Geocoding

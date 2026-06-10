@@ -39,10 +39,10 @@ describe("capture worker bundle files", () => {
       diagnostics: [{ key: "wechat2rss_raw_id", value: "raw-1" }],
     });
 
-    const result = buildArticleBundleFiles({ bundle, mode: "production" });
+    const result = buildArticleBundleFiles({ bundle, dataClass: "production" });
 
     expect(result.bundleId).toMatch(/^bundle_[a-f0-9]{24}$/);
-    expect(result.storagePrefix).toBe(`article-bundles/${result.bundleId}`);
+    expect(result.storagePrefix).toBe(`article-bundles/production/${result.bundleId}`);
     expect(result.files.map((file) => file.path).sort()).toEqual([
       "article.html",
       "article.txt",
@@ -72,7 +72,7 @@ describe("capture worker bundle files", () => {
       publishedAt: "2026-06-08T10:00:00.000Z",
       capturedAt: "2026-06-08T11:00:00.000Z",
       contentHash: bundle.contentHash,
-      mode: "production",
+      dataClass: "production",
       images: [
         {
           id: "image-001",
@@ -118,7 +118,7 @@ describe("capture worker bundle files", () => {
       ],
     });
 
-    const result = buildArticleBundleFiles({ bundle, mode: "production" });
+    const result = buildArticleBundleFiles({ bundle, dataClass: "production" });
     const imageFile = result.files.find((file) => file.path === "images/image-001.jpg");
     const manifest = JSON.parse(
       result.files.find((file) => file.path === "manifest.json").body,

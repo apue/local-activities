@@ -67,7 +67,7 @@ class RouteAdminStore implements AdminStore {
     confidence: 0.97,
     provider: "dashscope",
     model: "qwen3-vl-plus",
-    mode: "production",
+    dataClass: "production",
     draftId: "draft-1",
     canonicalEventId: "event-1",
     metadata: {},
@@ -415,7 +415,7 @@ describe("admin route handlers", () => {
   it("lists processing ledger rows for admin article audit", async () => {
     const response = await handleAdminListProcessingLedger(
       new Request(
-        "https://example.com/api/admin/processing-ledger?state=published&mode=production",
+        "https://example.com/api/admin/processing-ledger?state=published&dataClass=production",
         {
           headers: { authorization: "Bearer admin-secret" },
         },

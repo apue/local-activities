@@ -1,10 +1,13 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { loadRegressionCorpus } from "../../scripts/regression-corpus-replay.mjs";
+import {
+  loadRegressionCorpus,
+  requiredCoverageLabels,
+} from "../../scripts/regression-corpus-replay.mjs";
 import {
   createConfiguredLiveVariant,
   createLocalEvaluationWriter,
@@ -17,7 +20,7 @@ import {
 
 describe("evaluation runner", () => {
   it("scores false negatives and false positives as hard failures", async () => {
-    const corpus = await loadRegressionCorpus();
+    const corpus = await loadEvaluationCorpus();
     const positive = corpus.cases.find((item) => item.case.id === "korean-red-flavor");
     const negative = corpus.cases.find((item) => item.case.id === "official-visit-news");
 
@@ -61,7 +64,7 @@ describe("evaluation runner", () => {
   });
 
   it("compares two deterministic mock extractor variants without production writes", async () => {
-    const corpus = await loadRegressionCorpus();
+    const corpus = await loadEvaluationCorpus();
     const writer = createMemoryEvaluationWriter();
 
     const result = await runEvaluation({
@@ -74,12 +77,12 @@ describe("evaluation runner", () => {
     expect(result).toMatchObject({
       ok: true,
       runCount: 2,
-      caseCount: 15,
+      caseCount: 4,
     });
     const rows = writer.state.rows;
     expect(rows.evaluation_runs).toHaveLength(2);
-    expect(rows.evaluation_case_results).toHaveLength(30);
-    expect(rows.llm_usage_ledger).toHaveLength(30);
+    expect(rows.evaluation_case_results).toHaveLength(8);
+    expect(rows.llm_usage_ledger).toHaveLength(8);
     expect(Object.keys(rows)).toEqual([
       "evaluation_runs",
       "evaluation_case_results",
@@ -88,11 +91,11 @@ describe("evaluation runner", () => {
     expect(rows.evaluation_runs[0]).toMatchObject({
       run_id: "eval-mock-expected-v1-20260608120000",
       status: "completed",
-      pass_count: 15,
+      pass_count: 4,
       fail_count: 0,
     });
     expect(rows.evaluation_runs[1].summary.falseNegativeCount).toBeGreaterThan(0);
-    expect(rows.llm_usage_ledger.every((row) => row.mode === "eval")).toBe(true);
+    expect(rows.llm_usage_ledger.every((row) => row.data_class === "eval")).toBe(true);
     expect(rows.llm_usage_ledger.every((row) => row.operation === "evaluation_case")).toBe(true);
     expect([...writer.artifacts().keys()]).toContain(
       "runs/eval-mock-expected-v1-20260608120000/report.json",
@@ -100,7 +103,7 @@ describe("evaluation runner", () => {
   });
 
   it("writes local evaluation artifacts for reports and per-case details", async () => {
-    const corpus = await loadRegressionCorpus();
+    const corpus = await loadEvaluationCorpus();
     const artifactDir = await mkdtemp(path.join(os.tmpdir(), "evaluation-artifacts-"));
     const writer = createLocalEvaluationWriter({ artifactDir });
 
@@ -194,7 +197,7 @@ describe("evaluation runner", () => {
 
     await variant.analyze({
       context: {
-        mode: "eval",
+        dataClass: "eval",
         runId: "eval-test-run",
       },
       caseItem: {
@@ -242,7 +245,7 @@ describe("evaluation runner", () => {
   });
 
   it("marks vision live eval cases without consumable assets invalid before provider calls", async () => {
-    const corpus = await loadRegressionCorpus();
+    const corpus = await loadEvaluationCorpus();
     const writer = createMemoryEvaluationWriter();
     let fetchCount = 0;
     const variant = createConfiguredLiveVariant({
@@ -281,7 +284,7 @@ describe("evaluation runner", () => {
   });
 
   it("marks a run failed when live budget checks abort after the run starts", async () => {
-    const corpus = await loadRegressionCorpus();
+    const corpus = await loadEvaluationCorpus();
     const writer = createMemoryEvaluationWriter();
     const liveVariant = {
       id: "live-test",
@@ -366,7 +369,7 @@ describe("evaluation runner", () => {
     });
     await writer.writeUsage({
       usage_id: "usage-1",
-      mode: "eval",
+      data_class: "eval",
       evaluation_run_id: "eval-1",
     });
     await writer.writeArtifact("runs/eval-1/report.json", { ok: true });
@@ -378,7 +381,7 @@ describe("evaluation runner", () => {
     ]);
     expect(calls.map((item) => item.options.onConflict)).toEqual([
       "run_id",
-      "run_id,case_id",
+      "run_id,case_id,data_class",
       "usage_id",
     ]);
     expect(storageCalls).toEqual([
@@ -419,13 +422,217 @@ describe("evaluation runner", () => {
       },
     });
 
-    await expect(writer.writeUsage({ usage_id: "usage-1", mode: "production" }))
-      .rejects.toThrow("evaluation_usage_mode_required");
-    await expect(writer.writeUsage({ usage_id: "usage-2", mode: "eval" }))
+    await expect(writer.writeUsage({ usage_id: "usage-1", data_class: "production" }))
+      .rejects.toThrow("evaluation_usage_data_class_required");
+    await expect(writer.writeUsage({ usage_id: "usage-2", data_class: "eval" }))
       .rejects.toThrow("evaluation_usage_run_id_required");
   });
 });
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
+}
+
+async function loadEvaluationCorpus() {
+  return await loadRegressionCorpus({ corpusDir: await createEvaluationCorpusDir() });
+}
+
+async function createEvaluationCorpusDir() {
+  const corpusDir = await mkdtemp(path.join(os.tmpdir(), "evaluation-corpus-"));
+  const koreanLabels = [
+    "ordinary_public_event",
+    "registration_required",
+    "qr_registration",
+    "poster_or_image_dominant",
+    "mini_program_action_registration",
+    "multi_event_article",
+    "recurring_or_multiple_occurrences",
+    "long_running_exhibition",
+    "duplicate_or_update",
+    "information_sparse_requires_review",
+  ];
+  const officialVisitLabels = [
+    "official_visit_non_public_news",
+    "not_general_public",
+    "generic_not_event",
+    "not_beijing",
+  ];
+  const qrPosterLabels = [
+    "qr_registration",
+    "poster_or_image_dominant",
+    "qr_present_not_registration",
+  ];
+  await writeJson(path.join(corpusDir, "manifest.json"), {
+    version: "event-pipeline-regression-corpus-v1",
+    description: "Temporary evaluation-runner corpus.",
+    cases: [
+      { id: "korean-red-flavor", labels: koreanLabels },
+      { id: "qr-registration-poster", labels: qrPosterLabels },
+      { id: "official-visit-news", labels: officialVisitLabels },
+      { id: "capture-fetch-blocked", labels: ["capture_failure"] },
+    ],
+  });
+  await writeSuccessCase({
+    corpusDir,
+    id: "korean-red-flavor",
+    labels: koreanLabels,
+    bundle: bundleFixture({
+      id: "korean-red-flavor",
+      text: "A public Korean food event in Beijing with registration.",
+      images: [
+        { id: "poster-1", role: "poster", sourceUrl: "https://mmbiz.qpic.cn/poster.jpg" },
+        {
+          id: "qr-1",
+          role: "registration",
+          alt: "扫码报名",
+          sourceUrl: "https://mmbiz.qpic.cn/qr.jpg",
+        },
+      ],
+    }),
+    expected: {
+      action: "extract",
+      eventCount: 1,
+      requiresReservation: true,
+      evidence: { posterCount: 1, qrCodeCount: 1 },
+      eventDrafts: [{
+        draftId: "draft-1",
+        title: "Korean red flavor",
+        organizer: "Korean Cultural Center",
+        startsAt: "2026-06-13T14:00:00+08:00",
+        venueName: "Korean Cultural Center Beijing",
+      }],
+      dedupe: { decision: "new_event" },
+      publish: { state: "needs_review" },
+    },
+  });
+  await writeSuccessCase({
+    corpusDir,
+    id: "qr-registration-poster",
+    labels: qrPosterLabels,
+    caseMeta: {
+      evaluation: {
+        liveVisionEligible: false,
+        liveVisionReason: "No consumable poster or QR asset in this temporary corpus case.",
+      },
+    },
+    bundle: bundleFixture({
+      id: "qr-registration-poster",
+      text: "Poster-only registration event.",
+      images: [
+        { id: "poster-1", role: "poster", sourceUrl: "https://mmbiz.qpic.cn/poster-only.jpg" },
+      ],
+    }),
+    expected: {
+      action: "extract",
+      eventCount: 1,
+      evidence: { posterCount: 1 },
+      eventDrafts: [{
+        draftId: "draft-1",
+        title: "Poster registration event",
+        startsAt: "2026-06-14T15:00:00+08:00",
+      }],
+      dedupe: { decision: "new_event" },
+      publish: { state: "needs_review" },
+    },
+  });
+  await writeSuccessCase({
+    corpusDir,
+    id: "official-visit-news",
+    labels: officialVisitLabels,
+    bundle: bundleFixture({
+      id: "official-visit-news",
+      text: "Official visit news. Not open to ordinary attendees.",
+    }),
+    expected: {
+      action: "exclude",
+      eventCount: 0,
+      evidence: {},
+      dedupe: { decision: "insufficient_info" },
+      publish: { state: "rejected", reasons: ["official_visit_non_public_news"] },
+    },
+  });
+  await writeFailureCase({ corpusDir, id: "capture-fetch-blocked" });
+  for (const label of requiredCoverageLabels) {
+    const manifest = JSON.parse(await readFile(path.join(corpusDir, "manifest.json"), "utf8"));
+    if (!manifest.cases.some((item) => item.labels.includes(label))) {
+      throw new Error(`temporary_evaluation_corpus_missing_label:${label}`);
+    }
+  }
+  return corpusDir;
+}
+
+async function writeSuccessCase({
+  corpusDir,
+  id,
+  labels,
+  bundle,
+  expected,
+  caseMeta = {},
+}) {
+  const caseDir = path.join(corpusDir, id);
+  await mkdir(caseDir, { recursive: true });
+  await writeJson(path.join(caseDir, "case.json"), {
+    id,
+    labels,
+    source: { type: "captured_bundle", url: bundle.sourceUrl },
+    rationale: `Temporary evaluation-runner case ${id}.`,
+    ...caseMeta,
+  });
+  await writeJson(path.join(caseDir, "captured-bundle.json"), bundle);
+  await writeJson(path.join(caseDir, "expected.json"), expected);
+}
+
+async function writeFailureCase({ corpusDir, id }) {
+  const caseDir = path.join(corpusDir, id);
+  await mkdir(caseDir, { recursive: true });
+  await writeJson(path.join(caseDir, "case.json"), {
+    id,
+    labels: ["capture_failure"],
+    source: { type: "capture_failure", url: "https://mp.weixin.qq.com/s/blocked" },
+    rationale: "Temporary capture failure case.",
+  });
+  await writeJson(path.join(caseDir, "capture-result.json"), {
+    version: "capture-result-v1",
+    ok: false,
+    failure: {
+      stage: "page_fetch",
+      reason: "fetch_blocked",
+      message: "Fetch blocked by source.",
+      retryable: true,
+      sourceUrl: "https://mp.weixin.qq.com/s/blocked",
+      diagnostics: [],
+    },
+    diagnostics: [],
+    captureWarnings: [],
+  });
+  await writeJson(path.join(caseDir, "expected.json"), {
+    action: "capture_failure",
+    eventCount: 0,
+    sourceHealth: { failureReason: "fetch_blocked" },
+  });
+}
+
+function bundleFixture({ id, text, images = [] }) {
+  return {
+    version: "captured-article-bundle-v1",
+    captureId: `capture-${id}`,
+    provider: "local_fixture",
+    sourceUrl: `https://mp.weixin.qq.com/s/${id}`,
+    canonicalUrl: `https://mp.weixin.qq.com/s/${id}`,
+    finalUrl: `https://mp.weixin.qq.com/s/${id}`,
+    capturedAt: "2026-06-08T00:00:00.000Z",
+    captureMode: "html_complete",
+    text,
+    html: `<article>${text}</article>`,
+    images,
+    links: [],
+    miniPrograms: [],
+    diagnostics: [],
+    captureWarnings: [],
+    contentHash: `sha256-${id}`,
+  };
+}
+
+async function writeJson(filePath, value) {
+  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }

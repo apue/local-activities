@@ -141,12 +141,12 @@ class MemoryAdminStore implements AdminStore {
 
   async listProcessingLedger(input: {
     state?: AdminProcessingLedgerRecord["state"];
-    mode?: AdminProcessingLedgerRecord["mode"];
+    dataClass?: AdminProcessingLedgerRecord["dataClass"];
   }) {
     return this.ledgerRows.filter(
       (row) =>
         (!input.state || row.state === input.state) &&
-        (!input.mode || row.mode === input.mode),
+        (!input.dataClass || row.dataClass === input.dataClass),
     );
   }
 
@@ -434,7 +434,7 @@ describe("admin service", () => {
         confidence: 0.98,
         provider: "dashscope",
         model: "qwen3-vl-plus",
-        mode: "production",
+        dataClass: "production",
         metadata: {},
         createdAt: "2026-06-08T01:00:00.000Z",
       },
@@ -445,7 +445,7 @@ describe("admin service", () => {
         decision: "non_public_news",
         reason: "No public attendance signal.",
         confidence: 0.92,
-        mode: "production",
+        dataClass: "production",
         metadata: {},
         createdAt: "2026-06-08T02:00:00.000Z",
       },

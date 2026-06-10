@@ -49,7 +49,7 @@ describe("admin readonly smoke", () => {
       }
 
       if (
-        request.path === "/api/admin/processing-ledger?mode=production" &&
+        request.path === "/api/admin/processing-ledger?dataClass=production" &&
         request.headers.cookie === "admin_session=admin-secret"
       ) {
         return jsonResult(200, { ok: true, ledger: [] });
@@ -109,7 +109,7 @@ describe("admin readonly smoke", () => {
       "/api/admin/collector-jobs",
       "/api/admin/event-drafts",
       "/api/admin/excluded-articles",
-      "/api/admin/processing-ledger?mode=production",
+      "/api/admin/processing-ledger?dataClass=production",
       "/api/admin/evaluation-runs",
       "/api/admin/llm-usage?range=today",
       "/api/admin/llm-usage?range=7d",
@@ -203,7 +203,7 @@ describe("admin readonly smoke", () => {
       },
       {
         name: "admin_processing_ledger_json",
-        path: "/api/admin/processing-ledger?mode=production",
+        path: "/api/admin/processing-ledger?dataClass=production",
         authorization: undefined,
         cookie: "admin_session=admin-secret",
       },

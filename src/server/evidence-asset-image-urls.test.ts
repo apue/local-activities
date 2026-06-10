@@ -24,15 +24,15 @@ describe("evidence asset image URL resolution", () => {
     });
   });
 
-  it("rejects fixture placeholders and source-site image URLs from direct payloads", () => {
+  it("rejects source-site image URLs from direct payloads", () => {
     expect(
       resolveEvidenceAssetImageUrlsFromRows(
         {
           posterImageUrl: "https://mmbiz.qpic.cn/poster.png",
           posterImageAlt: "Source-site poster",
           posterImageSourceUrl: "https://mp.weixin.qq.com/source-poster",
-          registrationQrImageUrl: "fixture-assets/qr/register.png",
-          registrationQrImageAlt: "Fixture QR",
+          registrationQrImageUrl: "https://mp.weixin.qq.com/qr.png",
+          registrationQrImageAlt: "Source-site QR",
         },
         [],
       ),
@@ -46,20 +46,22 @@ describe("evidence asset image URL resolution", () => {
           posterAssetId: "asset-poster-1",
           registrationQrAssetId: "asset-qr-1",
           posterImageUrl: "https://mmbiz.qpic.cn/poster.png",
-          registrationQrImageUrl: "fixture-assets/qr/register.png",
+          registrationQrImageUrl: "https://mp.weixin.qq.com/qr.png",
         },
         [
           {
             asset_id: "asset-poster-1",
             role: "poster",
-            storage_path: "https://blob.example.com/posters/activity.png",
+            storage_path: "production/articles/bundle-1/poster.png",
+            public_url: "https://blob.example.com/posters/activity.png",
             source_url: "https://mmbiz.qpic.cn/source-poster.png",
             text_content: "Activity poster",
           },
           {
             asset_id: "asset-qr-1",
             role: "registration",
-            storage_path: "https://blob.example.com/qr/register.png",
+            storage_path: "production/articles/bundle-1/qr.png",
+            public_url: "https://blob.example.com/qr/register.png",
             source_url: "https://mmbiz.qpic.cn/source-qr.png",
             text_content: "Registration QR",
           },

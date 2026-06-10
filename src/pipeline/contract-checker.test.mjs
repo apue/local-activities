@@ -10,7 +10,7 @@ describe("pipeline contract checker", () => {
     expect(() =>
       checkPipelineContract({
         nodeName: "analysis_input",
-        context: { mode: "eval", runId: "eval-contract-test" },
+        context: { dataClass: "eval", runId: "eval-contract-test" },
         payload: {
           images: [{
             imageId: "poster",
@@ -26,7 +26,7 @@ describe("pipeline contract checker", () => {
   it("reports when analysis image assets are raw capture references", () => {
     const violations = collectPipelineContractViolations({
       nodeName: "analysis_input",
-      context: { mode: "eval", runId: "eval-contract-test" },
+      context: { dataClass: "eval", runId: "eval-contract-test" },
       payload: {
         images: [{
           imageId: "poster",
@@ -49,7 +49,7 @@ describe("pipeline contract checker", () => {
     expect(() =>
       checkPipelineContract({
         nodeName: "analysis_input",
-        context: { mode: "eval", runId: "eval-contract-test" },
+        context: { dataClass: "eval", runId: "eval-contract-test" },
         payload: {
           images: [{
             imageId: "poster",
@@ -64,7 +64,7 @@ describe("pipeline contract checker", () => {
   it("reports analysis inputs explicitly marked not live-vision eligible", () => {
     const violations = collectPipelineContractViolations({
       nodeName: "analysis_input",
-      context: { mode: "eval", runId: "eval-contract-test" },
+      context: { dataClass: "eval", runId: "eval-contract-test" },
       payload: {
         images: [{
           imageId: "poster",

@@ -1,4 +1,4 @@
-import type { AnalyzeMode, AnalyzeRequest } from "./types.ts";
+import type { AnalyzeDataClass, AnalyzeRequest } from "./types.ts";
 
 export function authenticateCollector(
   request: Request,
@@ -22,14 +22,14 @@ export async function parseAnalyzeRequest(
   }
   if (!isRecord(body)) throw new Error("invalid_request_body");
 
-  const mode = parseMode(body.mode);
+  const dataClass = parseDataClass(body.dataClass);
   const parsed: AnalyzeRequest = {
     sourceUrl: requiredString(body, "sourceUrl"),
     bundleId: requiredString(body, "bundleId"),
     storagePrefix: requiredString(body, "storagePrefix"),
     contentHash: requiredString(body, "contentHash"),
     sourceProvider: requiredString(body, "sourceProvider"),
-    mode,
+    dataClass,
   };
 
   const publishedAt = optionalString(body, "publishedAt");
@@ -41,12 +41,17 @@ export async function parseAnalyzeRequest(
   return parsed;
 }
 
-function parseMode(value: unknown): AnalyzeMode {
+function parseDataClass(value: unknown): AnalyzeDataClass {
   if (value === undefined || value === null || value === "") {
     return "production";
   }
-  if (value === "production" || value === "eval") return value;
-  throw new Error("invalid_mode");
+  if (
+    value === "production" ||
+    value === "eval" ||
+    value === "test" ||
+    value === "smoke"
+  ) return value;
+  throw new Error("invalid_data_class");
 }
 
 function requiredString(body: Record<string, unknown>, field: string): string {

@@ -44,7 +44,7 @@ export async function loadAdminState({
       },
     ),
     adminApiRequest<{ ledger: unknown[] }>(
-      "/api/admin/processing-ledger?mode=production",
+      "/api/admin/processing-ledger?dataClass=production",
       {
         fetchImpl,
       },

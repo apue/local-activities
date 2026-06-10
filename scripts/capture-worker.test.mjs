@@ -12,7 +12,7 @@ describe("capture worker CLI", () => {
       parseArgs([
         "--",
         "--dry-run",
-        "--mode",
+        "--data-class",
         "eval",
         "--env-file",
         ".env.collector",
@@ -23,7 +23,7 @@ describe("capture worker CLI", () => {
       ]),
     ).toEqual({
       dryRun: true,
-      mode: "eval",
+      dataClass: "eval",
       envFiles: [".env.collector"],
       limit: 3,
       proxyUrl: "http://127.0.0.1:7897",

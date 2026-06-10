@@ -18,6 +18,7 @@ type PublicEventsQuery = {
 
 export type CanonicalEventRow = {
   event_id: string;
+  data_class?: "production" | "eval" | "test" | "smoke" | null;
   title: string;
   organizer: string | null;
   starts_at: string;
@@ -216,6 +217,7 @@ function queryPublicUpcomingEvents(
   return client
     .from("canonical_events")
     .select(columns)
+    .eq("data_class", "production")
     .eq("status", "published")
     .or(buildUpcomingEventFilter(now))
     .order("starts_at", { ascending: true })
@@ -230,6 +232,7 @@ function queryPublicEvent(
   const query = client
     .from("canonical_events")
     .select(columns)
+    .eq("data_class", "production")
     .eq("event_id", eventId)
     .eq("status", "published");
 

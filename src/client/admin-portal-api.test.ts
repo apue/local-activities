@@ -73,7 +73,7 @@ describe("admin portal API client", () => {
           excludedArticles: [{ id: "excluded-1" }],
         });
       }
-      if (url === "/api/admin/processing-ledger?mode=production") {
+      if (url === "/api/admin/processing-ledger?dataClass=production") {
         return jsonResponse(200, {
           ok: true,
           ledger: [{ id: "ledger-1" }],
@@ -107,7 +107,7 @@ describe("admin portal API client", () => {
       "GET /api/admin/event-drafts?reviewState=needs_review",
       "GET /api/admin/llm-usage?range=all",
       "GET /api/admin/excluded-articles",
-      "GET /api/admin/processing-ledger?mode=production",
+      "GET /api/admin/processing-ledger?dataClass=production",
       "GET /api/admin/evaluation-runs?validity=valid",
     ]);
   });

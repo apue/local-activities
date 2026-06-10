@@ -178,7 +178,7 @@ type ProcessingLedgerRecord = {
   draftId?: string;
   canonicalEventId?: string;
   excludedArticleId?: string;
-  mode: string;
+  dataClass: "production" | "eval" | "test" | "smoke";
   errorDetails?: Record<string, unknown>;
   createdAt: string;
 };

@@ -42,7 +42,7 @@ async function main() {
     supabase: runtime.supabase,
     idempotency: runtime.idempotency,
     dryRun: args.dryRun,
-    mode: args.mode,
+    dataClass: args.dataClass,
     lookbackDays: wechatConfig.lookbackDays,
     limit: args.limit,
     fetchImpl: runtime.fetchImpl,
@@ -152,7 +152,7 @@ function hasSupabaseIdempotencyEnv(env) {
 export function parseArgs(argv) {
   const args = {
     dryRun: true,
-    mode: "production",
+    dataClass: "production",
     envFiles: [],
     proxyUrl: undefined,
     help: false,
@@ -167,10 +167,12 @@ export function parseArgs(argv) {
       args.dryRun = true;
     } else if (arg === "--apply") {
       args.dryRun = false;
-    } else if (arg === "--mode") {
+    } else if (arg === "--data-class") {
       const value = requiredValue(argv, index, arg);
-      if (!["production", "eval"].includes(value)) throw new Error(`invalid_mode:${value}`);
-      args.mode = value;
+      if (!["production", "eval", "test", "smoke"].includes(value)) {
+        throw new Error(`invalid_data_class:${value}`);
+      }
+      args.dataClass = value;
       index += 1;
     } else if (arg === "--limit") {
       const value = requiredValue(argv, index, arg);
@@ -252,7 +254,7 @@ function fetchForAnalyzeFunctionUrl({ analyzeFunctionUrl, fetchImpl }) {
 
 function helpText() {
   return [
-    "Usage: pnpm capture:wechat2rss:once [--dry-run|--apply] [--mode production|eval] [--limit N] [--env-file .env.local] [--proxy-url http://127.0.0.1:7897]",
+    "Usage: pnpm capture:wechat2rss:once [--dry-run|--apply] [--data-class production|eval|test|smoke] [--limit N] [--env-file .env.local] [--proxy-url http://127.0.0.1:7897]",
     "",
     "Dry-run is the default. Use --apply to upload article bundles and invoke analyze-article-bundle.",
   ].join("\n");

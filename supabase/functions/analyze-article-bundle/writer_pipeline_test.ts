@@ -210,22 +210,31 @@ Deno.test("runAnalysisPipeline does not auto-publish high-confidence activities 
   assertEquals(db.table("processing_ledger")[0].state, "needs_review");
 });
 
-Deno.test("runAnalysisPipeline in eval mode does not write production draft or canonical tables", async () => {
+Deno.test("runAnalysisPipeline in eval data class writes product-shaped rows scoped to eval", async () => {
   const db = createRecordingDb();
   await runAnalysisPipeline({
-    request: { ...validRequest(), mode: "eval" },
-    storage: bundleStorage(),
+    request: {
+      ...validRequest(),
+      dataClass: "eval",
+      storagePrefix: "article-bundles/eval/bundle-1",
+    },
+    storage: bundleStorage({ dataClass: "eval" }),
     db,
     provider: successfulProvider(),
     env: { provider: "mock", model: "mock-vision" },
   });
 
-  assertEquals(db.table("event_drafts").length, 0);
-  assertEquals(db.table("canonical_events").length, 0);
-  assertEquals(db.table("dedupe_decisions").length, 0);
+  assertEquals(db.table("event_drafts").length, 1);
+  assertEquals(db.table("event_drafts")[0].data_class, "eval");
+  assertEquals(db.table("canonical_events").length, 1);
+  assertEquals(db.table("canonical_events")[0].data_class, "eval");
+  assertEquals(db.table("dedupe_decisions").length, 1);
+  assertEquals(db.table("dedupe_decisions")[0].data_class, "eval");
   assertEquals(db.table("llm_usage_ledger").length, 1);
+  assertEquals(db.table("llm_usage_ledger")[0].data_class, "eval");
   assertEquals(db.table("processing_ledger").length, 1);
-  assertEquals(db.table("processing_ledger")[0].state, "needs_review");
+  assertEquals(db.table("processing_ledger")[0].data_class, "eval");
+  assertEquals(db.table("processing_ledger")[0].state, "published");
 });
 
 Deno.test("runAnalysisPipeline writes failed ledger and failed usage when provider fails", async () => {
@@ -338,7 +347,7 @@ Deno.test("runAnalysisPipeline skips fresh in-progress bundles", async () => {
   const db = createRecordingDb({
     initialArticleBundles: [{
       bundle_id: "bundle-1",
-      mode: "production",
+      data_class: "production",
       status: "analysis_started",
       updated_at: new Date().toISOString(),
     }],
@@ -368,7 +377,7 @@ Deno.test("runAnalysisPipeline reclaims stale in-progress bundles", async () => 
   const db = createRecordingDb({
     initialArticleBundles: [{
       bundle_id: "bundle-1",
-      mode: "production",
+      data_class: "production",
       status: "analysis_started",
       updated_at: staleUpdatedAt,
     }],
@@ -474,11 +483,11 @@ Deno.test("runAnalysisPipeline creates storage-backed evidence rows instead of s
   assertEquals(evidence.storage_bucket, "event-evidence-assets");
   assertEquals(
     evidence.storage_path,
-    "articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
+    "production/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
   );
   assertEquals(
     evidence.public_url,
-    "https://supabase.test/storage/v1/object/public/event-evidence-assets/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
+    "https://supabase.test/storage/v1/object/public/event-evidence-assets/production/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
   );
   assertEquals(String(evidence.public_url).includes("mmbiz.qpic.cn"), false);
   assertEquals(evidence.source_url, "https://mmbiz.qpic.cn/remote-poster");
@@ -486,7 +495,7 @@ Deno.test("runAnalysisPipeline creates storage-backed evidence rows instead of s
   assertEquals(storage.uploaded[0].bucket, "event-evidence-assets");
   assertEquals(
     storage.uploaded[0].path,
-    "articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
+    "production/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
   );
 });
 
@@ -508,7 +517,7 @@ Deno.test("runAnalysisPipeline falls back to bundle image roles when provider om
   assertEquals(evidence.role, "poster");
   assertEquals(
     db.table("canonical_events")[0].poster_image_url,
-    "https://supabase.test/storage/v1/object/public/event-evidence-assets/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
+    "https://supabase.test/storage/v1/object/public/event-evidence-assets/production/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
   );
 });
 
@@ -535,7 +544,7 @@ Deno.test("runAnalysisPipeline falls back to bundle image roles when provider ev
   assertEquals(evidence.metadata.imageId, "poster-1");
   assertEquals(
     db.table("event_drafts")[0].poster_image_url,
-    "https://supabase.test/storage/v1/object/public/event-evidence-assets/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
+    "https://supabase.test/storage/v1/object/public/event-evidence-assets/production/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
   );
 });
 
@@ -559,7 +568,7 @@ Deno.test("runAnalysisPipeline records QR evidence when registration URL points 
   assertEquals(evidence.role, "qr");
   assertEquals(
     db.table("event_drafts")[0].registration_qr_image_url,
-    "https://supabase.test/storage/v1/object/public/event-evidence-assets/articles/bundle-1/evidence-1-qr-poster-1-bundle-1.jpg",
+    "https://supabase.test/storage/v1/object/public/event-evidence-assets/production/articles/bundle-1/evidence-1-qr-poster-1-bundle-1.jpg",
   );
 });
 
@@ -651,20 +660,25 @@ function validRequest() {
     sourceUrl: "https://mp.weixin.qq.com/s/example",
     publishedAt: "2026-06-08T10:00:00+08:00",
     bundleId: "bundle-1",
-    storagePrefix: "article-bundles/bundle-1",
+    storagePrefix: "article-bundles/production/bundle-1",
     contentHash: "sha256:abc",
     sourceProvider: "wechat2rss",
     sourceId: "embassy-feed",
     sourceName: "Example Embassy",
-    mode: "production" as const,
+    dataClass: "production" as const,
   };
 }
 
 function bundleStorage(
   {
+    dataClass = "production",
     imageKind = "stable",
     roleHint,
-  }: { imageKind?: "stable" | "reference"; roleHint?: string } = {},
+  }: {
+    dataClass?: "production" | "eval" | "test" | "smoke";
+    imageKind?: "stable" | "reference";
+    roleHint?: string;
+  } = {},
 ) {
   const image = imageKind === "stable"
     ? {
@@ -691,10 +705,12 @@ function bundleStorage(
       altText: "Poster",
       roleHint,
     };
+  const prefix = `${dataClass}/bundle-1`;
   const files: Record<string, string> = {
-    "bundle-1/manifest.json": JSON.stringify({
+    [`${prefix}/manifest.json`]: JSON.stringify({
       bundleVersion: "article-bundle-v1",
       bundleId: "bundle-1",
+      dataClass,
       sourceProvider: "wechat2rss",
       sourceUrl: "https://mp.weixin.qq.com/s/example",
       canonicalUrl: "https://mp.weixin.qq.com/s/example",
@@ -705,16 +721,16 @@ function bundleStorage(
       links: [],
       diagnostics: [],
     }),
-    "bundle-1/article.html": "<article></article>",
-    "bundle-1/article.txt": "Public lecture in Beijing",
-    "bundle-1/links.json": JSON.stringify({ links: [], miniPrograms: [] }),
-    "bundle-1/diagnostics.json": JSON.stringify({
+    [`${prefix}/article.html`]: "<article></article>",
+    [`${prefix}/article.txt`]: "Public lecture in Beijing",
+    [`${prefix}/links.json`]: JSON.stringify({ links: [], miniPrograms: [] }),
+    [`${prefix}/diagnostics.json`]: JSON.stringify({
       diagnostics: [],
       captureWarnings: [],
     }),
   };
   const bytes: Record<string, Uint8Array> = {
-    "bundle-1/images/poster.jpg": new Uint8Array([1, 2, 3, 4]),
+    [`${prefix}/images/poster.jpg`]: new Uint8Array([1, 2, 3, 4]),
   };
   const uploaded: Array<{
     bucket: string;
@@ -955,10 +971,10 @@ function createRecordingDb({
     async findCanonicalCandidates() {
       return canonicalCandidates;
     },
-    async findArticleBundle(bundleId: string, mode: string) {
+    async findArticleBundle(bundleId: string, dataClass: string) {
       if (staleArticleBundleLookup) return null;
       return (rows.article_bundles ?? []).find((row) =>
-        row.bundle_id === bundleId && row.mode === mode
+        row.bundle_id === bundleId && row.data_class === dataClass
       ) ?? null;
     },
     table(name: string) {

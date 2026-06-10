@@ -4,6 +4,7 @@ import { getSupabaseAdminStore } from "./supabase-admin-store";
 
 describe("supabase admin store", () => {
   it("maps event analysis draft review fields for admin records", async () => {
+    const calls: unknown[] = [];
     const store = getSupabaseAdminStore(
       supabaseClientReturningEventDrafts([
         {
@@ -54,7 +55,7 @@ describe("supabase admin store", () => {
           evidence_asset_ids: ["asset-poster-1"],
           field_evidence: { title: ["asset-poster-1"] },
         },
-      ]),
+      ], calls),
     );
 
     await expect(store.listEventDrafts({})).resolves.toEqual([
@@ -77,13 +78,15 @@ describe("supabase admin store", () => {
         processingState: "ready_for_policy",
       }),
     ]);
+    expect(calls).toContainEqual(["eq", "data_class", "production"]);
   });
 
   it("maps and promotes excluded articles for admin audit", async () => {
     const updates: Array<{ table: string; payload: Record<string, unknown> }> =
       [];
+    const calls: unknown[] = [];
     const store = getSupabaseAdminStore(
-      supabaseClientForExcludedArticles(updates),
+      supabaseClientForExcludedArticles(updates, calls),
     );
 
     await expect(
@@ -106,6 +109,10 @@ describe("supabase admin store", () => {
       processingState: "promoted_to_extraction",
       promotedAt: "2026-06-03T09:00:00.000Z",
     });
+    expect(calls).toContainEqual(["eq", "data_class", "production"]);
+    expect(calls.filter((call) =>
+      Array.isArray(call) && call[0] === "eq" && call[1] === "data_class"
+    )).toHaveLength(2);
     expect(updates).toEqual([
       {
         table: "excluded_articles",
@@ -126,7 +133,7 @@ describe("supabase admin store", () => {
 
     const ledger = await store.listProcessingLedger({
       state: "excluded",
-      mode: "production",
+      dataClass: "production",
     });
     expect(ledger).toEqual([
       expect.objectContaining({
@@ -139,7 +146,7 @@ describe("supabase admin store", () => {
         confidence: 0.93,
         provider: "dashscope",
         model: "qwen3-vl-plus",
-        mode: "production",
+        dataClass: "production",
         excludedArticleId: "excluded-1",
         errorDetails: {
           safe: "kept",
@@ -160,7 +167,7 @@ describe("supabase admin store", () => {
     expect(JSON.stringify(ledger)).not.toContain("secret-token");
     expect(JSON.stringify(ledger)).not.toContain("session=secret");
     expect(calls).toContainEqual(["eq", "state", "excluded"]);
-    expect(calls).toContainEqual(["eq", "mode", "production"]);
+    expect(calls).toContainEqual(["eq", "data_class", "production"]);
   });
 
   it("maps evaluation runs with their case results", async () => {
@@ -314,7 +321,7 @@ describe("supabase admin store", () => {
           provider: "openai",
           model: "gpt-5-mini",
           status: "failed",
-          mode: "eval",
+          data_class: "eval",
           input_tokens: 500,
           output_tokens: 0,
           total_tokens: 500,
@@ -340,7 +347,7 @@ describe("supabase admin store", () => {
           provider: "openai",
           model: "gpt-5-mini",
           status: "succeeded",
-          mode: "production",
+          data_class: "production",
           input_tokens: 900,
           output_tokens: 250,
           total_tokens: 1150,
@@ -451,7 +458,7 @@ describe("supabase admin store", () => {
         expect.objectContaining({
           id: "usage-2",
           status: "failed",
-          mode: "eval",
+          dataClass: "eval",
           evaluationRunId: "eval-1",
           metadata: {
             failureReason: "analysis_request_failed",
@@ -461,7 +468,7 @@ describe("supabase admin store", () => {
         expect.objectContaining({
           id: "usage-1",
           operation: "event_extraction",
-          mode: "production",
+          dataClass: "production",
           totalTokens: 1150,
           metadata: {
             schemaVersion: "event-analysis-schema-v1",
@@ -634,9 +641,13 @@ describe("supabase admin store", () => {
   });
 });
 
-function supabaseClientReturningEventDrafts(rows: unknown[]) {
+function supabaseClientReturningEventDrafts(rows: unknown[], calls: unknown[] = []) {
   const query = {
     select() {
+      return query;
+    },
+    eq(...args: unknown[]) {
+      calls.push(["eq", ...args]);
       return query;
     },
     order() {
@@ -657,6 +668,7 @@ function supabaseClientReturningEventDrafts(rows: unknown[]) {
 
 function supabaseClientForExcludedArticles(
   updates: Array<{ table: string; payload: Record<string, unknown> }>,
+  calls: unknown[] = [],
 ) {
   const row = {
     excluded_article_id: "excluded-1",
@@ -690,7 +702,8 @@ function supabaseClientForExcludedArticles(
         limit() {
           return Promise.resolve({ data: [row], error: null });
         },
-        eq() {
+        eq(...args: unknown[]) {
+          calls.push(["eq", ...args]);
           return query;
         },
         update(payload: Record<string, unknown>) {
@@ -732,7 +745,7 @@ function supabaseClientForProcessingLedger(calls: unknown[] = []) {
       draft_id: null,
       canonical_event_id: null,
       excluded_article_id: "excluded-1",
-      mode: "production",
+      data_class: "production",
       error_details: {
         safe: "kept",
         prompt: "do not leak",
@@ -945,16 +958,22 @@ function supabaseClientMissingPosterColumnsForPublish(
   return {
     from(table: string) {
       if (table === "evidence_assets") {
-        return {
+        const evidenceQuery = {
           select() {
-            return {
-              in() {
-                return Promise.resolve({ data: [], error: null });
-              },
-            };
+            return evidenceQuery;
+          },
+          eq() {
+            return evidenceQuery;
+          },
+          in() {
+            return Promise.resolve({ data: [], error: null });
           },
         };
+        return {
+          select: evidenceQuery.select,
+        };
       }
+      let updateEqCount = 0;
       const query = {
         insert(payload: Record<string, unknown>) {
           inserts.push({ table, payload });
@@ -991,7 +1010,10 @@ function supabaseClientMissingPosterColumnsForPublish(
           return query;
         },
         eq() {
-          return Promise.resolve({ error: null });
+          updateEqCount += 1;
+          return updateEqCount >= 2
+            ? Promise.resolve({ error: null })
+            : query;
         },
       };
       return query;
@@ -1006,16 +1028,22 @@ function supabaseClientForPublishWithEvidence(
   return {
     from(table: string) {
       if (table === "evidence_assets") {
-        return {
+        const evidenceQuery = {
           select() {
-            return {
-              in() {
-                return Promise.resolve({ data: evidenceRows, error: null });
-              },
-            };
+            return evidenceQuery;
+          },
+          eq() {
+            return evidenceQuery;
+          },
+          in() {
+            return Promise.resolve({ data: evidenceRows, error: null });
           },
         };
+        return {
+          select: evidenceQuery.select,
+        };
       }
+      let updateEqCount = 0;
       const query = {
         insert(payload: Record<string, unknown>) {
           inserts.push({ table, payload });
@@ -1040,7 +1068,10 @@ function supabaseClientForPublishWithEvidence(
           return query;
         },
         eq() {
-          return Promise.resolve({ error: null });
+          updateEqCount += 1;
+          return updateEqCount >= 2
+            ? Promise.resolve({ error: null })
+            : query;
         },
       };
       return query;
