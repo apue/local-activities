@@ -1,8 +1,16 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { buildCandidatePacket } from "./candidate-packet.mjs";
+import { runCheapTriage } from "./cheap-triage.mjs";
+import { cleanCapturedArticleBundle } from "./content-cleaner.mjs";
+import { runLiveEditorPass, runLiveFullExtract } from "./live-harnesses.mjs";
+import { createLiveModelBudgetGuard, createOpenAICompatibleChatProvider } from "./model-provider.mjs";
+import { decideV5PublishState } from "./publish-policy-v2.mjs";
 import { loadV5RegressionCorpus } from "./regression-corpus-loader.mjs";
 import { runV5Replay } from "./replay-runner.mjs";
+import { scoreNormalizedContent } from "./signal-scorer.mjs";
+import { validateV5Extraction } from "./validator-v2.mjs";
 
 export const defaultV5EvaluationVariants = [
   "mock-expected-v1",
@@ -13,10 +21,16 @@ export const comparisonV5EvaluationVariants = [
   "mock-underfilter-v1",
 ];
 
-const supportedMockVariants = new Set([
+export const liveV5EvaluationVariants = [
+  "live-configured",
+];
+
+const supportedVariants = new Set([
   ...defaultV5EvaluationVariants,
   ...comparisonV5EvaluationVariants,
+  ...liveV5EvaluationVariants,
 ]);
+const liveVariants = new Set(liveV5EvaluationVariants);
 const defaultArtifactDir = path.resolve("tmp/v5-eval-runs");
 
 export function createMemoryV5EvaluationWriter() {
@@ -60,12 +74,18 @@ export async function runV5Evaluation({
   maxCostCny,
   target,
   now = new Date(),
+  env = process.env,
+  fetchImpl = globalThis.fetch,
+  liveEvaluator,
 } = {}) {
   if (!corpusDir && !replayResult) throw new Error("v5_evaluation_corpus_dir_required");
-  guardRuntime({ allowLive, maxCostCny, target });
   const selectedVariants = normalizeVariants(variants);
-  const unsupportedVariant = selectedVariants.find((variant) => !supportedMockVariants.has(variant));
+  guardRuntime({ allowLive, maxCostCny, target, variants: selectedVariants });
+  const unsupportedVariant = selectedVariants.find((variant) => !supportedVariants.has(variant));
   if (unsupportedVariant) throw new Error(`v5_evaluation_variant_unsupported:${unsupportedVariant}`);
+  const configuredLiveEvaluator = selectedVariants.some((variant) => liveVariants.has(variant))
+    ? liveEvaluator ?? createLiveConfiguredV5Evaluator({ env, fetchImpl, maxCostCny, now })
+    : undefined;
 
   const corpus = await loadV5RegressionCorpus({ corpusDir });
   const selectedCases = selectCases({ cases: corpus.cases, all, caseIds });
@@ -86,7 +106,12 @@ export async function runV5Evaluation({
   for (const variant of selectedVariants) {
     for (const caseItem of selectedCases) {
       const replayCase = replayCasesById.get(caseItem.case.id);
-      const caseResult = evaluateCaseVariant({ variant, caseItem, replayCase });
+      const caseResult = await evaluateCaseVariant({
+        variant,
+        caseItem,
+        replayCase,
+        liveEvaluator: configuredLiveEvaluator,
+      });
       const artifactPath = `${runPrefix}/variants/${safeArtifactSegment(variant)}/cases/${safeArtifactSegment(caseItem.case.id)}.json`;
       const caseResultWithArtifact = {
         ...caseResult,
@@ -144,6 +169,7 @@ export function parseV5EvaluationArgs(argv = []) {
     all: false,
     variants: [],
     allowLive: false,
+    envFiles: [],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -177,6 +203,9 @@ export function parseV5EvaluationArgs(argv = []) {
     } else if (arg === "--max-cost-cny") {
       options.maxCostCny = parsePositiveNumber(requiredValue(argv, index, arg), arg);
       index += 1;
+    } else if (arg === "--env-file") {
+      options.envFiles.push(path.resolve(requiredValue(argv, index, arg)));
+      index += 1;
     } else {
       throw new Error(`v5_evaluation_arg_unknown:${arg}`);
     }
@@ -189,10 +218,12 @@ export function parseV5EvaluationArgs(argv = []) {
   return options;
 }
 
-function evaluateCaseVariant({ variant, caseItem, replayCase }) {
+async function evaluateCaseVariant({ variant, caseItem, replayCase, liveEvaluator }) {
   const expectedAction = caseItem.expected.action;
   const expectedFinalState = finalStateFromExpectedAction(expectedAction);
-  const prediction = predictionForVariant({ variant, expectedAction, replayCase });
+  const prediction = liveVariants.has(variant)
+    ? await livePredictionForVariant({ variant, caseItem, replayCase, liveEvaluator })
+    : predictionForVariant({ variant, expectedAction, replayCase });
   const actionCorrect = prediction.action === expectedAction;
   const finalStateCorrect = prediction.finalState === expectedFinalState;
   const passed = actionCorrect && finalStateCorrect;
@@ -215,6 +246,82 @@ function evaluateCaseVariant({ variant, caseItem, replayCase }) {
     artifactPaths: prediction.artifactPaths ?? [],
     totalUsage,
   };
+}
+
+export function createLiveConfiguredV5Evaluator({
+  env = process.env,
+  fetchImpl = globalThis.fetch,
+  maxCostCny,
+  now = new Date(),
+} = {}) {
+  const config = liveProviderConfigFromEnv(env);
+  if (typeof fetchImpl !== "function") throw new Error("v5_evaluation_live_fetch_impl_required");
+  const budgetGuard = createLiveModelBudgetGuard({ maxCostCny });
+  const provider = createOpenAICompatibleChatProvider({
+    provider: config.provider,
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    model: config.model,
+    fetchImpl,
+  });
+
+  return async function evaluateLiveConfiguredCase({ caseItem, replayCase } = {}) {
+    if (!caseItem?.bundle) throw new Error(`v5_evaluation_case_has_no_bundle:${caseItem?.case?.id ?? "unknown"}`);
+    const normalized = cleanCapturedArticleBundle(caseItem.bundle);
+    const signalScore = scoreNormalizedContent(normalized);
+    const packet = buildCandidatePacket({ normalized, signalScore });
+    const triage = await runCheapTriage({ packet, now });
+    const extraction = await runLiveFullExtract({
+      normalized,
+      packet,
+      triage,
+      provider,
+      budgetGuard,
+      validator: ({ extraction: candidateExtraction }) => validateV5Extraction({
+        extraction: candidateExtraction,
+        normalized,
+        now,
+      }),
+      now,
+      imageEvidence: normalized.images ?? [],
+    });
+    const validation = validateV5Extraction({ extraction, normalized, now });
+    const editor = shouldRunEditorPass(extraction)
+      ? await runLiveEditorPass({
+        normalized,
+        extraction,
+        validation,
+        provider,
+        budgetGuard,
+        now,
+      })
+      : skippedEditorResult({ extraction, validation, normalized });
+    const policy = decideV5PublishState({ extraction, validation, editor });
+    return {
+      action: actionFromPublishState(policy.state),
+      finalState: policy.state,
+      artifactPaths: artifactPathsFromReplayCase(replayCase),
+      usage: sumUsage([
+        extraction.usage,
+        editor.usage,
+      ]),
+      live: {
+        provider: provider.provider,
+        model: provider.model,
+        triageDecision: triage.decision,
+        validationStatus: validation.status,
+        publishReasons: policy.reasons,
+        extractionDecision: extraction.decision,
+        editorDecision: editor.editorDecision,
+      },
+    };
+  };
+}
+
+async function livePredictionForVariant({ variant, caseItem, replayCase, liveEvaluator }) {
+  if (variant !== "live-configured") throw new Error(`v5_evaluation_variant_unsupported:${variant}`);
+  if (typeof liveEvaluator !== "function") throw new Error("v5_evaluation_live_evaluator_required");
+  return liveEvaluator({ caseItem, replayCase, variant });
 }
 
 function predictionForVariant({ variant, expectedAction, replayCase }) {
@@ -337,11 +444,67 @@ function writerForStore({ store, artifactDir }) {
   throw new Error(`v5_evaluation_store_invalid:${store}`);
 }
 
-function guardRuntime({ allowLive, maxCostCny, target }) {
+function guardRuntime({ allowLive, maxCostCny, target, variants = [] }) {
   if (target === "production") throw new Error("v5_evaluation_refuses_production_target");
+  if (variants.some((variant) => liveVariants.has(variant)) && allowLive !== true) {
+    throw new Error("v5_evaluation_live_requires_allow_live");
+  }
   if (allowLive && !(Number.isFinite(maxCostCny) && maxCostCny > 0)) {
     throw new Error("v5_evaluation_live_requires_positive_max_cost_cny");
   }
+}
+
+function liveProviderConfigFromEnv(env = {}) {
+  const config = {
+    provider: clean(env.V5_LIVE_PROVIDER) ?? clean(env.ANALYSIS_LLM_PROVIDER) ?? "openai-compatible",
+    baseUrl: clean(env.V5_LIVE_BASE_URL) ?? clean(env.ANALYSIS_LLM_BASE_URL),
+    model: clean(env.V5_LIVE_MODEL) ?? clean(env.ANALYSIS_LLM_MODEL),
+    apiKey: clean(env.V5_LIVE_API_KEY) ?? clean(env.ANALYSIS_LLM_API_KEY),
+  };
+  const missing = [
+    ["baseUrl", config.baseUrl],
+    ["model", config.model],
+    ["apiKey", config.apiKey],
+  ]
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
+  if (missing.length > 0) {
+    throw new Error(`v5_evaluation_live_provider_config_missing:${missing.join(",")}`);
+  }
+  return config;
+}
+
+function shouldRunEditorPass(extraction) {
+  return extraction?.decision === "event" && Array.isArray(extraction?.events) && extraction.events.length > 0;
+}
+
+function skippedEditorResult({ extraction, validation, normalized }) {
+  const extractionDecision = clean(extraction?.decision);
+  return {
+    displayTitle: clean(extraction?.events?.[0]?.title) ?? clean(normalized?.title) ?? "Untitled",
+    summary: "",
+    tags: [],
+    category: "unknown",
+    audience: "unknown",
+    corrections: [],
+    qualityIssues: validation?.issues ?? [],
+    editorDecision: skippedEditorDecision(extractionDecision),
+    reason: `editor_skipped_after_${extractionDecision ?? "unknown"}_extraction`,
+    usage: emptyUsage(),
+  };
+}
+
+function skippedEditorDecision(extractionDecision) {
+  if (extractionDecision === "non_event") return "exclude";
+  if (extractionDecision === "failed") return "failed";
+  return "review";
+}
+
+function actionFromPublishState(state) {
+  if (state === "published") return "extract";
+  if (state === "excluded") return "exclude";
+  if (state === "failed") return "capture_failure";
+  return "review";
 }
 
 function parsePositiveNumber(value, arg) {
@@ -372,4 +535,9 @@ function safeArtifactSegment(value) {
     .trim()
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "") || "unnamed";
+}
+
+function clean(value) {
+  const text = String(value ?? "").trim();
+  return text || undefined;
 }
