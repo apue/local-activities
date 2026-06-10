@@ -110,6 +110,44 @@ describe("event pipeline reset migration", () => {
     expect(allMigrationSql).toContain("evaluation_runs_validity_started_idx");
   });
 
+  it("adds normalized V5 pipeline ledger tables for run trace visibility", () => {
+    for (const table of [
+      "pipeline_runs",
+      "pipeline_steps",
+      "pipeline_artifacts",
+      "pipeline_attempts",
+    ]) {
+      expect(allMigrationSql).toContain(`create table public.${table}`);
+      expect(allMigrationSql).toMatch(
+        new RegExp(`alter table public\\.${table} enable row level security`),
+      );
+      expect(allMigrationSql).toMatch(
+        new RegExp(
+          `${table}_data_class_check[\\s\\S]*check \\(data_class in \\('production', 'eval', 'test', 'smoke'\\)\\)`,
+        ),
+      );
+    }
+
+    expect(allMigrationSql).toContain("run_id text not null unique");
+    expect(allMigrationSql).toContain(
+      "run_id text not null references public.pipeline_runs(run_id) on delete cascade",
+    );
+    expect(allMigrationSql).toContain(
+      "step_id text references public.pipeline_steps(step_id) on delete set null",
+    );
+    expect(allMigrationSql).not.toContain(
+      "step_id text not null references public.pipeline_steps(step_id) on delete set null",
+    );
+    expect(allMigrationSql).toContain("usage jsonb not null default '{}'::jsonb");
+    expect(allMigrationSql).toContain("input_artifact_ids text[] not null default '{}'");
+    expect(allMigrationSql).toContain("output_artifact_ids text[] not null default '{}'");
+    expect(allMigrationSql).toContain("pipeline_runs_data_class_started_idx");
+    expect(allMigrationSql).toContain("pipeline_steps_run_order_idx");
+    expect(allMigrationSql).toContain("pipeline_artifacts_run_created_idx");
+    expect(allMigrationSql).toContain("pipeline_attempts_step_attempt_idx");
+    expect(allMigrationSql).toContain("pipeline_attempts_data_class_run_idx");
+  });
+
   it("does not reintroduce removed active collector and Vercel asset paths", () => {
     expect(sql).not.toMatch(/vercel[_-]?sandbox/i);
     expect(sql).not.toContain(["BLOB", "READ", "WRITE", "TOKEN"].join("_"));

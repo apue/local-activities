@@ -192,6 +192,78 @@ export type AdminProcessingLedgerRecord = {
   createdAt: string;
 };
 
+export type AdminPipelineAttemptRecord = {
+  attemptId: string;
+  runId: string;
+  stepId: string;
+  attemptNumber: number;
+  provider?: string;
+  model?: string;
+  promptVersion?: string;
+  schemaVersion?: string;
+  usage: Record<string, unknown>;
+  validatorIssues: unknown[];
+  reason?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  latencyMs?: number;
+};
+
+export type AdminPipelineStepRecord = {
+  stepId: string;
+  runId: string;
+  stepOrder: number;
+  nodeName: string;
+  nodeVersion?: string;
+  status: string;
+  decision?: string;
+  reason?: string;
+  provider?: string;
+  model?: string;
+  promptVersion?: string;
+  schemaVersion?: string;
+  usageId?: string;
+  inputArtifactIds: string[];
+  outputArtifactIds: string[];
+  validationIssues: unknown[];
+  errorDetails: Record<string, unknown>;
+  startedAt?: string;
+  finishedAt?: string;
+  latencyMs?: number;
+  attempts: AdminPipelineAttemptRecord[];
+};
+
+export type AdminPipelineArtifactRecord = {
+  artifactId: string;
+  runId: string;
+  stepId?: string;
+  dataClass: AdminDataClass;
+  path: string;
+  kind: string;
+  hash?: string;
+  bucket?: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type AdminPipelineRunRecord = {
+  runId: string;
+  dataClass: AdminDataClass;
+  sourceKind?: string;
+  sourceId?: string;
+  articleBundleId?: string;
+  caseId?: string;
+  status: string;
+  decision?: string;
+  reason?: string;
+  startedAt: string;
+  finishedAt?: string;
+  metadata: Record<string, unknown>;
+  steps: AdminPipelineStepRecord[];
+  artifacts: AdminPipelineArtifactRecord[];
+  createdAt: string;
+};
+
 export type AdminEvaluationCaseResultRecord = {
   id: string;
   runId: string;
@@ -339,6 +411,10 @@ export type AdminStore = {
     state?: AdminProcessingLedgerState;
     dataClass?: AdminDataClass;
   }): Promise<AdminProcessingLedgerRecord[]>;
+  listPipelineRuns(input: {
+    dataClass?: AdminDataClass;
+    status?: string;
+  }): Promise<AdminPipelineRunRecord[]>;
   listEvaluationRuns(input: {
     status?: AdminEvaluationRunRecord["status"];
     validity?: AdminEvaluationRunRecord["validity"];
@@ -380,6 +456,19 @@ export function listAdminProcessingLedger(
   store: AdminStore,
 ) {
   return store.listProcessingLedger(input);
+}
+
+export function listAdminPipelineRuns(
+  input: {
+    dataClass?: AdminDataClass;
+    status?: string;
+  },
+  store: AdminStore,
+) {
+  return store.listPipelineRuns({
+    dataClass: input.dataClass ?? "production",
+    status: input.status,
+  });
 }
 
 export function listAdminEvaluationRuns(

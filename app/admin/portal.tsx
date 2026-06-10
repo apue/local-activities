@@ -213,6 +213,64 @@ type EvaluationRun = {
   createdAt: string;
 };
 
+type PipelineAttempt = {
+  attemptId: string;
+  attemptNumber: number;
+  provider?: string;
+  model?: string;
+  promptVersion?: string;
+  schemaVersion?: string;
+  usage: Record<string, unknown>;
+  validatorIssues: unknown[];
+  reason?: string;
+  latencyMs?: number;
+};
+
+type PipelineStep = {
+  stepId: string;
+  stepOrder: number;
+  nodeName: string;
+  nodeVersion?: string;
+  status: string;
+  decision?: string;
+  reason?: string;
+  provider?: string;
+  model?: string;
+  promptVersion?: string;
+  schemaVersion?: string;
+  usageId?: string;
+  inputArtifactIds: string[];
+  outputArtifactIds: string[];
+  validationIssues: unknown[];
+  latencyMs?: number;
+  attempts: PipelineAttempt[];
+};
+
+type PipelineArtifact = {
+  artifactId: string;
+  stepId?: string;
+  path: string;
+  kind: string;
+  bucket?: string;
+};
+
+type PipelineRun = {
+  runId: string;
+  dataClass: "production" | "eval" | "test" | "smoke";
+  sourceKind?: string;
+  sourceId?: string;
+  articleBundleId?: string;
+  caseId?: string;
+  status: string;
+  decision?: string;
+  reason?: string;
+  startedAt: string;
+  finishedAt?: string;
+  steps: PipelineStep[];
+  artifacts: PipelineArtifact[];
+  createdAt: string;
+};
+
 const emptyUsageSummary: LlmUsageSummary = {
   range: {
     key: "today",
@@ -243,6 +301,7 @@ export function AdminPortal() {
   );
   const [ledger, setLedger] = useState<ProcessingLedgerRecord[]>([]);
   const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRun[]>([]);
+  const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [reviewFilter, setReviewFilter] = useState("");
   const [usageRange, setUsageRange] = useState<UsageRange>("today");
@@ -325,12 +384,14 @@ export function AdminPortal() {
       const loadedLedger = adminState.ledger as ProcessingLedgerRecord[];
       const loadedEvaluationRuns =
         adminState.evaluationRuns as EvaluationRun[];
+      const loadedPipelineRuns = adminState.pipelineRuns as PipelineRun[];
       setJobs(loadedJobs);
       setDrafts(loadedDrafts);
       setUsage(loadedUsage);
       setExcludedArticles(loadedExcludedArticles);
       setLedger(loadedLedger);
       setEvaluationRuns(loadedEvaluationRuns);
+      setPipelineRuns(loadedPipelineRuns);
       setSelectedDraftId((current) =>
         current && loadedDrafts.some((draft) => draft.id === current)
           ? current
@@ -467,6 +528,10 @@ export function AdminPortal() {
             <div>
               <span>{usage.totals.requestCount}</span>
               <small>LLM calls · {getUsageRangeLabel(usage.range.key)}</small>
+            </div>
+            <div>
+              <span>{pipelineRuns.length}</span>
+              <small>V5 traces</small>
             </div>
           </div>
         </header>
@@ -869,6 +934,98 @@ export function AdminPortal() {
         <section className={styles.panel}>
           <div className={styles.panelHeader}>
             <div>
+              <p className={styles.eyebrow}>V5 pipeline</p>
+              <h2>Trace ledger</h2>
+            </div>
+            <span className={styles.countBadge}>
+              {pipelineRuns.length} runs
+            </span>
+          </div>
+          <div className={styles.pipelineList}>
+            {pipelineRuns.slice(0, 8).map((run) => (
+              <div key={run.runId} className={styles.pipelineRun}>
+                <div className={styles.pipelineRunHeader}>
+                  <div>
+                    <strong>{run.runId}</strong>
+                    <small>
+                      {run.status}
+                      {run.decision ? ` · ${run.decision}` : ""} ·{" "}
+                      {formatDateTime(run.startedAt)}
+                    </small>
+                  </div>
+                  <span>
+                    {run.sourceKind ?? "source"}:{run.sourceId ?? "unknown"}
+                    {run.articleBundleId ? ` · ${run.articleBundleId}` : ""}
+                    {run.caseId ? ` · ${run.caseId}` : ""}
+                  </span>
+                </div>
+                {run.reason ? (
+                  <p className={styles.pipelineReason}>{run.reason}</p>
+                ) : null}
+                <div className={styles.pipelineSteps}>
+                  {run.steps.map((step) => {
+                    const primaryAttempt = step.attempts[0];
+                    return (
+                      <div key={step.stepId} className={styles.pipelineStep}>
+                        <div>
+                          <strong>
+                            {step.stepOrder}. {step.nodeName}
+                          </strong>
+                          <span>
+                            {step.status}
+                            {step.decision ? ` · ${step.decision}` : ""}
+                          </span>
+                        </div>
+                        <small>
+                          {step.reason ?? "no step reason"} ·{" "}
+                          {step.provider ?? primaryAttempt?.provider ?? "provider"} /
+                          {step.model ?? primaryAttempt?.model ?? "model"} ·{" "}
+                          {step.promptVersion ??
+                            primaryAttempt?.promptVersion ??
+                            "prompt"}{" "}
+                          ·{" "}
+                          {step.schemaVersion ??
+                            primaryAttempt?.schemaVersion ??
+                            "schema"}
+                        </small>
+                        <small>
+                          {formatPipelineUsage(primaryAttempt?.usage)}
+                          {formatPipelineLatency(
+                            step.latencyMs ?? primaryAttempt?.latencyMs,
+                          )}
+                          {" · "}
+                          issues {step.validationIssues.length}
+                          {primaryAttempt?.validatorIssues.length
+                            ? `/${primaryAttempt.validatorIssues.length}`
+                            : ""}
+                          {step.usageId ? ` · ${step.usageId}` : ""}
+                        </small>
+                      </div>
+                    );
+                  })}
+                </div>
+                {run.artifacts.length ? (
+                  <div className={styles.pipelineArtifacts}>
+                    {run.artifacts.slice(0, 8).map((artifact) => (
+                      <span key={artifact.artifactId}>
+                        {artifact.kind}:{" "}
+                        {artifact.bucket ? `${artifact.bucket}/` : ""}
+                        {artifact.path}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+            {pipelineRuns.length === 0 ? (
+              <div className={styles.empty}>No V5 pipeline traces loaded.</div>
+            ) : null}
+          </div>
+        </section>
+
+        <section className={styles.panel}>
+          <div className={styles.panelHeader}>
+            <div>
               <p className={styles.eyebrow}>Evaluation</p>
               <h2>Reports</h2>
             </div>
@@ -1080,4 +1237,27 @@ function getDraftActionBody({
 
 function formatConfidence(value: number | undefined) {
   return typeof value === "number" ? `${Math.round(value * 100)}%` : "n/a";
+}
+
+function formatPipelineUsage(usage: Record<string, unknown> | undefined) {
+  if (!usage) return "tokens 0";
+  const totalTokens =
+    typeof usage.totalTokens === "number"
+      ? usage.totalTokens
+      : typeof usage.total_tokens === "number"
+        ? usage.total_tokens
+        : undefined;
+  const costMicroCny =
+    typeof usage.costMicroCny === "number"
+      ? usage.costMicroCny
+      : typeof usage.cost_micro_cny === "number"
+        ? usage.cost_micro_cny
+        : undefined;
+  return `${formatTokenCount(totalTokens)} tokens · ${formatLlmCostCny(
+    costMicroCny,
+  )}`;
+}
+
+function formatPipelineLatency(latencyMs: number | undefined) {
+  return typeof latencyMs === "number" ? ` · ${latencyMs}ms` : "";
 }

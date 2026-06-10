@@ -13,6 +13,10 @@ import type {
   AdminLlmUsageRecord,
   AdminLlmUsageSummary,
   AdminDataClass,
+  AdminPipelineArtifactRecord,
+  AdminPipelineAttemptRecord,
+  AdminPipelineRunRecord,
+  AdminPipelineStepRecord,
   AdminProcessingLedgerRecord,
   AdminProcessingLedgerState,
   AdminReviewState,
@@ -177,6 +181,75 @@ type EvaluationCaseResultRow = {
   usage_id: string | null;
   artifact_path: string | null;
   created_at: string;
+};
+
+type PipelineRunRow = {
+  run_id: string;
+  data_class: AdminDataClass;
+  source_kind: string | null;
+  source_id: string | null;
+  article_bundle_id: string | null;
+  case_id: string | null;
+  status: string;
+  decision: string | null;
+  reason: string | null;
+  started_at: string;
+  finished_at: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+type PipelineStepRow = {
+  step_id: string;
+  run_id: string;
+  step_order: number;
+  node_name: string;
+  node_version: string | null;
+  status: string;
+  decision: string | null;
+  reason: string | null;
+  provider: string | null;
+  model: string | null;
+  prompt_version: string | null;
+  schema_version: string | null;
+  usage_id: string | null;
+  input_artifact_ids: string[] | null;
+  output_artifact_ids: string[] | null;
+  validation_issues: unknown[] | null;
+  error_details: Record<string, unknown> | null;
+  started_at: string | null;
+  finished_at: string | null;
+  latency_ms: number | null;
+};
+
+type PipelineArtifactRow = {
+  artifact_id: string;
+  run_id: string;
+  step_id: string | null;
+  data_class: AdminDataClass;
+  path: string;
+  kind: string;
+  hash: string | null;
+  bucket: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+type PipelineAttemptRow = {
+  attempt_id: string;
+  run_id: string;
+  step_id: string;
+  attempt_number: number;
+  provider: string | null;
+  model: string | null;
+  prompt_version: string | null;
+  schema_version: string | null;
+  usage: Record<string, unknown> | null;
+  validator_issues: unknown[] | null;
+  reason: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  latency_ms: number | null;
 };
 
 type LlmUsageRow = {
@@ -383,6 +456,92 @@ class SupabaseAdminStore implements AdminStore {
     if (error) throw new Error("admin_processing_ledger_list_failed");
     return ((data ?? []) as ProcessingLedgerRow[]).map(
       toProcessingLedgerRecord,
+    );
+  }
+
+  async listPipelineRuns(input: {
+    dataClass?: AdminDataClass;
+    status?: string;
+  }): Promise<AdminPipelineRunRecord[]> {
+    const dataClass = input.dataClass ?? "production";
+    let runQuery = this.client
+      .from("pipeline_runs")
+      .select("*")
+      .eq("data_class", dataClass);
+
+    if (input.status) {
+      runQuery = runQuery.eq("status", input.status);
+    }
+
+    const { data: runData, error: runError } = await runQuery
+      .order("started_at", { ascending: false })
+      .limit(50);
+    if (runError) throw new Error("admin_pipeline_run_list_failed");
+
+    const runRows = (runData ?? []) as PipelineRunRow[];
+    const runIds = runRows.map((run) => run.run_id);
+    if (runIds.length === 0) return [];
+
+    const { data: stepData, error: stepError } = await this.client
+      .from("pipeline_steps")
+      .select("*")
+      .eq("data_class", dataClass)
+      .in("run_id", runIds)
+      .order("step_order", { ascending: true })
+      .limit(1_000);
+    if (stepError) throw new Error("admin_pipeline_step_list_failed");
+
+    const { data: artifactData, error: artifactError } = await this.client
+      .from("pipeline_artifacts")
+      .select("*")
+      .eq("data_class", dataClass)
+      .in("run_id", runIds)
+      .order("created_at", { ascending: true })
+      .limit(1_000);
+    if (artifactError) throw new Error("admin_pipeline_artifact_list_failed");
+
+    const { data: attemptData, error: attemptError } = await this.client
+      .from("pipeline_attempts")
+      .select("*")
+      .eq("data_class", dataClass)
+      .in("run_id", runIds)
+      .order("attempt_number", { ascending: true })
+      .limit(1_000);
+    if (attemptError) throw new Error("admin_pipeline_attempt_list_failed");
+
+    const attemptsByStep = new Map<string, AdminPipelineAttemptRecord[]>();
+    for (const row of (attemptData ?? []) as PipelineAttemptRow[]) {
+      const attempt = toPipelineAttemptRecord(row);
+      attemptsByStep.set(attempt.stepId, [
+        ...(attemptsByStep.get(attempt.stepId) ?? []),
+        attempt,
+      ]);
+    }
+
+    const stepsByRun = new Map<string, AdminPipelineStepRecord[]>();
+    for (const row of (stepData ?? []) as PipelineStepRow[]) {
+      const step = toPipelineStepRecord(
+        row,
+        attemptsByStep.get(row.step_id) ?? [],
+      );
+      stepsByRun.set(step.runId, [...(stepsByRun.get(step.runId) ?? []), step]);
+    }
+
+    const artifactsByRun = new Map<string, AdminPipelineArtifactRecord[]>();
+    for (const row of (artifactData ?? []) as PipelineArtifactRow[]) {
+      const artifact = toPipelineArtifactRecord(row);
+      artifactsByRun.set(artifact.runId, [
+        ...(artifactsByRun.get(artifact.runId) ?? []),
+        artifact,
+      ]);
+    }
+
+    return runRows.map((row) =>
+      toPipelineRunRecord(
+        row,
+        stepsByRun.get(row.run_id) ?? [],
+        artifactsByRun.get(row.run_id) ?? [],
+      ),
     );
   }
 
@@ -777,6 +936,8 @@ function isSensitiveMetadataKey(key: string) {
     "api_key",
     "apikey",
     "header",
+    "authorization",
+    "auth",
     "cookie",
     "token",
     "secret",
@@ -897,6 +1058,97 @@ function toProcessingLedgerRecord(
   };
 }
 
+function toPipelineRunRecord(
+  row: PipelineRunRow,
+  steps: AdminPipelineStepRecord[],
+  artifacts: AdminPipelineArtifactRecord[],
+): AdminPipelineRunRecord {
+  return {
+    runId: row.run_id,
+    dataClass: row.data_class,
+    sourceKind: row.source_kind ?? undefined,
+    sourceId: row.source_id ?? undefined,
+    articleBundleId: row.article_bundle_id ?? undefined,
+    caseId: row.case_id ?? undefined,
+    status: row.status,
+    decision: row.decision ?? undefined,
+    reason: row.reason ?? undefined,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at ?? undefined,
+    metadata: sanitizeJsonObject(row.metadata ?? {}),
+    steps,
+    artifacts,
+    createdAt: row.created_at,
+  };
+}
+
+function toPipelineStepRecord(
+  row: PipelineStepRow,
+  attempts: AdminPipelineAttemptRecord[],
+): AdminPipelineStepRecord {
+  return {
+    stepId: row.step_id,
+    runId: row.run_id,
+    stepOrder: row.step_order,
+    nodeName: row.node_name,
+    nodeVersion: row.node_version ?? undefined,
+    status: row.status,
+    decision: row.decision ?? undefined,
+    reason: row.reason ?? undefined,
+    provider: row.provider ?? undefined,
+    model: row.model ?? undefined,
+    promptVersion: row.prompt_version ?? undefined,
+    schemaVersion: row.schema_version ?? undefined,
+    usageId: row.usage_id ?? undefined,
+    inputArtifactIds: row.input_artifact_ids ?? [],
+    outputArtifactIds: row.output_artifact_ids ?? [],
+    validationIssues: sanitizeJsonArray(row.validation_issues ?? []),
+    errorDetails: sanitizeJsonObject(row.error_details ?? {}),
+    startedAt: row.started_at ?? undefined,
+    finishedAt: row.finished_at ?? undefined,
+    latencyMs: row.latency_ms ?? undefined,
+    attempts,
+  };
+}
+
+function toPipelineArtifactRecord(
+  row: PipelineArtifactRow,
+): AdminPipelineArtifactRecord {
+  return {
+    artifactId: row.artifact_id,
+    runId: row.run_id,
+    stepId: row.step_id ?? undefined,
+    dataClass: row.data_class,
+    path: row.path,
+    kind: row.kind,
+    hash: row.hash ?? undefined,
+    bucket: row.bucket ?? undefined,
+    metadata: sanitizeJsonObject(row.metadata ?? {}),
+    createdAt: row.created_at,
+  };
+}
+
+function toPipelineAttemptRecord(
+  row: PipelineAttemptRow,
+): AdminPipelineAttemptRecord {
+  return {
+    attemptId: row.attempt_id,
+    runId: row.run_id,
+    stepId: row.step_id,
+    attemptNumber: row.attempt_number,
+    provider: row.provider ?? undefined,
+    model: row.model ?? undefined,
+    promptVersion: row.prompt_version ?? undefined,
+    schemaVersion: row.schema_version ?? undefined,
+    usage: sanitizeUsageObject(row.usage ?? {}),
+    validatorIssues: sanitizeJsonArray(row.validator_issues ?? []),
+    reason: row.reason ?? undefined,
+    startedAt: row.started_at ?? undefined,
+    finishedAt: row.finished_at ?? undefined,
+    latencyMs: row.latency_ms ?? undefined,
+  };
+}
+
 function toEvaluationRunRecord(
   row: EvaluationRunRow,
   caseResults: AdminEvaluationCaseResultRecord[],
@@ -951,6 +1203,38 @@ function sanitizeJsonObject(
   input: Record<string, unknown>,
 ): Record<string, unknown> {
   return sanitizeLlmMetadata(input);
+}
+
+function sanitizeUsageObject(input: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (isSensitiveMetadataKey(key) && !isUsageMetricKey(key)) continue;
+    sanitized[key] = sanitizeJsonValue(value);
+  }
+  return sanitized;
+}
+
+function isUsageMetricKey(key: string) {
+  return [
+    "inputTokens",
+    "outputTokens",
+    "totalTokens",
+    "cachedInputTokens",
+    "reasoningOutputTokens",
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "cached_input_tokens",
+    "reasoning_output_tokens",
+    "costMicroCny",
+    "cost_micro_cny",
+    "latencyMs",
+    "latency_ms",
+  ].includes(key);
+}
+
+function sanitizeJsonArray(input: unknown[]): unknown[] {
+  return input.map(sanitizeJsonValue);
 }
 
 function toJobRecord(row: CollectorJobRow): AdminCollectorJobRecord {

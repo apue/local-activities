@@ -6,6 +6,7 @@ import type {
   AdminEvaluationRunRecord,
   AdminExcludedArticleRecord,
   AdminLlmUsageSummary,
+  AdminPipelineRunRecord,
   AdminProcessingLedgerRecord,
   AdminStore,
 } from "./admin-service";
@@ -17,6 +18,7 @@ import {
   handleAdminListCollectorJobs,
   handleAdminListEventDrafts,
   handleAdminListLlmUsage,
+  handleAdminListPipelineRuns,
   handleAdminListProcessingLedger,
   handleAdminPromoteExcludedArticle,
   handleAdminPatchEventDraft,
@@ -105,6 +107,77 @@ class RouteAdminStore implements AdminStore {
     createdAt: "2026-06-04T02:00:00.000Z",
   };
   evaluationRunsInput?: Parameters<AdminStore["listEvaluationRuns"]>[0];
+  pipelineRunsInput?: Parameters<AdminStore["listPipelineRuns"]>[0];
+  pipelineRun: AdminPipelineRunRecord = {
+    runId: "pipe-1",
+    dataClass: "production",
+    sourceKind: "article_bundle",
+    sourceId: "bundle-1",
+    articleBundleId: "bundle-1",
+    caseId: "case-1",
+    status: "completed",
+    decision: "needs_review",
+    reason: "Missing registration QR.",
+    startedAt: "2026-06-10T04:00:00.000Z",
+    finishedAt: "2026-06-10T04:00:04.000Z",
+    metadata: {},
+    steps: [
+      {
+        stepId: "step-1",
+        runId: "pipe-1",
+        stepOrder: 1,
+        nodeName: "full_extract",
+        nodeVersion: "v5",
+        status: "completed",
+        decision: "public_activity",
+        reason: "Event fields extracted.",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        promptVersion: "full-extract-v5",
+        schemaVersion: "event-extract-v5",
+        usageId: "usage-1",
+        inputArtifactIds: ["artifact-input"],
+        outputArtifactIds: ["artifact-output"],
+        validationIssues: [{ code: "missing_registration_qr" }],
+        errorDetails: {},
+        startedAt: "2026-06-10T04:00:00.000Z",
+        finishedAt: "2026-06-10T04:00:03.000Z",
+        latencyMs: 3000,
+        attempts: [
+          {
+            attemptId: "attempt-1",
+            runId: "pipe-1",
+            stepId: "step-1",
+            attemptNumber: 1,
+            provider: "dashscope",
+            model: "qwen3-vl-plus",
+            promptVersion: "full-extract-v5",
+            schemaVersion: "event-extract-v5",
+            usage: { totalTokens: 1450, costMicroCny: 4200 },
+            validatorIssues: [{ code: "missing_registration_qr" }],
+            reason: "Validator asked for review.",
+            startedAt: "2026-06-10T04:00:00.000Z",
+            finishedAt: "2026-06-10T04:00:03.000Z",
+            latencyMs: 3000,
+          },
+        ],
+      },
+    ],
+    artifacts: [
+      {
+        artifactId: "artifact-output",
+        runId: "pipe-1",
+        stepId: "step-1",
+        dataClass: "production",
+        path: "runs/pipe-1/full_extract.json",
+        kind: "extraction",
+        bucket: "eval-artifacts",
+        metadata: {},
+        createdAt: "2026-06-10T04:00:03.000Z",
+      },
+    ],
+    createdAt: "2026-06-10T04:00:00.000Z",
+  };
   llmUsageSummary: AdminLlmUsageSummary = {
     range: {
       key: "today",
@@ -196,6 +269,13 @@ class RouteAdminStore implements AdminStore {
     return [this.evaluationRun];
   }
 
+  async listPipelineRuns(
+    input: Parameters<AdminStore["listPipelineRuns"]>[0],
+  ): Promise<AdminPipelineRunRecord[]> {
+    this.pipelineRunsInput = input;
+    return [this.pipelineRun];
+  }
+
   async promoteExcludedArticle(
     excludedArticleId: string,
     promotedAt: string,
@@ -270,6 +350,10 @@ class FailingListAdminStore extends RouteAdminStore {
 
   async getLlmUsageSummary(): Promise<AdminLlmUsageSummary> {
     throw new Error("admin_llm_usage_list_failed");
+  }
+
+  async listPipelineRuns(): Promise<AdminPipelineRunRecord[]> {
+    throw new Error("admin_pipeline_run_list_failed");
   }
 }
 
@@ -473,6 +557,71 @@ describe("admin route handlers", () => {
     expect(store.evaluationRunsInput).toMatchObject({
       status: "completed",
       validity: "valid",
+    });
+  });
+
+  it("lists V5 pipeline runs with nested trace records for admin visibility", async () => {
+    const store = new RouteAdminStore();
+    const response = await handleAdminListPipelineRuns(
+      new Request(
+        "https://example.com/api/admin/pipeline-runs?dataClass=production&status=completed",
+        {
+          headers: { authorization: "Bearer admin-secret" },
+        },
+      ),
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      pipelineRuns: [
+        {
+          runId: "pipe-1",
+          status: "completed",
+          decision: "needs_review",
+          steps: [
+            {
+              stepOrder: 1,
+              nodeName: "full_extract",
+              provider: "dashscope",
+              model: "qwen3-vl-plus",
+              promptVersion: "full-extract-v5",
+              schemaVersion: "event-extract-v5",
+              validationIssues: [{ code: "missing_registration_qr" }],
+              attempts: [
+                {
+                  usage: { totalTokens: 1450, costMicroCny: 4200 },
+                  latencyMs: 3000,
+                },
+              ],
+            },
+          ],
+          artifacts: [{ path: "runs/pipe-1/full_extract.json" }],
+        },
+      ],
+    });
+    expect(store.pipelineRunsInput).toEqual({
+      dataClass: "production",
+      status: "completed",
+    });
+  });
+
+  it("rejects invalid pipeline run filters", async () => {
+    const response = await handleAdminListPipelineRuns(
+      new Request("https://example.com/api/admin/pipeline-runs?dataClass=dev", {
+        headers: { authorization: "Bearer admin-secret" },
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: "invalid_request",
     });
   });
 

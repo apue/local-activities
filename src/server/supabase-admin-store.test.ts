@@ -236,6 +236,89 @@ describe("supabase admin store", () => {
     expect(calls).toContainEqual(["in", "run_id", ["eval-1"]]);
   });
 
+  it("maps V5 pipeline runs with steps, attempts, and artifacts", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(supabaseClientForPipelineRuns(calls));
+
+    const runs = await store.listPipelineRuns({
+      dataClass: "production",
+      status: "completed",
+    });
+
+    expect(runs).toEqual([
+      expect.objectContaining({
+        runId: "pipe-1",
+        dataClass: "production",
+        sourceKind: "article_bundle",
+        sourceId: "bundle-1",
+        articleBundleId: "bundle-1",
+        caseId: "case-1",
+        status: "completed",
+        decision: "needs_review",
+        reason: "Missing registration QR.",
+        metadata: {
+          safe: "kept",
+        },
+        steps: [
+          expect.objectContaining({
+            stepId: "step-1",
+            stepOrder: 1,
+            nodeName: "full_extract",
+            provider: "dashscope",
+            model: "qwen3-vl-plus",
+            promptVersion: "full-extract-v5",
+            schemaVersion: "event-extract-v5",
+            usageId: "usage-1",
+            inputArtifactIds: ["artifact-input"],
+            outputArtifactIds: ["artifact-output"],
+            validationIssues: [
+              {
+                code: "missing_registration_qr",
+                safe: "kept",
+              },
+            ],
+            attempts: [
+              expect.objectContaining({
+                attemptId: "attempt-1",
+                attemptNumber: 1,
+                usage: {
+                  totalTokens: 1450,
+                  costMicroCny: 4200,
+                },
+                validatorIssues: [
+                  {
+                    code: "missing_registration_qr",
+                    safe: "kept",
+                  },
+                ],
+                latencyMs: 3000,
+              }),
+            ],
+          }),
+        ],
+        artifacts: [
+          expect.objectContaining({
+            artifactId: "artifact-output",
+            stepId: "step-1",
+            path: "runs/pipe-1/full_extract.json",
+            kind: "extraction",
+            bucket: "eval-artifacts",
+          }),
+        ],
+      }),
+    ]);
+    expect(JSON.stringify(runs)).not.toContain("do not leak");
+    expect(JSON.stringify(runs)).not.toContain("secret");
+    expect(calls).toContainEqual(["eq", "pipeline_runs", "data_class", "production"]);
+    expect(calls).toContainEqual(["eq", "pipeline_runs", "status", "completed"]);
+    expect(calls).toContainEqual(["eq", "pipeline_steps", "data_class", "production"]);
+    expect(calls).toContainEqual(["eq", "pipeline_artifacts", "data_class", "production"]);
+    expect(calls).toContainEqual(["eq", "pipeline_attempts", "data_class", "production"]);
+    expect(calls).toContainEqual(["in", "pipeline_steps", "run_id", ["pipe-1"]]);
+    expect(calls).toContainEqual(["in", "pipeline_artifacts", "run_id", ["pipe-1"]]);
+    expect(calls).toContainEqual(["in", "pipeline_attempts", "run_id", ["pipe-1"]]);
+  });
+
   it("can list invalidated evaluation runs for audit", async () => {
     const calls: unknown[] = [];
     const store = getSupabaseAdminStore(
@@ -892,6 +975,141 @@ function supabaseClientForEvaluationRuns(
             data: table === "evaluation_runs" ? runRows : caseRows,
             error: null,
           });
+        },
+      };
+      return query;
+    },
+  } as never;
+}
+
+function supabaseClientForPipelineRuns(calls: unknown[] = []) {
+  const rowsByTable: Record<string, unknown[]> = {
+    pipeline_runs: [
+      {
+        run_id: "pipe-1",
+        data_class: "production",
+        source_kind: "article_bundle",
+        source_id: "bundle-1",
+        article_bundle_id: "bundle-1",
+        case_id: "case-1",
+        status: "completed",
+        decision: "needs_review",
+        reason: "Missing registration QR.",
+        started_at: "2026-06-10T04:00:00.000Z",
+        finished_at: "2026-06-10T04:00:04.000Z",
+        metadata: {
+          safe: "kept",
+          prompt: "do not leak",
+        },
+        created_at: "2026-06-10T04:00:00.000Z",
+      },
+    ],
+    pipeline_steps: [
+      {
+        step_id: "step-1",
+        run_id: "pipe-1",
+        step_order: 1,
+        node_name: "full_extract",
+        node_version: "v5",
+        status: "completed",
+        decision: "public_activity",
+        reason: "Event fields extracted.",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        prompt_version: "full-extract-v5",
+        schema_version: "event-extract-v5",
+        usage_id: "usage-1",
+        input_artifact_ids: ["artifact-input"],
+        output_artifact_ids: ["artifact-output"],
+        validation_issues: [
+          {
+            code: "missing_registration_qr",
+            safe: "kept",
+            raw_response: "do not leak",
+          },
+        ],
+        error_details: {
+          nested: {
+            safe: "kept",
+            api_key: "secret",
+          },
+        },
+        started_at: "2026-06-10T04:00:00.000Z",
+        finished_at: "2026-06-10T04:00:03.000Z",
+        latency_ms: 3000,
+        created_at: "2026-06-10T04:00:00.000Z",
+      },
+    ],
+    pipeline_artifacts: [
+      {
+        artifact_id: "artifact-output",
+        run_id: "pipe-1",
+        step_id: "step-1",
+        data_class: "production",
+        path: "runs/pipe-1/full_extract.json",
+        kind: "extraction",
+        hash: "sha256:abc",
+        bucket: "eval-artifacts",
+        metadata: {
+          safe: "kept",
+          token: "secret",
+        },
+        created_at: "2026-06-10T04:00:03.000Z",
+      },
+    ],
+    pipeline_attempts: [
+      {
+        attempt_id: "attempt-1",
+        run_id: "pipe-1",
+        step_id: "step-1",
+        attempt_number: 1,
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        prompt_version: "full-extract-v5",
+        schema_version: "event-extract-v5",
+        usage: {
+          totalTokens: 1450,
+          costMicroCny: 4200,
+          authorization: "secret",
+        },
+        validator_issues: [
+          {
+            code: "missing_registration_qr",
+            safe: "kept",
+            raw_response: "do not leak",
+          },
+        ],
+        reason: "Validator asked for review.",
+        started_at: "2026-06-10T04:00:00.000Z",
+        finished_at: "2026-06-10T04:00:03.000Z",
+        latency_ms: 3000,
+        created_at: "2026-06-10T04:00:00.000Z",
+      },
+    ],
+  };
+
+  return {
+    from(table: string) {
+      const query = {
+        select() {
+          calls.push(["select", table]);
+          return query;
+        },
+        eq(column: string, value: string) {
+          calls.push(["eq", table, column, value]);
+          return query;
+        },
+        in(column: string, values: string[]) {
+          calls.push(["in", table, column, values]);
+          return query;
+        },
+        order(column: string) {
+          calls.push(["order", table, column]);
+          return query;
+        },
+        limit(count: number) {
+          calls.push(["limit", table, count]);
+          return Promise.resolve({ data: rowsByTable[table] ?? [], error: null });
         },
       };
       return query;
