@@ -13,6 +13,7 @@
     "start": "next start",
     "env:check": "node scripts/env-inventory.mjs",
     "regression:replay": "node scripts/regression-corpus-replay.mjs",
+    "pipeline:v5:replay": "node scripts/pipeline-v5-replay.mjs",
     "eval:run": "node scripts/evaluation-runner.mjs",
     "data:audit": "node scripts/data-hygiene.mjs audit",
     "data:hygiene": "node scripts/data-hygiene.mjs hygiene",
