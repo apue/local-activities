@@ -55,31 +55,18 @@ Configuration uses:
 
 ## Evaluation
 
-Evaluation runs from the Node.js runner and compares extractor variants:
+V5 model evaluation is not an active package command after the cleanup. The next
+evaluation implementation should run on V5 replay artifacts and compare
+extractor/editor variants through the same contracts used by the pipeline:
 
 ```text
 provider + model + promptVersion + schemaVersion + parameters
 ```
 
-The default CI-safe command uses memory storage, mocked variants, and an
-explicit corpus:
-
-```bash
-pnpm eval:run -- --corpus-dir tests/regression-corpus --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
-```
-
-Local artifact runs write to `tmp/evaluation-runs` by default. Supabase writes
-require `--store supabase` and are limited to `evaluation_runs`,
-`evaluation_case_results`, `llm_usage_ledger`, and `eval-artifacts`. Live
-provider runs are opt-in:
-
-```bash
-pnpm eval:run -- --corpus-dir tests/regression-corpus --variant live-configured --allow-live --max-cost-cny <n>
-```
-
-The committed corpus is public-safe and text-derived. Use it for live provider
-wiring smoke checks, not poster/QR vision quality. Vision evaluation requires a
-private local corpus directory with consumable image assets.
+Future live provider comparisons must be explicit, budgeted, data-class scoped,
+and must not write production drafts or canonical events. The committed corpus
+is public-safe and text-derived; poster/QR quality checks require a private
+local corpus directory with consumable image assets.
 
 ## Map And Geocoding
 
@@ -101,7 +88,6 @@ the MVP reset.
 
 ## Active References
 
-- [Event Pipeline Reset Goal](event-pipeline-reset-goal.md)
 - [Event Pipeline Architecture](event-pipeline-architecture.md)
 - [Technical Baseline](technical-baseline.md)
 - [Testing Strategy](testing-strategy.md)

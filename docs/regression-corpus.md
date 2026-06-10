@@ -3,7 +3,7 @@
 This document defines the current regression corpus policy. The committed corpus
 under `tests/regression-corpus` is public-safe regression data derived from real
 locally captured Wechat2RSS article bundles. It is the default product
-regression set for offline pipeline replay and mocked evaluation.
+regression set for V5 offline pipeline replay.
 
 ## Current State
 
@@ -18,22 +18,15 @@ derived factual text, expected outcomes, and source metadata. Use a private loca
 corpus rebuilt from Wechat2RSS when validating live vision behavior for posters
 or registration QR codes.
 
-Replay must still point at an explicit corpus directory:
+V5 replay must point at an explicit corpus directory:
 
 ```bash
-pnpm regression:replay -- --corpus-dir tests/regression-corpus --all
+pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store memory
 ```
 
-Unit tests for the replay loader and evaluation runner generate temporary
-contract-valid corpora at runtime. Those temporary corpora test the harness
-itself; they are not model-quality benchmarks and must not be treated as product
-acceptance data.
-
-CI-safe evaluation can consume the same corpus through mocked variants:
-
-```bash
-pnpm eval:run -- --corpus-dir tests/regression-corpus --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
-```
+Unit tests for the replay loader may generate temporary contract-valid corpora
+at runtime. Those temporary corpora test the harness itself; they are not
+model-quality benchmarks and must not be treated as product acceptance data.
 
 ## Required Case Format
 
@@ -104,8 +97,8 @@ Known gaps are recorded in `manifest.json`:
 ## Replay Boundary
 
 Replay is offline and deterministic. It validates corpus structure, validates
-captured bundles, extracts evidence from the bundle, and compares mocked
-analysis/dedupe/publish expectations from `expected.json`.
+captured bundles, and runs the V5 Phase 1 node chain against expectations from
+`expected.json`.
 
 Replay must not call live WeChat, live LLM providers, hosted Supabase, or
 production write paths.
@@ -128,6 +121,5 @@ mirrors or copied article images to the public repository.
 After adding or changing cases, run:
 
 ```bash
-pnpm regression:replay -- --corpus-dir tests/regression-corpus --all
-pnpm eval:run -- --corpus-dir tests/regression-corpus --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
+pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store memory
 ```

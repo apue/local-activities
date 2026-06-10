@@ -27,7 +27,7 @@ tables directly.
 | --- | --- | --- |
 | Capture worker | Wechat2RSS health checks, article polling, bundle creation, Supabase Storage upload, Edge Function trigger | LLM calls, event publication decisions, direct event/draft/evidence DB writes |
 | Supabase Edge Functions | bundle analysis, provider calls, schema validation, dedupe, publish routing, data-class-scoped ledger/evidence/draft/event/usage writes | WeChat crawling, browser automation, unscoped production writes |
-| Evaluation runner | extractor variant orchestration, scoring, local eval artifacts, explicit eval-scoped Supabase writes | production event publication, draft/evidence writes, live provider calls without an allow-live flag and budget |
+| V5 evaluation surface | future extractor/editor variant orchestration, scoring, local eval artifacts, explicit eval-scoped Supabase writes | production event publication, draft/evidence writes, live provider calls without an allow-live flag and budget |
 | Supabase Storage | raw bundles, event evidence assets, eval artifacts | mixed-purpose buckets that combine raw capture and published assets |
 | Supabase Postgres | sources, bundles, ledger, drafts, canonical events, evidence, usage, evaluations | unvalidated collector output as public state |
 | Vercel | public catalog, admin portal, read-only operational views, admin actions | production capture, production LLM analysis |
@@ -90,28 +90,23 @@ Wechat2RSS article
 Every article outcome writes ledger state, including `excluded`, `duplicate`,
 and `failed`.
 
-## Evaluation Harness
+## V5 Replay And Evaluation
 
-The evaluation harness is separate from the production publication pipeline. Its
-CI-safe path uses mocked variants, memory storage, and an explicit corpus:
-
-```bash
-pnpm eval:run -- --corpus-dir tests/regression-corpus --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
-```
-
-Local artifact runs write to `tmp/evaluation-runs` by default. Evaluation runs
-must point to an explicit corpus directory. The Supabase writer is explicit with
-`--store supabase`, writes metadata with `data_class='eval'`, and may write only
-`evaluation_runs`, `evaluation_case_results`, `llm_usage_ledger`, and
-`eval-artifacts`. Live provider evaluation is opt-in:
+The active offline pipeline harness is V5 replay:
 
 ```bash
-pnpm eval:run -- --corpus-dir tests/regression-corpus --variant live-configured --allow-live --max-cost-cny <n>
+pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store memory
 ```
 
-The committed corpus is public-safe and text-derived. Use it for smoke-testing
-live provider wiring and schema handling. For poster or registration QR quality,
-point `--corpus-dir` at a private local corpus rebuilt from Wechat2RSS with
+V5 replay is separate from the production publication pipeline. It uses the
+committed corpus, mock providers, memory or local artifacts, and no hosted
+writes. The reset-era evaluation runner has been removed as an active
+entrypoint. The next model-evaluation surface should consume V5 node artifacts
+and preserve the same explicit data-class, budget, and no-production-write
+boundaries.
+
+The committed corpus is public-safe and text-derived. For poster or
+registration QR quality, use a private local corpus rebuilt from Wechat2RSS with
 consumable image assets.
 
 ## Module Contracts

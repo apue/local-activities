@@ -66,21 +66,17 @@ multi-event and long-running cases, recurring occurrences, and negative
 news/non-public/not-Beijing cases.
 
 The committed corpus does not include full third-party article mirrors or copied
-article images. It is suitable for deterministic replay, mocked evaluation, and
-pipeline contract regression. Live vision checks for posters or registration QR
-codes require a private local corpus rebuilt from Wechat2RSS and kept outside
-the public repository.
+article images. It is suitable for V5 deterministic replay and pipeline
+contract regression. Live vision checks for posters or registration QR codes
+require a private local corpus rebuilt from Wechat2RSS and kept outside the
+public repository.
 
-Replay remains available, but every run must point to an explicit corpus
-directory:
+V5 replay is the active corpus replay path. Every run must point to an explicit
+corpus directory.
 
-```bash
-pnpm regression:replay -- --corpus-dir tests/regression-corpus --all
-```
-
-Unit tests for the replay loader and evaluation runner may create temporary
-contract-valid corpora at runtime. Those temporary corpora verify the harness
-itself; they are not product acceptance data.
+Unit tests for the replay loader may create temporary contract-valid corpora at
+runtime. Those temporary corpora verify the harness itself; they are not product
+acceptance data.
 
 Replay must run without network/provider/production writes. New corpus cases are
 added by reviewed PRs with public-safe derived captured bundles or explicit
@@ -108,41 +104,18 @@ pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store lo
 Local artifact mode writes under `tmp/v5-replay-runs` unless `--artifact-dir` is
 provided. V5 replay refuses production target and live-provider flags in Phase 1.
 
-## Evaluation
+## V5 Model Evaluation
 
-Evaluation tests compare extractor variants through the reusable evaluation
-runner:
+The reset-era Node evaluation runner has been removed as an active entrypoint.
+The next evaluation surface should be built on top of V5 node contracts and
+replay artifacts, so model/prompt comparisons inspect the same packet,
+extraction, validation, editor, usage, and publish-trace records as the active
+pipeline.
 
-```text
-provider + model + promptVersion + schemaVersion + parameters
-```
-
-CI-safe validation uses mocked variants, memory storage, and an explicit corpus:
-
-```bash
-pnpm eval:run -- --corpus-dir tests/regression-corpus --store memory --variant mock-expected-v1 --variant mock-overfilter-v1
-```
-
-Local artifact runs write to `tmp/evaluation-runs` by default. Hosted writes are
-explicit with `--store supabase` and are limited to `evaluation_runs`,
-`evaluation_case_results`, `llm_usage_ledger`, and the `eval-artifacts` bucket.
-Hosted evaluation metadata must use `data_class='eval'`.
-
-Expected checks:
-
-- scorer unit tests
-- mocked evaluation run
-- artifact write/read tests
-- usage/cost aggregation tests
-- optional live model comparison with budget guard
-
-The evaluation runner must never write production drafts or canonical events.
-Use the Supabase Edge Function with `dataClass=eval`, `test`, or `smoke` only
-when intentionally testing product-shaped analysis writes outside production.
-The default evaluation path must not call live LLM providers; live variants
-require `--variant live-configured --allow-live --max-cost-cny <n>`. Live vision
-variants should use a private local corpus directory that includes consumable
-image assets, not the public-safe committed corpus.
+Until that V5 evaluation runner exists, model evaluation is not an active
+package command. Any future live provider comparison must remain explicit,
+budgeted, data-class scoped, and must not write production drafts or canonical
+events.
 
 ## Admin/Public UI
 

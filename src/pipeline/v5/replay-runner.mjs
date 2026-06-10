@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { loadRegressionCorpus } from "../../../scripts/regression-corpus-replay.mjs";
 import { buildCandidatePacket } from "./candidate-packet.mjs";
 import { runCheapTriage } from "./cheap-triage.mjs";
 import { cleanCapturedArticleBundle } from "./content-cleaner.mjs";
@@ -13,6 +12,7 @@ import {
   publishTraceFromEditor,
   validateMockExtraction,
 } from "./mock-harnesses.mjs";
+import { loadV5RegressionCorpus } from "./regression-corpus-loader.mjs";
 import { scoreNormalizedContent } from "./signal-scorer.mjs";
 
 const refusedTargets = new Set(["live_wechat", "live_llm", "hosted_supabase", "production"]);
@@ -56,7 +56,7 @@ export async function runV5Replay({
   now = new Date(),
 } = {}) {
   if (!corpusDir) throw new Error("v5_replay_corpus_dir_required");
-  const corpus = await loadRegressionCorpus({ corpusDir });
+  const corpus = await loadV5RegressionCorpus({ corpusDir });
   const selectedCases = selectCases({ cases: corpus.cases, all, caseIds });
   const replayWriter = writer ?? writerForStore({ store, artifactDir });
   const runId = `v5-replay-${timestampId(now)}`;

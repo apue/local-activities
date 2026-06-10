@@ -278,7 +278,7 @@ describe("data hygiene audit", () => {
     const actions = planDataHygieneActions(rows);
     const actionNames = actions.map((action) => action.action);
 
-    expect(actionNames).toContain("retriage_legacy_draft");
+    expect(actionNames).toContain("review_incomplete_pipeline_metadata");
     expect(actionNames).toContain("review_duplicate_draft");
     expect(actionNames).toContain("review_possible_negative_draft");
     expect(actionNames).toContain("repair_or_drop_broken_evidence_url");
