@@ -68,6 +68,11 @@ scoped, and must not write production drafts or canonical events. The committed
 corpus is public-safe and text-derived; poster/QR quality checks require a
 private local corpus directory with consumable image assets.
 
+Local live evaluation uses the `live-configured` variant. It accepts
+`V5_LIVE_BASE_URL`, `V5_LIVE_API_KEY`, `V5_LIVE_MODEL`, and optional
+`V5_LIVE_PROVIDER`; if those are not set, it falls back to the
+`ANALYSIS_LLM_*` Edge Function provider variables.
+
 ## Map And Geocoding
 
 AMAP remains the initial map/geocoding candidate for China address accuracy.

@@ -117,6 +117,16 @@ variants, memory/local artifacts, and no hosted writes. Any live provider
 comparison must remain explicit, budgeted, data-class scoped, and must not write
 production drafts or canonical events.
 
+Live model smoke uses the `live-configured` evaluation variant and is opt-in
+only. The command must include `--allow-live`, `--max-cost-cny`, and provider
+config loaded with `--env-file`. Tests cover this fail-closed behavior with fake
+providers; CI should keep using mocked variants.
+
+Private raw corpora are allowed for local evaluation when the committed
+public-safe corpus cannot exercise poster, QR, or long-image behavior. They must
+follow the same corpus contract as `tests/regression-corpus`, stay outside the
+repository, and write only evaluation artifacts.
+
 ## Admin/Public UI
 
 Public checks:

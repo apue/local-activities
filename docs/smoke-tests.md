@@ -58,6 +58,52 @@ Then run the project fixture analysis smoke added by the Edge Function issue.
 The default smoke must use a mocked provider. Live provider smoke requires
 configured secrets and budget approval.
 
+## V5 Private Corpus / Live Model Smoke
+
+The committed regression corpus remains the default validation path and must not
+call live providers:
+
+```bash
+pnpm pipeline:v5:eval -- --corpus-dir tests/regression-corpus --all --store memory
+```
+
+Use a private local corpus directory for live model smoke checks, especially
+when validating poster, QR, or long-image behavior. The private corpus must use
+the same case shape as `tests/regression-corpus`, but it must not be committed.
+
+Live evaluation is fail-closed. It requires all of:
+
+- `--variant live-configured`
+- `--allow-live`
+- `--max-cost-cny <positive number>`
+- provider config from `--env-file`
+
+The live provider config can use either V5-specific variables or the Edge
+Function analysis variables:
+
+```text
+V5_LIVE_BASE_URL      or ANALYSIS_LLM_BASE_URL
+V5_LIVE_API_KEY       or ANALYSIS_LLM_API_KEY
+V5_LIVE_MODEL         or ANALYSIS_LLM_MODEL
+V5_LIVE_PROVIDER      or ANALYSIS_LLM_PROVIDER
+```
+
+Example:
+
+```bash
+pnpm pipeline:v5:eval -- \
+  --corpus-dir /path/to/private-v5-corpus \
+  --case <case-id> \
+  --store local \
+  --variant live-configured \
+  --allow-live \
+  --max-cost-cny 10 \
+  --env-file .env.local
+```
+
+This smoke writes only evaluation artifacts. It must not write production drafts
+or canonical events.
+
 ## Capture Worker Dry Run
 
 Run the capture worker dry-run against local Wechat2RSS input:

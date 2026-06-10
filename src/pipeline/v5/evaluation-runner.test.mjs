@@ -62,10 +62,28 @@ describe("V5 evaluation runner", () => {
       "--allow-live",
       "--max-cost-cny",
       "1",
+      "--env-file",
+      ".env.local",
     ])).toMatchObject({
       allowLive: true,
       maxCostCny: 1,
+      envFiles: [path.resolve(".env.local")],
     });
+    expect(() => parseV5EvaluationArgs([
+      "--corpus-dir",
+      "tests/regression-corpus",
+      "--all",
+      "--variant",
+      "live-configured",
+    ])).toThrow("v5_evaluation_live_requires_allow_live");
+    expect(() => parseV5EvaluationArgs([
+      "--corpus-dir",
+      "tests/regression-corpus",
+      "--all",
+      "--variant",
+      "live-configured",
+      "--allow-live",
+    ])).toThrow("v5_evaluation_live_requires_positive_max_cost_cny");
   });
 
   it("runs the default deterministic baseline over fixture corpus with memory artifacts", async () => {
@@ -189,5 +207,107 @@ describe("V5 evaluation runner", () => {
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
     }
+  });
+
+  it("refuses live-configured evaluation without provider configuration", async () => {
+    await expect(runV5Evaluation({
+      corpusDir: "tests/regression-corpus",
+      caseIds: ["spanish-nantang-lecture"],
+      variants: ["live-configured"],
+      allowLive: true,
+      maxCostCny: 1,
+      env: {},
+      fetchImpl: async () => {
+        throw new Error("fetch should not be called");
+      },
+    })).rejects.toThrow("v5_evaluation_live_provider_config_missing:baseUrl,model,apiKey");
+  });
+
+  it("runs live-configured evaluation through injected provider config and budget", async () => {
+    const fetchCalls = [];
+    const fetchImpl = async (url, init) => {
+      fetchCalls.push({ url, init });
+      const body = fetchCalls.length === 1
+        ? {
+          decision: "event",
+          events: [{
+            title: "讲座《北京南堂的文化交流》",
+            startsAt: "2026-06-10T18:30:00+08:00",
+            city: "Beijing",
+            venue: "北京南堂庞迪我会议室",
+            registrationAction: "not_required",
+            summary: "A public cultural lecture in Beijing.",
+          }],
+          publicEligibility: "public",
+          publicEligibilityReason: "Open to the general public.",
+          confidence: 0.91,
+          reason: "Complete event facts extracted.",
+        }
+        : {
+          displayTitle: "讲座《北京南堂的文化交流》",
+          summary: "6月10日晚在北京南堂举办的公开文化讲座。",
+          tags: ["talk", "culture"],
+          category: "talk",
+          audience: "general_public",
+          audienceNote: "面向公众。",
+          corrections: [],
+          qualityIssues: [],
+          editorDecision: "publish",
+          reason: "Facts are complete and public.",
+        };
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            choices: [{ message: { content: JSON.stringify(body) } }],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              total_tokens: 15,
+              cost_micro_cny: 20,
+            },
+          };
+        },
+      };
+    };
+
+    const result = await runV5Evaluation({
+      corpusDir: "tests/regression-corpus",
+      caseIds: ["spanish-nantang-lecture"],
+      variants: ["live-configured"],
+      allowLive: true,
+      maxCostCny: 1,
+      env: {
+        V5_LIVE_PROVIDER: "test-openai-compatible",
+        V5_LIVE_BASE_URL: "https://llm.example/v1",
+        V5_LIVE_MODEL: "test-vl-model",
+        V5_LIVE_API_KEY: "test-key",
+      },
+      fetchImpl,
+      now: new Date("2026-06-10T05:00:00.000Z"),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      caseCount: 1,
+      runCount: 1,
+      passCount: 1,
+      failCount: 0,
+      totalUsage: {
+        inputTokens: 20,
+        outputTokens: 10,
+        totalTokens: 30,
+        costMicroCny: 40,
+      },
+    });
+    expect(result.cases[0]).toMatchObject({
+      variant: "live-configured",
+      predictedAction: "extract",
+      predictedFinalState: "published",
+      status: "passed",
+    });
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls[0].url).toBe("https://llm.example/v1/chat/completions");
   });
 });

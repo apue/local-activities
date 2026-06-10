@@ -6,10 +6,25 @@ import {
   parseV5EvaluationArgs,
   runV5Evaluation,
 } from "../src/pipeline/v5/evaluation-runner.mjs";
+import { loadEnvFile, mergeEnvs } from "./env-inventory.mjs";
 
-export async function runV5EvaluationCli(argv = process.argv.slice(2), consoleLike = console) {
+export async function runV5EvaluationCli(
+  argv = process.argv.slice(2),
+  consoleLike = console,
+  {
+    env = process.env,
+    loadEnvFileImpl = loadEnvFile,
+    fetchImpl = globalThis.fetch,
+  } = {},
+) {
   const args = parseV5EvaluationArgs(argv);
-  const result = await runV5Evaluation(args);
+  const envFromFiles = (args.envFiles ?? []).map((envFile) => loadEnvFileImpl(envFile));
+  const mergedEnv = mergeEnvs(env, ...envFromFiles);
+  const result = await runV5Evaluation({
+    ...args,
+    env: mergedEnv,
+    fetchImpl,
+  });
   const output = {
     ok: result.ok,
     store: result.store,
