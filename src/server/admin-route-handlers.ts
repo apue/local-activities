@@ -10,6 +10,7 @@ import {
   listAdminExcludedArticles,
   listAdminEventDrafts,
   listAdminLlmUsageSummary,
+  listAdminPipelineRuns,
   listAdminProcessingLedger,
   markAdminEventDraftNeedsInfo,
   patchAdminEventDraft,
@@ -78,6 +79,14 @@ const processingLedgerStateSchema = z
     "duplicate",
     "failed",
   ])
+  .optional();
+
+const pipelineRunStatusSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .regex(/^[a-z][a-z0-9_:-]*$/)
   .optional();
 
 const dataClassSchema = z
@@ -215,6 +224,45 @@ export async function handleAdminListProcessingLedger(
       {
         ok: true,
         ledger,
+      },
+      {
+        headers: {
+          "cache-control": "no-store",
+        },
+      },
+    );
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminListPipelineRuns(
+  request: Request,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const url = new URL(request.url);
+  const parsedDataClass = dataClassSchema.safeParse(
+    url.searchParams.get("dataClass") ?? undefined,
+  );
+  if (!parsedDataClass.success) return invalidRequestResponse(parsedDataClass.error);
+  const parsedStatus = pipelineRunStatusSchema.safeParse(
+    url.searchParams.get("status") ?? undefined,
+  );
+  if (!parsedStatus.success) return invalidRequestResponse(parsedStatus.error);
+
+  try {
+    const pipelineRuns = await listAdminPipelineRuns(
+      { dataClass: parsedDataClass.data, status: parsedStatus.data },
+      store,
+    );
+    return Response.json(
+      {
+        ok: true,
+        pipelineRuns,
       },
       {
         headers: {

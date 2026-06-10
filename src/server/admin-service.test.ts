@@ -7,6 +7,7 @@ import {
   listAdminExcludedArticles,
   listAdminEvaluationRuns,
   listAdminLlmUsageSummary,
+  listAdminPipelineRuns,
   listAdminProcessingLedger,
   listAdminEventDrafts,
   markAdminEventDraftNeedsInfo,
@@ -17,6 +18,7 @@ import {
   type AdminExcludedArticleRecord,
   type AdminEventDraftRecord,
   type AdminEvaluationRunRecord,
+  type AdminPipelineRunRecord,
   type AdminProcessingLedgerRecord,
   type AdminStore,
 } from "./admin-service";
@@ -28,6 +30,8 @@ class MemoryAdminStore implements AdminStore {
   ledgerRows: AdminProcessingLedgerRecord[] = [];
   evaluationRuns: AdminEvaluationRunRecord[] = [];
   evaluationRunsInput?: Parameters<AdminStore["listEvaluationRuns"]>[0];
+  pipelineRuns: AdminPipelineRunRecord[] = [];
+  pipelineRunsInput?: Parameters<AdminStore["listPipelineRuns"]>[0];
   llmUsageInput?: Parameters<AdminStore["getLlmUsageSummary"]>[0];
   llmUsageSummary = {
     range: {
@@ -162,6 +166,15 @@ class MemoryAdminStore implements AdminStore {
     );
   }
 
+  async listPipelineRuns(input: Parameters<AdminStore["listPipelineRuns"]>[0]) {
+    this.pipelineRunsInput = input;
+    return this.pipelineRuns.filter(
+      (run) =>
+        (!input.status || run.status === input.status) &&
+        (!input.dataClass || run.dataClass === input.dataClass),
+    );
+  }
+
   async getLlmUsageSummary(input: Parameters<AdminStore["getLlmUsageSummary"]>[0]) {
     this.llmUsageInput = input;
     return {
@@ -291,6 +304,103 @@ describe("admin service", () => {
     expect(store.llmUsageInput).toMatchObject({
       startsAt: "2026-06-03T16:00:00.000Z",
     });
+  });
+
+  it("returns pipeline runs scoped to production by default", async () => {
+    const store = new MemoryAdminStore();
+    store.pipelineRuns = [
+      {
+        runId: "pipe-1",
+        dataClass: "production",
+        sourceKind: "article_bundle",
+        sourceId: "bundle-1",
+        articleBundleId: "bundle-1",
+        caseId: "case-1",
+        status: "completed",
+        decision: "needs_review",
+        reason: "Missing QR evidence.",
+        startedAt: "2026-06-10T04:00:00.000Z",
+        finishedAt: "2026-06-10T04:00:03.000Z",
+        metadata: {},
+        steps: [
+          {
+            stepId: "step-1",
+            runId: "pipe-1",
+            stepOrder: 1,
+            nodeName: "full_extract",
+            nodeVersion: "v5",
+            status: "completed",
+            decision: "public_activity",
+            reason: "Public attendance signal found.",
+            provider: "dashscope",
+            model: "qwen3-vl-plus",
+            promptVersion: "full-extract-v5",
+            schemaVersion: "event-extract-v5",
+            usageId: "usage-1",
+            inputArtifactIds: ["artifact-input"],
+            outputArtifactIds: ["artifact-output"],
+            validationIssues: [],
+            errorDetails: {},
+            startedAt: "2026-06-10T04:00:00.000Z",
+            finishedAt: "2026-06-10T04:00:02.000Z",
+            latencyMs: 2000,
+            attempts: [
+              {
+                attemptId: "attempt-1",
+                runId: "pipe-1",
+                stepId: "step-1",
+                attemptNumber: 1,
+                provider: "dashscope",
+                model: "qwen3-vl-plus",
+                promptVersion: "full-extract-v5",
+                schemaVersion: "event-extract-v5",
+                usage: { totalTokens: 1200, costMicroCny: 3200 },
+                validatorIssues: [],
+                reason: "Parsed on first attempt.",
+                startedAt: "2026-06-10T04:00:00.000Z",
+                finishedAt: "2026-06-10T04:00:02.000Z",
+                latencyMs: 2000,
+              },
+            ],
+          },
+        ],
+        artifacts: [
+          {
+            artifactId: "artifact-output",
+            runId: "pipe-1",
+            stepId: "step-1",
+            dataClass: "production",
+            path: "runs/pipe-1/full_extract.json",
+            kind: "extraction",
+            hash: "sha256:abc",
+            bucket: "eval-artifacts",
+            metadata: {},
+            createdAt: "2026-06-10T04:00:02.000Z",
+          },
+        ],
+        createdAt: "2026-06-10T04:00:00.000Z",
+      },
+    ];
+
+    await expect(listAdminPipelineRuns({}, store)).resolves.toMatchObject([
+      {
+        runId: "pipe-1",
+        dataClass: "production",
+        steps: [
+          {
+            stepOrder: 1,
+            nodeName: "full_extract",
+            attempts: [
+              {
+                usage: { totalTokens: 1200, costMicroCny: 3200 },
+              },
+            ],
+          },
+        ],
+        artifacts: [{ path: "runs/pipe-1/full_extract.json" }],
+      },
+    ]);
+    expect(store.pipelineRunsInput).toEqual({ dataClass: "production" });
   });
 
   it("resolves admin LLM usage ranges using the Asia/Shanghai day boundary", () => {

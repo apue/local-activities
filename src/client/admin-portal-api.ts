@@ -27,6 +27,7 @@ export async function loadAdminState({
     excludedArticlesResponse,
     ledgerResponse,
     evaluationRunsResponse,
+    pipelineRunsResponse,
   ] = await Promise.all([
     adminApiRequest<{ jobs: unknown[] }>("/api/admin/collector-jobs", {
       fetchImpl,
@@ -55,6 +56,12 @@ export async function loadAdminState({
         fetchImpl,
       },
     ),
+    adminApiRequest<{ pipelineRuns: unknown[] }>(
+      "/api/admin/pipeline-runs?dataClass=production",
+      {
+        fetchImpl,
+      },
+    ),
   ]);
 
   return {
@@ -64,6 +71,7 @@ export async function loadAdminState({
     excludedArticles: excludedArticlesResponse.excludedArticles,
     ledger: ledgerResponse.ledger,
     evaluationRuns: evaluationRunsResponse.evaluationRuns,
+    pipelineRuns: pipelineRunsResponse.pipelineRuns,
   };
 }
 

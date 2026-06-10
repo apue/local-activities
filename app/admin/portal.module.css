@@ -493,7 +493,8 @@
 }
 
 .auditList,
-.evalList {
+.evalList,
+.pipelineList {
   display: grid;
   gap: 8px;
   margin-top: 14px;
@@ -545,6 +546,92 @@
 
 .evalRow span {
   font-weight: 850;
+}
+
+.pipelineRun {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d6d9d1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.pipelineRunHeader {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.pipelineRunHeader strong,
+.pipelineRunHeader small,
+.pipelineRunHeader span,
+.pipelineStep strong,
+.pipelineStep span,
+.pipelineStep small,
+.pipelineArtifacts span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pipelineRunHeader small,
+.pipelineReason,
+.pipelineStep small {
+  color: #667062;
+}
+
+.pipelineRunHeader span {
+  color: #4d5549;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.pipelineReason {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.pipelineSteps {
+  display: grid;
+  gap: 7px;
+}
+
+.pipelineStep {
+  display: grid;
+  gap: 4px;
+  border-left: 3px solid #467262;
+  background: #fbfcf8;
+  padding: 8px 10px;
+}
+
+.pipelineStep div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pipelineStep span {
+  color: #8f3f35;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.pipelineArtifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pipelineArtifacts span {
+  border: 1px solid #d6d9d1;
+  border-radius: 8px;
+  background: #fbfcf8;
+  color: #315b7c;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 5px 7px;
 }
 
 .jobRow {
@@ -657,6 +744,7 @@
   .detail dl,
   .jobRow,
   .evalRow,
+  .pipelineRunHeader,
   .evidenceGrid,
   .usageSummary,
   .usageRow {
