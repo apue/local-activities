@@ -1,0 +1,49 @@
+{
+  "action": "extract",
+  "eventCount": 3,
+  "evidence": {},
+  "eventDrafts": [
+    {
+      "draftId": "goethe-open-day",
+      "title": "2026年歌德学院开放日",
+      "organizer": "北京德国文化中心歌德学院",
+      "startsAt": "2026-06-06T14:00:00+08:00",
+      "endsAt": "2026-06-06T19:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "歌德学院北京分院",
+      "venueAddress": "北京市海淀区中关村南大街2号数码大厦B座17层",
+      "summary": "Open day with German classes, workshops, talks, and food."
+    },
+    {
+      "draftId": "goethe-opera-talk",
+      "title": "当代歌剧赏析：“Schöne Stellen” 当代歌剧中的美丽瞬间",
+      "organizer": "北京德国文化中心歌德学院",
+      "startsAt": "2026-06-06T14:00:00+08:00",
+      "endsAt": "2026-06-06T16:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "歌德学院北京分院",
+      "summary": "Contemporary opera appreciation talk in Chinese and English."
+    },
+    {
+      "draftId": "goethe-sonic-otherlands-exhibition",
+      "title": "展览：Sonic Other__lands 第三只耳——折叠的地景之间",
+      "organizer": "北京德国文化中心歌德学院",
+      "startsAt": "2026-06-04T10:00:00+08:00",
+      "endsAt": "2026-08-30T18:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "北京德国文化中心歌德学院",
+      "venueAddress": "北京市朝阳区798艺术区创意广场",
+      "scheduleText": "展期至8月30日，周二至周日 10:00-18:00",
+      "summary": "Long-running exhibition at Goethe-Institut in 798."
+    }
+  ],
+  "dedupe": {
+    "decision": "new_event"
+  },
+  "publish": {
+    "state": "public",
+    "reasons": [
+      "long_running_exhibition"
+    ]
+  }
+}

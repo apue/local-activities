@@ -1,0 +1,26 @@
+{
+  "action": "extract",
+  "eventCount": 1,
+  "evidence": {},
+  "eventDrafts": [
+    {
+      "draftId": "goethe-winkler-book-salon",
+      "title": "“走向西方”意味着什么？顾彬x李雪涛新书沙龙",
+      "organizer": "北京德国文化中心·歌德学院",
+      "startsAt": "2026-06-15T19:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "北京德国文化中心·歌德学院",
+      "registrationAction": "unknown",
+      "summary": "Book salon about Heinrich August Winkler’s history of Germany."
+    }
+  ],
+  "dedupe": {
+    "decision": "new_event"
+  },
+  "publish": {
+    "state": "needs_review",
+    "reasons": [
+      "source_text_needs_human_schedule_confirmation"
+    ]
+  }
+}

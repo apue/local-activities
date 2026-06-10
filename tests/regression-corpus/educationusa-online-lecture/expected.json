@@ -1,0 +1,27 @@
+{
+  "action": "extract",
+  "eventCount": 1,
+  "requiresReservation": true,
+  "evidence": {},
+  "eventDrafts": [
+    {
+      "draftId": "educationusa-online-lecture",
+      "title": "解码大学申请：全面了解美国本科申请流程",
+      "organizer": "EducationUSA",
+      "startsAt": "2026-06-11T18:30:00+08:00",
+      "endsAt": "2026-06-11T20:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "Online / Zoom",
+      "registrationUrl": "https://forms.office.com/g/JafNgzaw1R?origin=lprLink",
+      "registrationAction": "external_url",
+      "scheduleText": "6月11日 周四 18:30-20:00",
+      "summary": "EducationUSA online lecture about the U.S. undergraduate application process."
+    }
+  ],
+  "dedupe": {
+    "decision": "new_event"
+  },
+  "publish": {
+    "state": "public"
+  }
+}

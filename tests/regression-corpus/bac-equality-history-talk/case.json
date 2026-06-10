@@ -1,0 +1,22 @@
+{
+  "id": "bac-equality-history-talk",
+  "labels": [
+    "ordinary_public_event",
+    "registration_required"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "美国驻华大使馆",
+    "url": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=7&sn=4b5c580fba9eb5e2f474c0c71ec4c2ac",
+    "publishedAt": "2026-06-09T10:30:00.000Z"
+  },
+  "rationale": "Public Beijing American Center talk that requires RSVP.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "action": "extract",
+  "eventCount": 1,
+  "requiresReservation": true,
+  "evidence": {},
+  "eventDrafts": [
+    {
+      "draftId": "bac-equality-history-talk",
+      "title": "缅怀过去，展望未来：追求平等的未竟之路",
+      "organizer": "北京美国中心",
+      "startsAt": "2026-06-16T15:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "北京美国中心",
+      "registrationAction": "qr_code",
+      "scheduleText": "6月16日 周二 15:00",
+      "summary": "English-language public seminar at the Beijing American Center."
+    }
+  ],
+  "dedupe": {
+    "decision": "new_event"
+  },
+  "publish": {
+    "state": "public"
+  }
+}

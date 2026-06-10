@@ -1,0 +1,21 @@
+{
+  "id": "goethe-winkler-book-salon",
+  "labels": [
+    "ordinary_public_event"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "德国印象",
+    "url": "https://mp.weixin.qq.com/s?__biz=MzA4MjM2NjgwNg==&mid=2653297153&idx=1&sn=97cb4709559a45365956ba44980b239a",
+    "publishedAt": "2026-06-09T03:02:00.000Z"
+  },
+  "rationale": "Goethe/embassy book salon with a clear public cultural-program format.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}

@@ -1,0 +1,165 @@
+{
+  "version": "event-pipeline-regression-corpus-v1",
+  "description": "Public-safe regression corpus derived from locally captured Wechat2RSS article bundles on 2026-06-10. Full third-party article mirrors and image assets are intentionally not committed.",
+  "source": {
+    "provider": "wechat2rss",
+    "envFile": ".env.collector",
+    "after": "20260601",
+    "capturedAt": "2026-06-10T00:00:00.000Z"
+  },
+  "requiredCoverageLabels": [
+    "generic_not_event",
+    "information_sparse_requires_review",
+    "long_running_exhibition",
+    "mini_program_action_registration",
+    "multi_event_article",
+    "not_beijing",
+    "not_general_public",
+    "official_visit_non_public_news",
+    "ordinary_public_event",
+    "recurring_or_multiple_occurrences",
+    "registration_required"
+  ],
+  "knownCoverageGaps": [
+    {
+      "label": "qr_registration",
+      "reason": "The public repository does not commit third-party QR image assets. Rebuild a private local corpus from Wechat2RSS for live vision evaluation."
+    },
+    {
+      "label": "poster_or_image_dominant",
+      "reason": "The public repository does not commit third-party poster/image assets. Rebuild a private local corpus from Wechat2RSS for live vision evaluation."
+    },
+    {
+      "label": "duplicate_or_update",
+      "reason": "The local cache contains duplicate URLs, but the current replay/eval harness is single-case and has no stateful candidate set for fair dedupe/update scoring."
+    },
+    {
+      "label": "qr_present_not_registration",
+      "reason": "No real captured article in the current local cache exposed a reliable footer/share QR image through the bundle contract."
+    },
+    {
+      "label": "capture_failure",
+      "reason": "Wechat2RSS was healthy during corpus rebuild, so no real login_required/captcha_required/fetch_blocked capture failure sample was available."
+    }
+  ],
+  "cases": [
+    {
+      "id": "educationusa-online-lecture",
+      "labels": [
+        "ordinary_public_event",
+        "registration_required"
+      ]
+    },
+    {
+      "id": "bac-equality-history-talk",
+      "labels": [
+        "ordinary_public_event",
+        "registration_required"
+      ]
+    },
+    {
+      "id": "spanish-nantang-lecture",
+      "labels": [
+        "ordinary_public_event"
+      ]
+    },
+    {
+      "id": "iic-leopardi-performance",
+      "labels": [
+        "ordinary_public_event",
+        "registration_required"
+      ]
+    },
+    {
+      "id": "goethe-winkler-book-salon",
+      "labels": [
+        "ordinary_public_event"
+      ]
+    },
+    {
+      "id": "beiping-beer-festival-guide",
+      "labels": [
+        "ordinary_public_event",
+        "registration_required",
+        "mini_program_action_registration"
+      ]
+    },
+    {
+      "id": "korean-kbeauty-lecture",
+      "labels": [
+        "ordinary_public_event",
+        "registration_required"
+      ]
+    },
+    {
+      "id": "korean-movie-two-screenings",
+      "labels": [
+        "ordinary_public_event",
+        "registration_required",
+        "recurring_or_multiple_occurrences"
+      ]
+    },
+    {
+      "id": "goethe-weekend-roundup",
+      "labels": [
+        "multi_event_article",
+        "long_running_exhibition",
+        "ordinary_public_event"
+      ]
+    },
+    {
+      "id": "iic-save-the-date-june",
+      "labels": [
+        "multi_event_article",
+        "information_sparse_requires_review"
+      ]
+    },
+    {
+      "id": "us-founder-history-news",
+      "labels": [
+        "generic_not_event"
+      ]
+    },
+    {
+      "id": "turkey-president-meeting-news",
+      "labels": [
+        "official_visit_non_public_news",
+        "generic_not_event"
+      ]
+    },
+    {
+      "id": "guangzhou-watch-party-not-beijing",
+      "labels": [
+        "not_beijing",
+        "registration_required"
+      ]
+    },
+    {
+      "id": "relo-teacher-seminar-limited-audience",
+      "labels": [
+        "not_general_public",
+        "registration_required"
+      ]
+    },
+    {
+      "id": "mexico-community-world-cup-exclusive",
+      "labels": [
+        "not_general_public",
+        "registration_required"
+      ]
+    },
+    {
+      "id": "mexico-football-fest-recap",
+      "labels": [
+        "generic_not_event"
+      ]
+    },
+    {
+      "id": "hsam-suzhou-exhibition-not-beijing",
+      "labels": [
+        "not_beijing",
+        "long_running_exhibition"
+      ]
+    }
+  ]
+}

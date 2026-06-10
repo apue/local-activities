@@ -1,0 +1,22 @@
+{
+  "id": "hsam-suzhou-exhibition-not-beijing",
+  "labels": [
+    "not_beijing",
+    "long_running_exhibition"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "IICPechino",
+    "url": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917382&idx=2&sn=194bd3ff5245cc5f10445d77f3358b65",
+    "publishedAt": "2026-06-08T08:14:00.000Z"
+  },
+  "rationale": "Long-running exhibition article, but the venue is in Suzhou rather than Beijing.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}

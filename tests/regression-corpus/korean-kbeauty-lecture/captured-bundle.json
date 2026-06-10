@@ -1,0 +1,33 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-7cfc361ab8676ac68d92995e",
+  "sourceId": "2397214962",
+  "sourceName": "驻华韩国文化院",
+  "provider": "wechat2rss_public_safe_excerpt",
+  "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429122&idx=1&sn=3f67eff3babccc644df9164a6b278d57",
+  "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429122&idx=1&sn=3f67eff3babccc644df9164a6b278d57",
+  "finalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429122&idx=1&sn=3f67eff3babccc644df9164a6b278d57",
+  "title": "【活动报名】K-Beauty的科学：韩国化妆品与皮肤管理特别讲座",
+  "authorName": "驻华韩国文化院",
+  "publishedAt": "2026-06-04T10:19:00.000Z",
+  "capturedAt": "2026-06-10T00:00:00.000Z",
+  "languageHints": [
+    "zh",
+    "en"
+  ],
+  "captureMode": "text_complete",
+  "text": "Title: 【活动报名】K-Beauty的科学：韩国化妆品与皮肤管理特别讲座\nSource: 驻华韩国文化院\nPublished at: 2026-06-04T10:19:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429122&idx=1&sn=3f67eff3babccc644df9164a6b278d57\nExpected action: extract\nRationale: Korean Cultural Center public lecture with reservation window and venue.\nReview/exclusion reasons: start_time_missing_in_text\nEvent: K-Beauty的科学：韩国化妆品与皮肤管理特别讲座\nOrganizer: 驻华韩国文化院\nStarts: 2026-06-09T00:00:00+08:00\nSchedule: 6月9日，预约开放时间为6月8日10:00\nVenue: 驻华韩国文化院\nRegistration action: qr_code\nSummary: Public K-Beauty lecture by Professor Kim Joo-ri; reservation required.\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
+  "html": "<article><p>Title: 【活动报名】K-Beauty的科学：韩国化妆品与皮肤管理特别讲座</p><p>Source: 驻华韩国文化院</p><p>Published at: 2026-06-04T10:19:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&amp;mid=2649429122&amp;idx=1&amp;sn=3f67eff3babccc644df9164a6b278d57</p><p>Expected action: extract</p><p>Rationale: Korean Cultural Center public lecture with reservation window and venue.</p><p>Review/exclusion reasons: start_time_missing_in_text</p><p>Event: K-Beauty的科学：韩国化妆品与皮肤管理特别讲座</p><p>Organizer: 驻华韩国文化院</p><p>Starts: 2026-06-09T00:00:00+08:00</p><p>Schedule: 6月9日，预约开放时间为6月8日10:00</p><p>Venue: 驻华韩国文化院</p><p>Registration action: qr_code</p><p>Summary: Public K-Beauty lecture by Professor Kim Joo-ri; reservation required.</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "images": [],
+  "links": [],
+  "miniPrograms": [],
+  "contentHash": "851588fc7d4d960732d510fdf76decccfa9f128255d7b1485de6fbdda4f489b2",
+  "diagnostics": [],
+  "captureWarnings": [
+    {
+      "code": "public_safe_curated_excerpt",
+      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
+      "severity": "info"
+    }
+  ]
+}

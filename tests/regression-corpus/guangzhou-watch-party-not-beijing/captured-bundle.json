@@ -1,0 +1,33 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-b796f1307f61e61f18ffbd77",
+  "sourceId": "2390064940",
+  "sourceName": "美国驻华大使馆",
+  "provider": "wechat2rss_public_safe_excerpt",
+  "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=6&sn=2cfb362f859b4e5c0f4e32935db85e19",
+  "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=6&sn=2cfb362f859b4e5c0f4e32935db85e19",
+  "finalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=6&sn=2cfb362f859b4e5c0f4e32935db85e19",
+  "title": "【美国驻广州总领馆活动】美国队对阵巴拉圭队足球现场直播观赛派对，6月13日上午9:00 – 11:00",
+  "authorName": "美国驻华大使馆",
+  "publishedAt": "2026-06-09T10:30:00.000Z",
+  "capturedAt": "2026-06-10T00:00:00.000Z",
+  "languageHints": [
+    "zh",
+    "en"
+  ],
+  "captureMode": "text_complete",
+  "text": "Title: 【美国驻广州总领馆活动】美国队对阵巴拉圭队足球现场直播观赛派对，6月13日上午9:00 – 11:00\nSource: 美国驻华大使馆\nPublished at: 2026-06-09T10:30:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=6&sn=2cfb362f859b4e5c0f4e32935db85e19\nExpected action: exclude\nRationale: Public event but located in Guangzhou, outside the Beijing product scope.\nReview/exclusion reasons: not_beijing\nThis case is retained as a negative product judgment. The original article content is not mirrored in the public repository.",
+  "html": "<article><p>Title: 【美国驻广州总领馆活动】美国队对阵巴拉圭队足球现场直播观赛派对，6月13日上午9:00 – 11:00</p><p>Source: 美国驻华大使馆</p><p>Published at: 2026-06-09T10:30:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&amp;mid=2651346286&amp;idx=6&amp;sn=2cfb362f859b4e5c0f4e32935db85e19</p><p>Expected action: exclude</p><p>Rationale: Public event but located in Guangzhou, outside the Beijing product scope.</p><p>Review/exclusion reasons: not_beijing</p><p>This case is retained as a negative product judgment. The original article content is not mirrored in the public repository.</p></article>",
+  "images": [],
+  "links": [],
+  "miniPrograms": [],
+  "contentHash": "5af84b6e2c6290efa960aa75fc9c97e34b76d8d53aec3f35b3a1e4f6bf045e90",
+  "diagnostics": [],
+  "captureWarnings": [
+    {
+      "code": "public_safe_curated_excerpt",
+      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
+      "severity": "info"
+    }
+  ]
+}

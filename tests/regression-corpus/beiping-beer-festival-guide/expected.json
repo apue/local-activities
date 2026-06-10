@@ -1,0 +1,26 @@
+{
+  "action": "extract",
+  "eventCount": 1,
+  "evidence": {},
+  "eventDrafts": [
+    {
+      "draftId": "beiping-beer-festival-guide",
+      "title": "北平机器友谊万岁精酿啤酒节",
+      "organizer": "北平机器",
+      "startsAt": "2026-06-12T15:00:00+08:00",
+      "endsAt": "2026-06-14T23:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "友谊花园",
+      "venueAddress": "北京市建国门外大街17号",
+      "registrationAction": "mini_program",
+      "scheduleText": "2026.06.12-06.14 15:00-23:00",
+      "summary": "Three-day craft beer festival with beer, food, games, music, and free entry."
+    }
+  ],
+  "dedupe": {
+    "decision": "new_event"
+  },
+  "publish": {
+    "state": "public"
+  }
+}

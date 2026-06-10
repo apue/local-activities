@@ -1,0 +1,35 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-bb0beb4ccb843427912cfed1",
+  "sourceId": "3095330064",
+  "sourceName": "墨西哥驻华大使馆",
+  "provider": "wechat2rss_public_safe_excerpt",
+  "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743873&idx=1&sn=be1ad3f8b02d04a0eb3ce542df95343f",
+  "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743873&idx=1&sn=be1ad3f8b02d04a0eb3ce542df95343f",
+  "finalUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743873&idx=1&sn=be1ad3f8b02d04a0eb3ce542df95343f",
+  "title": "¡Acompáñanos a vivir la inauguración del Mundial como en casa!",
+  "authorName": "墨西哥驻华大使馆",
+  "publishedAt": "2026-06-03T04:00:00.000Z",
+  "capturedAt": "2026-06-10T00:00:00.000Z",
+  "languageHints": [
+    "zh",
+    "es",
+    "fr",
+    "en"
+  ],
+  "captureMode": "text_complete",
+  "text": "Title: ¡Acompáñanos a vivir la inauguración del Mundial como en casa!\nSource: 墨西哥驻华大使馆\nPublished at: 2026-06-03T04:00:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743873&idx=1&sn=be1ad3f8b02d04a0eb3ce542df95343f\nExpected action: exclude\nRationale: Embassy event in Beijing but explicitly exclusive to the Mexican community in China.\nReview/exclusion reasons: not_general_public\nThis case is retained as a negative product judgment. The original article content is not mirrored in the public repository.",
+  "html": "<article><p>Title: ¡Acompáñanos a vivir la inauguración del Mundial como en casa!</p><p>Source: 墨西哥驻华大使馆</p><p>Published at: 2026-06-03T04:00:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&amp;mid=2651743873&amp;idx=1&amp;sn=be1ad3f8b02d04a0eb3ce542df95343f</p><p>Expected action: exclude</p><p>Rationale: Embassy event in Beijing but explicitly exclusive to the Mexican community in China.</p><p>Review/exclusion reasons: not_general_public</p><p>This case is retained as a negative product judgment. The original article content is not mirrored in the public repository.</p></article>",
+  "images": [],
+  "links": [],
+  "miniPrograms": [],
+  "contentHash": "6e3b05c01561aecffe4321d6e798bcf7787c74cda278bb5b3078ff4d1c226d6b",
+  "diagnostics": [],
+  "captureWarnings": [
+    {
+      "code": "public_safe_curated_excerpt",
+      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
+      "severity": "info"
+    }
+  ]
+}

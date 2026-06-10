@@ -20,9 +20,53 @@ describe("event pipeline regression corpus replay", () => {
 
     expect(corpus.manifest.version).toBe("event-pipeline-regression-corpus-v1");
     expect(corpus.cases).toHaveLength(3);
+    expect(corpus.requiredCoverageLabels).toEqual(requiredCoverageLabels);
     for (const label of requiredCoverageLabels) {
       expect(corpus.coverageLabels).toContain(label);
     }
+  });
+
+  it("allows a real corpus to declare an explicit coverage target and known gaps", async () => {
+    const corpusDir = await createScopedCoverageCorpus();
+    const corpus = await loadRegressionCorpus({ corpusDir });
+
+    expect(corpus.requiredCoverageLabels).toEqual([
+      "ordinary_public_event",
+      "registration_required",
+    ]);
+    expect(corpus.coverageLabels).toContain("ordinary_public_event");
+    expect(corpus.knownCoverageGaps).toEqual([
+      {
+        label: "capture_failure",
+        reason: "No real capture failure was observed in the current source cache.",
+      },
+    ]);
+  });
+
+  it("still rejects missing labels from an explicit coverage target", async () => {
+    const corpusDir = await createScopedCoverageCorpus({
+      requiredCoverageLabels: ["ordinary_public_event", "capture_failure"],
+    });
+
+    await expect(loadRegressionCorpus({ corpusDir })).rejects.toThrow(
+      "regression_corpus_coverage_missing:capture_failure",
+    );
+  });
+
+  it("resolves case-local image assets into provider-consumable data URLs", async () => {
+    const corpusDir = await createValidCorpus();
+    const corpus = await loadRegressionCorpus({ corpusDir });
+    const item = corpus.cases.find((candidate) =>
+      candidate.case.id === "ordinary-public-event"
+    );
+
+    const poster = item.bundle.images.find((image) => image.id === "poster-1");
+
+    expect(poster).toMatchObject({
+      path: "assets/poster.png",
+      contentType: "image/png",
+      dataUrl: "data:image/png;base64,aGVsbG8=",
+    });
   });
 
   it("refuses live, hosted, and production replay targets", async () => {
@@ -146,7 +190,13 @@ async function createValidCorpus() {
       id: "ordinary-public-event",
       text: "Public event in Beijing. Scan QR to register.",
       images: [
-        { id: "poster-1", role: "poster", sourceUrl: "https://mmbiz.qpic.cn/poster.jpg" },
+        {
+          id: "poster-1",
+          role: "poster",
+          sourceUrl: "https://mmbiz.qpic.cn/poster.jpg",
+          path: "assets/poster.png",
+          contentType: "image/png",
+        },
         {
           id: "qr-1",
           role: "registration",
@@ -162,6 +212,9 @@ async function createValidCorpus() {
       eventDrafts: [{ title: "Public event", draftId: "draft-1" }],
       dedupe: { decision: "new_event" },
       publish: { state: "needs_review" },
+    },
+    assets: {
+      "poster.png": Buffer.from("hello"),
     },
   });
   await writeSuccessCase({
@@ -213,22 +266,69 @@ async function createMissingFileCorpus() {
   return corpusDir;
 }
 
+async function createScopedCoverageCorpus({
+  requiredCoverageLabels: manifestRequiredCoverageLabels = [
+    "ordinary_public_event",
+    "registration_required",
+  ],
+} = {}) {
+  const corpusDir = await makeCorpusDir("regression-corpus-scoped");
+  await writeManifest(
+    corpusDir,
+    [{ id: "ordinary-public-event", labels: ["ordinary_public_event", "registration_required"] }],
+    {
+      requiredCoverageLabels: manifestRequiredCoverageLabels,
+      knownCoverageGaps: [
+        {
+          label: "capture_failure",
+          reason: "No real capture failure was observed in the current source cache.",
+        },
+      ],
+    },
+  );
+  await writeSuccessCase({
+    corpusDir,
+    id: "ordinary-public-event",
+    labels: ["ordinary_public_event", "registration_required"],
+    bundle: bundleFixture({
+      id: "ordinary-public-event",
+      text: "Public event in Beijing. Register by link.",
+    }),
+    expected: {
+      action: "extract",
+      eventCount: 1,
+      evidence: { posterCount: 0, qrCodeCount: 0 },
+      eventDrafts: [{ title: "Public event", draftId: "draft-1" }],
+      dedupe: { decision: "new_event" },
+      publish: { state: "needs_review" },
+    },
+  });
+  return corpusDir;
+}
+
 async function makeCorpusDir(prefix) {
   return await mkdtemp(path.join(os.tmpdir(), `${prefix}-`));
 }
 
-async function writeManifest(corpusDir, cases) {
+async function writeManifest(corpusDir, cases, overrides = {}) {
   await mkdir(corpusDir, { recursive: true });
   await writeJson(path.join(corpusDir, "manifest.json"), {
     version: "event-pipeline-regression-corpus-v1",
     description: "Temporary contract-valid corpus for replay tests.",
     cases,
+    ...overrides,
   });
 }
 
-async function writeSuccessCase({ corpusDir, id, labels, bundle, expected }) {
+async function writeSuccessCase({ corpusDir, id, labels, bundle, expected, assets = {} }) {
   const caseDir = path.join(corpusDir, id);
   await mkdir(caseDir, { recursive: true });
+  if (Object.keys(assets).length) {
+    await mkdir(path.join(caseDir, "assets"), { recursive: true });
+    for (const [fileName, body] of Object.entries(assets)) {
+      await writeFile(path.join(caseDir, "assets", fileName), body);
+    }
+  }
   await writeJson(path.join(caseDir, "case.json"), {
     id,
     labels,

@@ -24,16 +24,9 @@ export function extractEvidenceFromArticleBundle(bundle) {
     const evidenceAsset = evidenceByImageId.get(image.id);
     const labels = imageLabels(image);
     const nonRegistrationReason = nonRegistrationQrReason(image, labels);
-    if (image.role === "poster" || looksLikePoster(image, labels)) {
-      posters.push(imageEvidence({ kind: "poster", image, evidenceAsset }));
-      if (evidenceAsset) {
-        assetRequests.push(assetRequest({ role: "poster", image, evidenceAsset }));
-      }
-      continue;
-    }
-
     if (isQrRole(image.role) && !nonRegistrationReason) {
-      const registrationLikely = registrationLabels(labels) || image.role === "registration";
+      const registrationLikely = registrationLabels(labels) ||
+        isRegistrationQrRole(image.role);
       qrCodes.push(
         imageEvidence({
           kind: "qr_code",
@@ -51,6 +44,14 @@ export function extractEvidenceFromArticleBundle(bundle) {
             evidenceAsset,
           }),
         );
+      }
+      continue;
+    }
+
+    if (image.role === "poster" || looksLikePoster(image, labels)) {
+      posters.push(imageEvidence({ kind: "poster", image, evidenceAsset }));
+      if (evidenceAsset) {
+        assetRequests.push(assetRequest({ role: "poster", image, evidenceAsset }));
       }
       continue;
     }
@@ -204,6 +205,12 @@ function isQrRole(role) {
   );
 }
 
+function isRegistrationQrRole(role) {
+  return ["registration", "registration_qr"].includes(
+    String(role ?? "").trim().toLowerCase(),
+  );
+}
+
 function registrationLabels(value) {
   return /报名|预约|扫码|二维码|registration|register|sign\s*up|reserve/.test(value);
 }
@@ -220,10 +227,14 @@ function nonRegistrationQrReason(image, labels) {
   if (!isQrRole(image.role)) return undefined;
   if (footerQrLabels(labels)) return "follow_or_footer_qr";
   if (shareQrLabels(labels)) return "share_or_contact_qr";
-  if (image.role === "qr" && labels && !registrationLabels(labels)) {
+  if (image.role === "qr" && labels && !registrationLabels(labels) && !qrCodeLabels(labels)) {
     return "qr_without_registration_label";
   }
   return undefined;
+}
+
+function qrCodeLabels(value) {
+  return /qr\s*code|qrcode/i.test(value);
 }
 
 function looksLikePoster(image, labels) {

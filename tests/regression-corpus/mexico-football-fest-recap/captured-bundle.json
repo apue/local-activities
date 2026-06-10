@@ -1,0 +1,35 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-cff840843405132c62d45d95",
+  "sourceId": "3095330064",
+  "sourceName": "墨西哥驻华大使馆",
+  "provider": "wechat2rss_public_safe_excerpt",
+  "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743962&idx=1&sn=d46542c5361bef6d4d475078df3d5068",
+  "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743962&idx=1&sn=d46542c5361bef6d4d475078df3d5068",
+  "finalUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743962&idx=1&sn=d46542c5361bef6d4d475078df3d5068",
+  "title": "“墨西哥足球嘉年华”亮相北京，点燃世界杯热情 - El \"México Football Fest\" trajo la emoción del Mundial a Beijing.",
+  "authorName": "墨西哥驻华大使馆",
+  "publishedAt": "2026-06-04T09:56:00.000Z",
+  "capturedAt": "2026-06-10T00:00:00.000Z",
+  "languageHints": [
+    "zh",
+    "es",
+    "fr",
+    "en"
+  ],
+  "captureMode": "text_complete",
+  "text": "Title: “墨西哥足球嘉年华”亮相北京，点燃世界杯热情 - El \"México Football Fest\" trajo la emoción del Mundial a Beijing.\nSource: 墨西哥驻华大使馆\nPublished at: 2026-06-04T09:56:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743962&idx=1&sn=d46542c5361bef6d4d475078df3d5068\nExpected action: exclude\nRationale: Recap/news article about a completed event, not an actionable upcoming activity listing.\nReview/exclusion reasons: generic_not_event\nThis case is retained as a negative product judgment. The original article content is not mirrored in the public repository.",
+  "html": "<article><p>Title: “墨西哥足球嘉年华”亮相北京，点燃世界杯热情 - El &quot;México Football Fest&quot; trajo la emoción del Mundial a Beijing.</p><p>Source: 墨西哥驻华大使馆</p><p>Published at: 2026-06-04T09:56:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&amp;mid=2651743962&amp;idx=1&amp;sn=d46542c5361bef6d4d475078df3d5068</p><p>Expected action: exclude</p><p>Rationale: Recap/news article about a completed event, not an actionable upcoming activity listing.</p><p>Review/exclusion reasons: generic_not_event</p><p>This case is retained as a negative product judgment. The original article content is not mirrored in the public repository.</p></article>",
+  "images": [],
+  "links": [],
+  "miniPrograms": [],
+  "contentHash": "5170c29a512eacdd3c30a20e3ee98fc003d7f79813c1da09469370b8a9c17534",
+  "diagnostics": [],
+  "captureWarnings": [
+    {
+      "code": "public_safe_curated_excerpt",
+      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
+      "severity": "info"
+    }
+  ]
+}

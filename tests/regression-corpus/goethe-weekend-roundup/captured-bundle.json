@@ -1,0 +1,34 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-e9cca872c615d6098222887f",
+  "sourceId": "3083582603",
+  "sourceName": "北京德国文化中心歌德学院",
+  "provider": "wechat2rss_public_safe_excerpt",
+  "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MzU4MjYwMw==&mid=2692059726&idx=1&sn=0f980ad3364b1b75364492bee1a6288e",
+  "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MzU4MjYwMw==&mid=2692059726&idx=1&sn=0f980ad3364b1b75364492bee1a6288e",
+  "finalUrl": "https://mp.weixin.qq.com/s?__biz=MzA4MzU4MjYwMw==&mid=2692059726&idx=1&sn=0f980ad3364b1b75364492bee1a6288e",
+  "title": "这个周末也太精彩了~~",
+  "authorName": "北京德国文化中心歌德学院",
+  "publishedAt": "2026-06-04T07:00:00.000Z",
+  "capturedAt": "2026-06-10T00:00:00.000Z",
+  "languageHints": [
+    "zh",
+    "es",
+    "en"
+  ],
+  "captureMode": "text_complete",
+  "text": "Title: 这个周末也太精彩了~~\nSource: 北京德国文化中心歌德学院\nPublished at: 2026-06-04T07:00:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MzA4MzU4MjYwMw==&mid=2692059726&idx=1&sn=0f980ad3364b1b75364492bee1a6288e\nExpected action: extract\nRationale: Goethe weekend roundup containing multiple public activities and a long-running exhibition.\nReview/exclusion reasons: long_running_exhibition\nEvent: 2026年歌德学院开放日\nOrganizer: 北京德国文化中心歌德学院\nStarts: 2026-06-06T14:00:00+08:00\nEnds: 2026-06-06T19:00:00+08:00\nVenue: 歌德学院北京分院\nAddress: 北京市海淀区中关村南大街2号数码大厦B座17层\nSummary: Open day with German classes, workshops, talks, and food.\nEvent: 当代歌剧赏析：“Schöne Stellen” 当代歌剧中的美丽瞬间\nOrganizer: 北京德国文化中心歌德学院\nStarts: 2026-06-06T14:00:00+08:00\nEnds: 2026-06-06T16:00:00+08:00\nVenue: 歌德学院北京分院\nSummary: Contemporary opera appreciation talk in Chinese and English.\nEvent: 展览：Sonic Other__lands 第三只耳——折叠的地景之间\nOrganizer: 北京德国文化中心歌德学院\nStarts: 2026-06-04T10:00:00+08:00\nEnds: 2026-08-30T18:00:00+08:00\nSchedule: 展期至8月30日，周二至周日 10:00-18:00\nVenue: 北京德国文化中心歌德学院\nAddress: 北京市朝阳区798艺术区创意广场\nSummary: Long-running exhibition at Goethe-Institut in 798.\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
+  "html": "<article><p>Title: 这个周末也太精彩了~~</p><p>Source: 北京德国文化中心歌德学院</p><p>Published at: 2026-06-04T07:00:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MzA4MzU4MjYwMw==&amp;mid=2692059726&amp;idx=1&amp;sn=0f980ad3364b1b75364492bee1a6288e</p><p>Expected action: extract</p><p>Rationale: Goethe weekend roundup containing multiple public activities and a long-running exhibition.</p><p>Review/exclusion reasons: long_running_exhibition</p><p>Event: 2026年歌德学院开放日</p><p>Organizer: 北京德国文化中心歌德学院</p><p>Starts: 2026-06-06T14:00:00+08:00</p><p>Ends: 2026-06-06T19:00:00+08:00</p><p>Venue: 歌德学院北京分院</p><p>Address: 北京市海淀区中关村南大街2号数码大厦B座17层</p><p>Summary: Open day with German classes, workshops, talks, and food.</p><p>Event: 当代歌剧赏析：“Schöne Stellen” 当代歌剧中的美丽瞬间</p><p>Organizer: 北京德国文化中心歌德学院</p><p>Starts: 2026-06-06T14:00:00+08:00</p><p>Ends: 2026-06-06T16:00:00+08:00</p><p>Venue: 歌德学院北京分院</p><p>Summary: Contemporary opera appreciation talk in Chinese and English.</p><p>Event: 展览：Sonic Other__lands 第三只耳——折叠的地景之间</p><p>Organizer: 北京德国文化中心歌德学院</p><p>Starts: 2026-06-04T10:00:00+08:00</p><p>Ends: 2026-08-30T18:00:00+08:00</p><p>Schedule: 展期至8月30日，周二至周日 10:00-18:00</p><p>Venue: 北京德国文化中心歌德学院</p><p>Address: 北京市朝阳区798艺术区创意广场</p><p>Summary: Long-running exhibition at Goethe-Institut in 798.</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "images": [],
+  "links": [],
+  "miniPrograms": [],
+  "contentHash": "d135b50c423915b93086304fdcea332ed1bf58c50251b9ff6d1f26bca6d45e2d",
+  "diagnostics": [],
+  "captureWarnings": [
+    {
+      "code": "public_safe_curated_excerpt",
+      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
+      "severity": "info"
+    }
+  ]
+}

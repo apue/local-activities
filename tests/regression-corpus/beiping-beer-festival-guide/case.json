@@ -1,0 +1,23 @@
+{
+  "id": "beiping-beer-festival-guide",
+  "labels": [
+    "ordinary_public_event",
+    "registration_required",
+    "mini_program_action_registration"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "北平机器",
+    "url": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518666&idx=1&sn=2b07a8ccba4da28aa88aaed8530470f0",
+    "publishedAt": "2026-06-09T07:02:00.000Z"
+  },
+  "rationale": "Large public festival guide with mini-program actions, free entry, paid tokens, and dense schedule text.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}

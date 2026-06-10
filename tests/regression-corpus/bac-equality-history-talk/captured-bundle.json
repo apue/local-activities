@@ -1,0 +1,33 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-cea2407e951813831d870b89",
+  "sourceId": "2390064940",
+  "sourceName": "美国驻华大使馆",
+  "provider": "wechat2rss_public_safe_excerpt",
+  "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=7&sn=4b5c580fba9eb5e2f474c0c71ec4c2ac",
+  "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=7&sn=4b5c580fba9eb5e2f474c0c71ec4c2ac",
+  "finalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=7&sn=4b5c580fba9eb5e2f474c0c71ec4c2ac",
+  "title": "【北京美国中心活动】缅怀过去，展望未来：美利坚合众国的历史回顾与未来愿景 第六场：追求平等的未竟之路，6月16日，周二， 下午3：00",
+  "authorName": "美国驻华大使馆",
+  "publishedAt": "2026-06-09T10:30:00.000Z",
+  "capturedAt": "2026-06-10T00:00:00.000Z",
+  "languageHints": [
+    "zh",
+    "en"
+  ],
+  "captureMode": "text_complete",
+  "text": "Title: 【北京美国中心活动】缅怀过去，展望未来：美利坚合众国的历史回顾与未来愿景 第六场：追求平等的未竟之路，6月16日，周二， 下午3：00\nSource: 美国驻华大使馆\nPublished at: 2026-06-09T10:30:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=7&sn=4b5c580fba9eb5e2f474c0c71ec4c2ac\nExpected action: extract\nRationale: Public Beijing American Center talk that requires RSVP.\nEvent: 缅怀过去，展望未来：追求平等的未竟之路\nOrganizer: 北京美国中心\nStarts: 2026-06-16T15:00:00+08:00\nSchedule: 6月16日 周二 15:00\nVenue: 北京美国中心\nRegistration action: qr_code\nSummary: English-language public seminar at the Beijing American Center.\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
+  "html": "<article><p>Title: 【北京美国中心活动】缅怀过去，展望未来：美利坚合众国的历史回顾与未来愿景 第六场：追求平等的未竟之路，6月16日，周二， 下午3：00</p><p>Source: 美国驻华大使馆</p><p>Published at: 2026-06-09T10:30:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&amp;mid=2651346286&amp;idx=7&amp;sn=4b5c580fba9eb5e2f474c0c71ec4c2ac</p><p>Expected action: extract</p><p>Rationale: Public Beijing American Center talk that requires RSVP.</p><p>Event: 缅怀过去，展望未来：追求平等的未竟之路</p><p>Organizer: 北京美国中心</p><p>Starts: 2026-06-16T15:00:00+08:00</p><p>Schedule: 6月16日 周二 15:00</p><p>Venue: 北京美国中心</p><p>Registration action: qr_code</p><p>Summary: English-language public seminar at the Beijing American Center.</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "images": [],
+  "links": [],
+  "miniPrograms": [],
+  "contentHash": "b7aae2f323de38334c17c1f48566c2bb6b41d691e72e8e671c13130f6b9e5b8a",
+  "diagnostics": [],
+  "captureWarnings": [
+    {
+      "code": "public_safe_curated_excerpt",
+      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
+      "severity": "info"
+    }
+  ]
+}

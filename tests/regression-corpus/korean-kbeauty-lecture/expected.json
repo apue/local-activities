@@ -1,0 +1,28 @@
+{
+  "action": "extract",
+  "eventCount": 1,
+  "requiresReservation": true,
+  "evidence": {},
+  "eventDrafts": [
+    {
+      "draftId": "korean-kbeauty-lecture",
+      "title": "K-Beauty的科学：韩国化妆品与皮肤管理特别讲座",
+      "organizer": "驻华韩国文化院",
+      "startsAt": "2026-06-09T00:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "驻华韩国文化院",
+      "registrationAction": "qr_code",
+      "scheduleText": "6月9日，预约开放时间为6月8日10:00",
+      "summary": "Public K-Beauty lecture by Professor Kim Joo-ri; reservation required."
+    }
+  ],
+  "dedupe": {
+    "decision": "new_event"
+  },
+  "publish": {
+    "state": "needs_review",
+    "reasons": [
+      "start_time_missing_in_text"
+    ]
+  }
+}

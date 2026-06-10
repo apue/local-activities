@@ -1,0 +1,22 @@
+{
+  "id": "guangzhou-watch-party-not-beijing",
+  "labels": [
+    "not_beijing",
+    "registration_required"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "美国驻华大使馆",
+    "url": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=6&sn=2cfb362f859b4e5c0f4e32935db85e19",
+    "publishedAt": "2026-06-09T10:30:00.000Z"
+  },
+  "rationale": "Public event but located in Guangzhou, outside the Beijing product scope.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}

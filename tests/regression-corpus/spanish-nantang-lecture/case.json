@@ -1,0 +1,21 @@
+{
+  "id": "spanish-nantang-lecture",
+  "labels": [
+    "ordinary_public_event"
+  ],
+  "source": {
+    "type": "captured_bundle",
+    "provider": "wechat2rss",
+    "sourceName": "西班牙驻华大使馆",
+    "url": "https://mp.weixin.qq.com/s?__biz=MzI5NDkwMDU1Mw==&mid=2247493179&idx=1&sn=5c55e9f75252b63db9004a188753f20f",
+    "publishedAt": "2026-06-09T07:48:00.000Z"
+  },
+  "rationale": "Clear public Beijing lecture with time, venue, language, and free admission.",
+  "capture": {
+    "capturedAt": "2026-06-10T00:00:00.000Z",
+    "assetCount": 0,
+    "imageCount": 0,
+    "source": "local Wechat2RSS cache queried on 2026-06-10",
+    "publicSafeDerived": true
+  }
+}

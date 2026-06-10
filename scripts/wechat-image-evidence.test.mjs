@@ -48,6 +48,12 @@ describe("WeChat image evidence helpers", () => {
     ).toBe("qr");
     expect(
       classifyImageCandidate({
+        url: "https://mmbiz.qpic.cn/qrcode-image.jpg",
+        alt: "QRCode for embassy event",
+      }),
+    ).toBe("qr");
+    expect(
+      classifyImageCandidate({
         url: "https://mmbiz.qpic.cn/event-poster.jpg",
       }),
     ).toBe("poster");
