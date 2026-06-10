@@ -89,6 +89,25 @@ poster/QR vision assets, stateful duplicate/update cases, and real capture
 failures are recorded in
 `tests/regression-corpus/manifest.json`.
 
+## Event Pipeline V5 Phase 1 Replay
+
+V5 Phase 1 adds a node-by-node offline replay harness for the future LLM/editor
+pipeline. Its default path is deterministic and uses the committed regression
+corpus, mock providers, memory artifacts, and no hosted writes:
+
+```bash
+pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store memory
+```
+
+Use local artifact mode when debugging node inputs, outputs, or lineage:
+
+```bash
+pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store local
+```
+
+Local artifact mode writes under `tmp/v5-replay-runs` unless `--artifact-dir` is
+provided. V5 replay refuses production target and live-provider flags in Phase 1.
+
 ## Evaluation
 
 Evaluation tests compare extractor variants through the reusable evaluation
