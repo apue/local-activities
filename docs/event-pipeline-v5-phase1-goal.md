@@ -155,6 +155,27 @@ Local artifact mode should also work:
 pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store local
 ```
 
+## Implemented Phase 1 Surface
+
+Phase 1 implementation is intentionally small and local-first:
+
+- contracts and artifact metadata: `src/pipeline/v5/contracts.mjs`
+- deterministic article normalization: `src/pipeline/v5/content-cleaner.mjs`
+- high-recall signal scoring: `src/pipeline/v5/signal-scorer.mjs`
+- bounded candidate packet building: `src/pipeline/v5/candidate-packet.mjs`
+- mock-first cheap triage and budget-guarded live interface:
+  `src/pipeline/v5/cheap-triage.mjs`
+- mock Full Extract, deterministic validation, mock Editor Pass, and publish
+  trace helpers: `src/pipeline/v5/mock-harnesses.mjs`
+- offline replay orchestration and artifact writing:
+  `src/pipeline/v5/replay-runner.mjs`
+- CLI entrypoint: `scripts/pipeline-v5-replay.mjs`
+
+The default `memory` store is for CI-safe validation and does not write files.
+The `local` store writes replay artifacts under `tmp/v5-replay-runs` unless
+`--artifact-dir` is provided. Neither mode calls WeChat, live LLM providers, or
+production Supabase tables.
+
 ## Validation
 
 Before closing #309 and #302, run:
@@ -196,4 +217,3 @@ The final handoff on #302 must summarize:
 - validation commands and results
 - replay command output summary
 - any remaining Phase 2 work explicitly not included
-
