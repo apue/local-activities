@@ -71,7 +71,9 @@ private local corpus directory with consumable image assets.
 Local live evaluation uses the `live-configured` variant. It accepts
 `V5_LIVE_BASE_URL`, `V5_LIVE_API_KEY`, `V5_LIVE_MODEL`, and optional
 `V5_LIVE_PROVIDER`; if those are not set, it falls back to the
-`ANALYSIS_LLM_*` Edge Function provider variables.
+`ANALYSIS_LLM_*` Edge Function provider variables. It also accepts
+`V5_LIVE_MAX_TOKENS` and `V5_LIVE_ENABLE_THINKING` for OpenAI-compatible
+provider body options, which are useful for SiliconFlow/Qwen models.
 
 ## Map And Geocoding
 

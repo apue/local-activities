@@ -86,6 +86,8 @@ V5_LIVE_BASE_URL      or ANALYSIS_LLM_BASE_URL
 V5_LIVE_API_KEY       or ANALYSIS_LLM_API_KEY
 V5_LIVE_MODEL         or ANALYSIS_LLM_MODEL
 V5_LIVE_PROVIDER      or ANALYSIS_LLM_PROVIDER
+V5_LIVE_MAX_TOKENS    or ANALYSIS_LLM_MAX_OUTPUT_TOKENS
+V5_LIVE_ENABLE_THINKING
 ```
 
 Example:
@@ -100,6 +102,11 @@ pnpm pipeline:v5:eval -- \
   --max-cost-cny 10 \
   --env-file .env.local
 ```
+
+For SiliconFlow Qwen reasoning models that return `reasoning_content`, set
+`V5_LIVE_ENABLE_THINKING=false` so the provider returns the extraction JSON in
+`message.content`. Use `V5_LIVE_MAX_TOKENS` to keep enough output budget for
+Full Extract and Editor Pass responses.
 
 This smoke writes only evaluation artifacts. It must not write production drafts
 or canonical events.
