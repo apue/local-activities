@@ -5,6 +5,8 @@ import type {
   AdminEventDraftRecord,
   AdminEvaluationRunRecord,
   AdminExcludedArticleRecord,
+  AdminFeedbackInput,
+  AdminFeedbackRecord,
   AdminLlmUsageSummary,
   AdminPipelineRunRecord,
   AdminProcessingLedgerRecord,
@@ -12,6 +14,8 @@ import type {
 } from "./admin-service";
 import {
   handleAdminDraftAction,
+  handleAdminCreateFeedback,
+  handleAdminListFeedback,
   handleAdminListEvaluationRuns,
   handleAdminLogin,
   handleAdminListExcludedArticles,
@@ -109,6 +113,24 @@ class RouteAdminStore implements AdminStore {
   };
   evaluationRunsInput?: Parameters<AdminStore["listEvaluationRuns"]>[0];
   pipelineRunsInput?: Parameters<AdminStore["listPipelineRuns"]>[0];
+  feedbackRows: AdminFeedbackRecord[] = [
+    {
+      id: "feedback-1",
+      dataClass: "production",
+      feedbackType: "missing_qr",
+      articleBundleId: "bundle-1",
+      draftId: "draft-1",
+      fieldName: "registrationQrAssetId",
+      reason: "The QR code is visible in the source poster.",
+      createdBy: "operator@example.com",
+      status: "open",
+      metadata: {},
+      createdAt: "2026-06-11T10:00:00.000Z",
+      updatedAt: "2026-06-11T10:00:00.000Z",
+    },
+  ];
+  feedbackInput?: Parameters<AdminStore["listFeedback"]>[0];
+  createdFeedbackInput?: AdminFeedbackInput;
   pipelineRun: AdminPipelineRunRecord = {
     runId: "pipe-1",
     dataClass: "production",
@@ -299,6 +321,48 @@ class RouteAdminStore implements AdminStore {
       ...this.llmUsageSummary,
       range: input.range,
     };
+  }
+
+  async listFeedback(
+    input: Parameters<AdminStore["listFeedback"]>[0],
+  ): Promise<AdminFeedbackRecord[]> {
+    this.feedbackInput = input;
+    return this.feedbackRows.filter(
+      (row) =>
+        (!input.dataClass || row.dataClass === input.dataClass) &&
+        (!input.draftId || row.draftId === input.draftId) &&
+        (!input.eventId || row.eventId === input.eventId) &&
+        (!input.articleBundleId ||
+          row.articleBundleId === input.articleBundleId) &&
+        (!input.pipelineRunId || row.pipelineRunId === input.pipelineRunId) &&
+        (!input.status || row.status === input.status),
+    );
+  }
+
+  async createFeedback(
+    input: AdminFeedbackInput,
+  ): Promise<AdminFeedbackRecord> {
+    this.createdFeedbackInput = input;
+    const feedback: AdminFeedbackRecord = {
+      id: "feedback-2",
+      dataClass: input.dataClass,
+      feedbackType: input.feedbackType,
+      pipelineRunId: input.pipelineRunId,
+      articleBundleId: input.articleBundleId,
+      draftId: input.draftId,
+      eventId: input.eventId,
+      fieldName: input.fieldName,
+      oldValue: input.oldValue,
+      correctedValue: input.correctedValue,
+      reason: input.reason,
+      createdBy: input.createdBy,
+      status: "open",
+      metadata: input.metadata ?? {},
+      createdAt: "2026-06-11T10:10:00.000Z",
+      updatedAt: "2026-06-11T10:10:00.000Z",
+    };
+    this.feedbackRows.unshift(feedback);
+    return feedback;
   }
 
   async getEventDraft(draftId: string) {
@@ -626,6 +690,128 @@ describe("admin route handlers", () => {
       ok: false,
       error: "invalid_request",
     });
+  });
+
+  it("lists structured admin feedback by draft and article identifiers", async () => {
+    const store = new RouteAdminStore();
+    const response = await handleAdminListFeedback(
+      new Request(
+        "https://example.com/api/admin/feedback?draft_id=draft-1&article_bundle_id=bundle-1",
+        {
+          headers: { authorization: "Bearer admin-secret" },
+        },
+      ),
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      feedback: [
+        expect.objectContaining({
+          id: "feedback-1",
+          feedbackType: "missing_qr",
+          draftId: "draft-1",
+          articleBundleId: "bundle-1",
+        }),
+      ],
+    });
+    expect(store.feedbackInput).toEqual({
+      dataClass: "production",
+      draftId: "draft-1",
+      articleBundleId: "bundle-1",
+    });
+  });
+
+  it("creates structured feedback without invoking draft actions", async () => {
+    const store = new RouteAdminStore();
+    const response = await handleAdminCreateFeedback(
+      new Request("https://example.com/api/admin/feedback", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          dataClass: "production",
+          feedbackType: "wrong_location",
+          pipelineRunId: "pipe-1",
+          articleBundleId: "bundle-1",
+          draftId: "draft-1",
+          eventId: "event-1",
+          fieldName: "venueName",
+          oldValue: "Old venue",
+          correctedValue: "New venue",
+          reason: "Operator checked the source page.",
+          createdBy: "spoofed@example.com",
+        }),
+      }),
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      feedback: {
+        id: "feedback-2",
+        feedbackType: "wrong_location",
+        fieldName: "venueName",
+        status: "open",
+      },
+    });
+    expect(store.createdFeedbackInput).toMatchObject({
+      dataClass: "production",
+      feedbackType: "wrong_location",
+      pipelineRunId: "pipe-1",
+      articleBundleId: "bundle-1",
+      draftId: "draft-1",
+      eventId: "event-1",
+      fieldName: "venueName",
+      createdBy: "admin",
+    });
+    expect(store.draft.reviewState).toBe("ready_for_review");
+  });
+
+  it("rejects invalid feedback enum values and data classes", async () => {
+    const invalidType = await handleAdminCreateFeedback(
+      new Request("https://example.com/api/admin/feedback", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          dataClass: "production",
+          feedbackType: "maybe_event",
+          reason: "Not a supported feedback label.",
+          createdBy: "operator@example.com",
+        }),
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+    expect(invalidType.status).toBe(400);
+
+    const invalidDataClass = await handleAdminListFeedback(
+      new Request("https://example.com/api/admin/feedback?data_class=dev", {
+        headers: { authorization: "Bearer admin-secret" },
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+    expect(invalidDataClass.status).toBe(400);
+
+    const unanchored = await handleAdminCreateFeedback(
+      new Request("https://example.com/api/admin/feedback", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          dataClass: "production",
+          feedbackType: "other",
+          reason: "This feedback is not linked to any record.",
+        }),
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+    expect(unanchored.status).toBe(400);
   });
 
   it("passes explicit evaluation run validity filters to the admin store", async () => {

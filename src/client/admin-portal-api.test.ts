@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   adminApiRequest,
+  createAdminFeedback,
+  listAdminFeedback,
   loadAdminState,
   loginAdmin,
   patchAdminDraft,
@@ -195,6 +197,81 @@ describe("admin portal API client", () => {
         body: JSON.stringify({
           scheduleText: "至8月30日，周二至周日 10:00-18:00",
           venueName: "Goethe 798",
+        }),
+      },
+    });
+    expect(JSON.stringify(calls[0].init)).not.toContain("authorization");
+  });
+
+  it("lists structured feedback for selected draft details", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl: typeof fetch = async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      return jsonResponse(200, {
+        ok: true,
+        feedback: [{ id: "feedback-1", draftId: "draft-1" }],
+      });
+    };
+
+    await expect(
+      listAdminFeedback({
+        dataClass: "production",
+        draftId: "draft-1",
+        articleBundleId: "bundle-1",
+        fetchImpl,
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      feedback: [{ id: "feedback-1", draftId: "draft-1" }],
+    });
+
+    expect(calls).toHaveLength(1);
+    const [path, query = ""] = calls[0].url.split("?");
+    expect(path).toBe("/api/admin/feedback");
+    expect(Object.fromEntries(new URLSearchParams(query))).toEqual({
+      data_class: "production",
+      article_bundle_id: "bundle-1",
+      draft_id: "draft-1",
+    });
+    expect(calls[0].init.credentials).toBe("same-origin");
+    expect(JSON.stringify(calls[0].init)).not.toContain("authorization");
+  });
+
+  it("creates structured feedback through the cookie session", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl: typeof fetch = async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      return jsonResponse(200, {
+        ok: true,
+        feedback: { id: "feedback-1", feedbackType: "missing_qr" },
+      });
+    };
+
+    await createAdminFeedback({
+      feedback: {
+        dataClass: "production",
+        feedbackType: "missing_qr",
+        draftId: "draft-1",
+        articleBundleId: "bundle-1",
+        oldValue: "missing",
+        reason: "QR exists in the source image.",
+      },
+      fetchImpl,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      url: "/api/admin/feedback",
+      init: {
+        method: "POST",
+        credentials: "same-origin",
+        body: JSON.stringify({
+          dataClass: "production",
+          feedbackType: "missing_qr",
+          draftId: "draft-1",
+          articleBundleId: "bundle-1",
+          oldValue: "missing",
+          reason: "QR exists in the source image.",
         }),
       },
     });

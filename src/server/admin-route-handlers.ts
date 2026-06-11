@@ -4,7 +4,9 @@ import { adminSessionCookie } from "./admin-auth";
 import { authenticateAdminRequest } from "./admin-auth";
 import {
   AdminDraftPublishBlockedError,
+  createAdminFeedback,
   getAdminEventDraftDetail,
+  listAdminFeedback,
   listAdminCollectorJobs,
   listAdminEvaluationRuns,
   listAdminExcludedArticles,
@@ -106,6 +108,63 @@ const dataClassSchema = z
   .enum(["production", "eval", "test", "smoke"])
   .optional()
   .default("production");
+
+const feedbackTypeSchema = z.enum([
+  "not_event",
+  "not_public",
+  "should_publish",
+  "missing_event",
+  "wrong_time",
+  "wrong_location",
+  "missing_registration",
+  "missing_qr",
+  "duplicate_event",
+  "bad_summary",
+  "bad_category_or_tags",
+  "other",
+]);
+
+const feedbackStatusSchema = z
+  .enum(["open", "triaged", "resolved", "dismissed"])
+  .optional();
+
+const jsonObjectSchema = z.custom<Record<string, unknown>>(
+  (value) =>
+    typeof value === "object" && value !== null && !Array.isArray(value),
+  { message: "Expected a JSON object." },
+);
+
+const feedbackCreateSchema = z
+  .object({
+    dataClass: z
+      .enum(["production", "eval", "test", "smoke"])
+      .default("production"),
+    feedbackType: feedbackTypeSchema,
+    pipelineRunId: z.string().trim().min(1).max(200).optional(),
+    articleBundleId: z.string().trim().min(1).max(200).optional(),
+    draftId: z.string().trim().min(1).max(200).optional(),
+    eventId: z.string().trim().min(1).max(200).optional(),
+    fieldName: z.string().trim().min(1).max(200).optional(),
+    oldValue: z.unknown().optional(),
+    correctedValue: z.unknown().optional(),
+    reason: z.string().trim().min(1).max(4_000).optional(),
+    createdBy: z.string().trim().min(1).max(200).default("admin"),
+    metadata: jsonObjectSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      Boolean(
+        value.pipelineRunId ||
+          value.articleBundleId ||
+          value.draftId ||
+          value.eventId,
+      ),
+    {
+      message:
+        "Feedback must be linked to a pipeline run, article bundle, draft, or event.",
+    },
+  );
 
 const excludedArticleProcessingStateSchema = z
   .enum(["excluded", "promoted_to_extraction"])
@@ -372,6 +431,84 @@ export async function handleAdminListLlmUsage(
         },
       },
     );
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminListFeedback(
+  request: Request,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const url = new URL(request.url);
+  const parsedDataClass = dataClassSchema.safeParse(
+    optionalSearchParam(url, "data_class") ??
+      optionalSearchParam(url, "dataClass") ??
+      undefined,
+  );
+  if (!parsedDataClass.success) {
+    return invalidRequestResponse(parsedDataClass.error);
+  }
+  const parsedStatus = feedbackStatusSchema.safeParse(
+    optionalSearchParam(url, "status"),
+  );
+  if (!parsedStatus.success) return invalidRequestResponse(parsedStatus.error);
+
+  try {
+    const feedback = await listAdminFeedback(
+      {
+        dataClass: parsedDataClass.data,
+        pipelineRunId: optionalSearchParam(url, "pipeline_run_id"),
+        articleBundleId: optionalSearchParam(url, "article_bundle_id"),
+        draftId: optionalSearchParam(url, "draft_id"),
+        eventId: optionalSearchParam(url, "event_id"),
+        status: parsedStatus.data,
+      },
+      store,
+    );
+    return Response.json(
+      {
+        ok: true,
+        feedback,
+      },
+      {
+        headers: {
+          "cache-control": "no-store",
+        },
+      },
+    );
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminCreateFeedback(
+  request: Request,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const parsed = feedbackCreateSchema.safeParse(await parseJson(request));
+  if (!parsed.success) return invalidRequestResponse(parsed.error);
+
+  try {
+    const feedback = await createAdminFeedback(
+      {
+        ...parsed.data,
+        createdBy: "admin",
+      },
+      store,
+    );
+    return Response.json({
+      ok: true,
+      feedback,
+    });
   } catch (error) {
     return serviceErrorResponse(error);
   }

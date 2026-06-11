@@ -169,6 +169,60 @@ describe("event pipeline reset migration", () => {
     expect(allMigrationSql).toContain("llm_usage_source_recorded_idx");
   });
 
+  it("adds structured admin feedback ledger for agent-operable ground truth", () => {
+    expect(allMigrationSql).toContain("create table public.admin_feedback_ledger");
+    for (const column of [
+      "feedback_id text not null unique",
+      "data_class text not null default 'production'",
+      "feedback_type text not null",
+      "pipeline_run_id text",
+      "article_bundle_id text",
+      "draft_id text",
+      "event_id text",
+      "field_name text",
+      "old_value jsonb",
+      "corrected_value jsonb",
+      "reason text",
+      "created_by text not null",
+      "status text not null default 'open'",
+      "metadata jsonb not null default '{}'::jsonb",
+    ]) {
+      expect(allMigrationSql).toContain(column);
+    }
+    expect(allMigrationSql).toContain(
+      "admin_feedback_ledger_feedback_type_check",
+    );
+    expect(allMigrationSql).toContain(
+      "check (feedback_type in ('not_event', 'not_public', 'should_publish', 'missing_event', 'wrong_time', 'wrong_location', 'missing_registration', 'missing_qr', 'duplicate_event', 'bad_summary', 'bad_category_or_tags', 'other'))",
+    );
+    expect(allMigrationSql).toContain("admin_feedback_ledger_data_class_created_idx");
+    expect(allMigrationSql).toContain("admin_feedback_ledger_draft_created_idx");
+    expect(allMigrationSql).toContain("admin_feedback_ledger_event_created_idx");
+    expect(allMigrationSql).toContain("admin_feedback_ledger_article_created_idx");
+    expect(allMigrationSql).toContain("admin_feedback_ledger_run_created_idx");
+    expect(allMigrationSql).toContain(
+      "validate_admin_feedback_data_class()",
+    );
+    expect(allMigrationSql).toContain(
+      "raise exception 'admin_feedback_data_class_mismatch:pipeline_run_id:%'",
+    );
+    expect(allMigrationSql).toContain(
+      "raise exception 'admin_feedback_data_class_mismatch:article_bundle_id:%'",
+    );
+    expect(allMigrationSql).toContain(
+      "raise exception 'admin_feedback_data_class_mismatch:draft_id:%'",
+    );
+    expect(allMigrationSql).toContain(
+      "raise exception 'admin_feedback_data_class_mismatch:event_id:%'",
+    );
+    expect(allMigrationSql).toContain(
+      "before insert or update on public.admin_feedback_ledger",
+    );
+    expect(allMigrationSql).toContain(
+      "alter table public.admin_feedback_ledger enable row level security",
+    );
+  });
+
   it("does not reintroduce removed active collector and Vercel asset paths", () => {
     expect(sql).not.toMatch(/vercel[_-]?sandbox/i);
     expect(sql).not.toContain(["BLOB", "READ", "WRITE", "TOKEN"].join("_"));

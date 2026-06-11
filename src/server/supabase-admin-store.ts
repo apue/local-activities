@@ -9,6 +9,9 @@ import type {
   AdminEventDraftRecord,
   AdminEvaluationCaseResultRecord,
   AdminEvaluationRunRecord,
+  AdminFeedbackFilters,
+  AdminFeedbackInput,
+  AdminFeedbackRecord,
   AdminLlmUsageRange,
   AdminLlmUsageRecord,
   AdminLlmUsageSummary,
@@ -284,6 +287,25 @@ type LlmUsageRow = {
   excluded_article_id: string | null;
   evaluation_run_id: string | null;
   metadata: Record<string, unknown> | null;
+};
+
+type AdminFeedbackRow = {
+  feedback_id: string;
+  data_class: AdminFeedbackRecord["dataClass"];
+  feedback_type: AdminFeedbackRecord["feedbackType"];
+  pipeline_run_id: string | null;
+  article_bundle_id: string | null;
+  draft_id: string | null;
+  event_id: string | null;
+  field_name: string | null;
+  old_value: unknown;
+  corrected_value: unknown;
+  reason: string | null;
+  created_by: string;
+  status: AdminFeedbackRecord["status"];
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
 };
 
 const LLM_USAGE_COLUMNS = [
@@ -650,6 +672,65 @@ class SupabaseAdminStore implements AdminStore {
     return summarizeLlmUsage(records, input.range);
   }
 
+  async listFeedback(
+    input: AdminFeedbackFilters,
+  ): Promise<AdminFeedbackRecord[]> {
+    let query = this.client
+      .from("admin_feedback_ledger")
+      .select("*")
+      .eq("data_class", input.dataClass ?? "production");
+
+    if (input.pipelineRunId) {
+      query = query.eq("pipeline_run_id", input.pipelineRunId);
+    }
+    if (input.articleBundleId) {
+      query = query.eq("article_bundle_id", input.articleBundleId);
+    }
+    if (input.draftId) {
+      query = query.eq("draft_id", input.draftId);
+    }
+    if (input.eventId) {
+      query = query.eq("event_id", input.eventId);
+    }
+    if (input.status) {
+      query = query.eq("status", input.status);
+    }
+
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw new Error("admin_feedback_list_failed");
+    return ((data ?? []) as AdminFeedbackRow[]).map(toFeedbackRecord);
+  }
+
+  async createFeedback(
+    input: AdminFeedbackInput,
+  ): Promise<AdminFeedbackRecord> {
+    const { data, error } = await this.client
+      .from("admin_feedback_ledger")
+      .insert({
+        feedback_id: `feedback-${randomUUID()}`,
+        data_class: input.dataClass,
+        feedback_type: input.feedbackType,
+        pipeline_run_id: input.pipelineRunId ?? null,
+        article_bundle_id: input.articleBundleId ?? null,
+        draft_id: input.draftId ?? null,
+        event_id: input.eventId ?? null,
+        field_name: input.fieldName ?? null,
+        old_value: input.oldValue ?? null,
+        corrected_value: input.correctedValue ?? null,
+        reason: input.reason ?? null,
+        created_by: input.createdBy,
+        status: "open",
+        metadata: input.metadata ?? {},
+      })
+      .select("*")
+      .maybeSingle<AdminFeedbackRow>();
+
+    if (error || !data) throw new Error("admin_feedback_create_failed");
+    return toFeedbackRecord(data);
+  }
+
   async publishEventDraft(input: {
     draft: AdminEventDraftRecord;
     publishedAt: string;
@@ -971,6 +1052,27 @@ function toLlmUsageRecord(row: LlmUsageRow): AdminLlmUsageRecord {
     excludedArticleId: row.excluded_article_id ?? undefined,
     evaluationRunId: row.evaluation_run_id ?? undefined,
     metadata: sanitizeLlmMetadata(row.metadata ?? {}),
+  };
+}
+
+function toFeedbackRecord(row: AdminFeedbackRow): AdminFeedbackRecord {
+  return {
+    id: row.feedback_id,
+    dataClass: row.data_class,
+    feedbackType: row.feedback_type,
+    pipelineRunId: row.pipeline_run_id ?? undefined,
+    articleBundleId: row.article_bundle_id ?? undefined,
+    draftId: row.draft_id ?? undefined,
+    eventId: row.event_id ?? undefined,
+    fieldName: row.field_name ?? undefined,
+    oldValue: row.old_value ?? undefined,
+    correctedValue: row.corrected_value ?? undefined,
+    reason: row.reason ?? undefined,
+    createdBy: row.created_by,
+    status: row.status,
+    metadata: sanitizeJsonObject(row.metadata ?? {}),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
