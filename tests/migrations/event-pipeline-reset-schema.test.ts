@@ -148,6 +148,27 @@ describe("event pipeline reset migration", () => {
     expect(allMigrationSql).toContain("pipeline_attempts_data_class_run_idx");
   });
 
+  it("extends LLM usage ledger for agent-readable call audit", () => {
+    for (const column of [
+      "pipeline_run_id text",
+      "pipeline_step_id text",
+      "source_id text",
+      "source_url text",
+      "prompt_version text",
+      "schema_version text",
+      "params jsonb not null default '{}'::jsonb",
+      "error_code text",
+      "request_artifact_path text",
+      "response_artifact_path text",
+    ]) {
+      expect(allMigrationSql).toContain(column);
+    }
+
+    expect(allMigrationSql).toContain("llm_usage_agent_filter_idx");
+    expect(allMigrationSql).toContain("llm_usage_article_recorded_idx");
+    expect(allMigrationSql).toContain("llm_usage_source_recorded_idx");
+  });
+
   it("does not reintroduce removed active collector and Vercel asset paths", () => {
     expect(sql).not.toMatch(/vercel[_-]?sandbox/i);
     expect(sql).not.toContain(["BLOB", "READ", "WRITE", "TOKEN"].join("_"));

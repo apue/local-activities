@@ -108,6 +108,7 @@ export async function runAnalysisPipeline({
       model,
       status: "failed",
       usage: lastUsage,
+      errorCode: errorCode(error),
       metadata: { error: errorDetails(error) },
     });
     await writeUnique(db, "processing_ledger", {
@@ -414,6 +415,7 @@ async function writeUsage(
     model,
     status,
     usage,
+    errorCode,
     metadata = {},
   }: {
     usageId: string;
@@ -422,6 +424,7 @@ async function writeUsage(
     model: string;
     status: "succeeded" | "failed";
     usage: UsageMetrics;
+    errorCode?: string;
     metadata?: Record<string, unknown>;
   },
 ) {
@@ -431,6 +434,12 @@ async function writeUsage(
     provider: providerName,
     model,
     status,
+    source_id: request.sourceId,
+    source_url: request.sourceUrl,
+    prompt_version: promptVersion,
+    schema_version: schemaVersion,
+    params: { responseFormat: "json_object" },
+    error_code: errorCode,
     input_tokens: usage.inputTokens,
     output_tokens: usage.outputTokens,
     total_tokens: usage.totalTokens,
@@ -856,6 +865,13 @@ function errorDetails(error: unknown) {
   return {
     message: errorMessage(error),
   };
+}
+
+function errorCode(error: unknown): string {
+  if (isRecord(error)) {
+    return stringValue(error.code) ?? stringValue(error.message) ?? "analysis_error";
+  }
+  return errorMessage(error) || "analysis_error";
 }
 
 function errorMessage(error: unknown): string {

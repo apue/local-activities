@@ -25,6 +25,7 @@ import {
 } from "./admin-route-handlers";
 
 class RouteAdminStore implements AdminStore {
+  llmUsageInput?: Parameters<AdminStore["getLlmUsageSummary"]>[0];
   draft: AdminEventDraftRecord = {
     id: "draft-1",
     articleUrl: "https://mp.weixin.qq.com/s/example",
@@ -241,6 +242,7 @@ class RouteAdminStore implements AdminStore {
         cachedInputTokens: 0,
         reasoningOutputTokens: 0,
         costMicroCny: 2100,
+        params: {},
         metadata: { environment: "production_collector" },
       },
     ],
@@ -292,6 +294,7 @@ class RouteAdminStore implements AdminStore {
   async getLlmUsageSummary(
     input: Parameters<AdminStore["getLlmUsageSummary"]>[0],
   ): Promise<AdminLlmUsageSummary> {
+    this.llmUsageInput = input;
     return {
       ...this.llmUsageSummary,
       range: input.range,
@@ -682,11 +685,12 @@ describe("admin route handlers", () => {
   });
 
   it("lists the admin LLM usage summary without prompt or response payloads", async () => {
+    const store = new RouteAdminStore();
     const response = await handleAdminListLlmUsage(
-      new Request("https://example.com/api/admin/llm-usage?range=7d", {
+      new Request("https://example.com/api/admin/llm-usage?range=7d&data_class=eval&provider=dashscope&model=qwen3-vl-plus&operation=full_extract&status=failed&source_id=source-1&article_bundle_id=bundle-1", {
         headers: { authorization: "Bearer admin-secret" },
       }),
-      new RouteAdminStore(),
+      store,
       { ADMIN_ACCESS_TOKEN: "admin-secret" },
       new Date("2026-06-04T03:00:00.000Z"),
     );
@@ -731,6 +735,17 @@ describe("admin route handlers", () => {
             totalTokens: 1150,
           },
         ],
+      },
+    });
+    expect(store.llmUsageInput).toMatchObject({
+      filters: {
+        dataClass: "eval",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        operation: "full_extract",
+        status: "failed",
+        sourceId: "source-1",
+        articleBundleId: "bundle-1",
       },
     });
   });

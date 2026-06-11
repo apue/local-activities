@@ -67,6 +67,19 @@ const llmUsageRangeSchema = z
   .enum(["today", "7d", "all"])
   .optional()
   .default("today");
+const llmUsageStatusSchema = z.enum(["succeeded", "failed"]);
+const llmUsageFiltersSchema = z
+  .object({
+    dataClass: z.enum(["production", "eval", "test", "smoke"]).optional(),
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    operation: z.string().min(1).optional(),
+    status: llmUsageStatusSchema.optional(),
+    sourceId: z.string().min(1).optional(),
+    sourceUrl: z.string().url().optional(),
+    articleBundleId: z.string().min(1).optional(),
+  })
+  .strict();
 
 const processingLedgerStateSchema = z
   .enum([
@@ -330,10 +343,21 @@ export async function handleAdminListLlmUsage(
     url.searchParams.get("range") ?? undefined,
   );
   if (!parsedRange.success) return invalidRequestResponse(parsedRange.error);
+  const parsedFilters = llmUsageFiltersSchema.safeParse({
+    dataClass: optionalSearchParam(url, "data_class"),
+    provider: optionalSearchParam(url, "provider"),
+    model: optionalSearchParam(url, "model"),
+    operation: optionalSearchParam(url, "operation"),
+    status: optionalSearchParam(url, "status"),
+    sourceId: optionalSearchParam(url, "source_id"),
+    sourceUrl: optionalSearchParam(url, "source_url"),
+    articleBundleId: optionalSearchParam(url, "article_bundle_id"),
+  });
+  if (!parsedFilters.success) return invalidRequestResponse(parsedFilters.error);
 
   try {
     const usage = await listAdminLlmUsageSummary(
-      { range: parsedRange.data },
+      { range: parsedRange.data, filters: parsedFilters.data },
       store,
       now,
     );
@@ -480,6 +504,11 @@ function authErrorResponse(
     },
     { status: auth.status },
   );
+}
+
+function optionalSearchParam(url: URL, name: string) {
+  const value = url.searchParams.get(name);
+  return value && value.trim() ? value.trim() : undefined;
 }
 
 function invalidRequestResponse(error: z.ZodError) {

@@ -1,5 +1,6 @@
 import { createAttemptTrace, createUsagePlaceholder } from "./contracts.mjs";
 import { redactSecrets } from "./live-artifact-recorder.mjs";
+import { recordLlmCall } from "./llm-call-ledger.mjs";
 
 export const liveFullExtractVersion = "v5-live-full-extract.v1";
 export const liveEditorPassVersion = "v5-live-editor-pass.v1";
@@ -74,6 +75,8 @@ export async function runLiveFullExtract({
   now = new Date(),
   imageEvidence = [],
   artifactRecorder,
+  llmCallLedger,
+  ledgerContext = {},
 } = {}) {
   requireInputs({ normalized, provider, budgetGuard, errorPrefix: "live_full_extract" });
   const startedAt = isoTimestamp(now);
@@ -107,9 +110,10 @@ export async function runLiveFullExtract({
         attempt: attemptNumber,
       },
     };
+    let requestArtifact;
     try {
       budgetGuard.assertCanSpend();
-      await pushArtifact(artifacts, artifactRecorder, "full_extract_request", request);
+      requestArtifact = await pushArtifact(artifacts, artifactRecorder, "full_extract_request", request);
       const completion = await provider.completeJson({
         messages,
         temperature: 0,
@@ -120,7 +124,7 @@ export async function runLiveFullExtract({
           attempt: attemptNumber,
         },
       });
-      await pushArtifact(artifacts, artifactRecorder, "full_extract_raw_response", {
+      const responseArtifact = await pushArtifact(artifacts, artifactRecorder, "full_extract_raw_response", {
         operation: "full_extract",
         provider: completion.provider ?? provider.provider,
         model: completion.model ?? provider.model,
@@ -132,6 +136,19 @@ export async function runLiveFullExtract({
       });
       budgetGuard.recordUsage(usage);
       totalUsage.add(usage);
+      await recordLiveLlmCall({
+        llmCallLedger,
+        ledgerContext,
+        operation: "full_extract",
+        provider,
+        attempt: attemptNumber,
+        status: "succeeded",
+        usage,
+        requestArtifact,
+        responseArtifact,
+        params: requestParams(request),
+        recordedAt: startedAt,
+      });
       latestExtraction = normalizeExtraction(completion.json);
       await pushArtifact(artifacts, artifactRecorder, "full_extract_normalized_response", {
         operation: "full_extract",
@@ -170,8 +187,9 @@ export async function runLiveFullExtract({
     } catch (error) {
       const normalizedError = errorShape(error);
       errors.push(normalizedError);
+      let responseArtifact;
       if (normalizedError.raw !== undefined) {
-        await pushArtifact(artifacts, artifactRecorder, "full_extract_raw_response", {
+        responseArtifact = await pushArtifact(artifacts, artifactRecorder, "full_extract_raw_response", {
           operation: "full_extract",
           provider: provider.provider,
           model: provider.model,
@@ -180,6 +198,20 @@ export async function runLiveFullExtract({
           raw: normalizedError.raw,
         });
       }
+      await recordLiveLlmCall({
+        llmCallLedger,
+        ledgerContext,
+        operation: "full_extract",
+        provider,
+        attempt: attemptNumber,
+        status: "failed",
+        errorCode: normalizedError.code,
+        usage: createUsagePlaceholder(),
+        requestArtifact,
+        responseArtifact,
+        params: requestParams(request),
+        recordedAt: startedAt,
+      });
       await pushArtifact(artifacts, artifactRecorder, "full_extract_normalized_response", {
         operation: "full_extract",
         provider: provider.provider,
@@ -256,6 +288,8 @@ export async function runLiveEditorPass({
   budgetGuard,
   now = new Date(),
   artifactRecorder,
+  llmCallLedger,
+  ledgerContext = {},
 } = {}) {
   requireInputs({ normalized, provider, budgetGuard, errorPrefix: "live_editor_pass" });
   if (!extraction || typeof extraction !== "object") {
@@ -280,10 +314,11 @@ export async function runLiveEditorPass({
       attempt: 1,
     },
   };
+  let requestArtifact;
 
   try {
     budgetGuard.assertCanSpend();
-    await pushArtifact(artifacts, artifactRecorder, "editor_pass_request", request);
+    requestArtifact = await pushArtifact(artifacts, artifactRecorder, "editor_pass_request", request);
     const completion = await provider.completeJson({
       messages,
       temperature: 0,
@@ -294,7 +329,7 @@ export async function runLiveEditorPass({
         attempt: 1,
       },
     });
-    await pushArtifact(artifacts, artifactRecorder, "editor_pass_raw_response", {
+    const responseArtifact = await pushArtifact(artifacts, artifactRecorder, "editor_pass_raw_response", {
       operation: "editor_pass",
       provider: completion.provider ?? provider.provider,
       model: completion.model ?? provider.model,
@@ -306,6 +341,19 @@ export async function runLiveEditorPass({
     });
     budgetGuard.recordUsage(usage);
     totalUsage.add(usage);
+    await recordLiveLlmCall({
+      llmCallLedger,
+      ledgerContext,
+      operation: "editor_pass",
+      provider,
+      attempt: 1,
+      status: "succeeded",
+      usage,
+      requestArtifact,
+      responseArtifact,
+      params: requestParams(request),
+      recordedAt: startedAt,
+    });
     const editor = normalizeEditorOutput(completion.json);
     await pushArtifact(artifacts, artifactRecorder, "editor_pass_normalized_response", {
       operation: "editor_pass",
@@ -353,8 +401,9 @@ export async function runLiveEditorPass({
   } catch (error) {
     const normalizedError = errorShape(error);
     errors.push(normalizedError);
+    let responseArtifact;
     if (normalizedError.raw !== undefined) {
-      await pushArtifact(artifacts, artifactRecorder, "editor_pass_raw_response", {
+      responseArtifact = await pushArtifact(artifacts, artifactRecorder, "editor_pass_raw_response", {
         operation: "editor_pass",
         provider: provider.provider,
         model: provider.model,
@@ -363,6 +412,20 @@ export async function runLiveEditorPass({
         raw: normalizedError.raw,
       });
     }
+    await recordLiveLlmCall({
+      llmCallLedger,
+      ledgerContext,
+      operation: "editor_pass",
+      provider,
+      attempt: 1,
+      status: "failed",
+      errorCode: normalizedError.code,
+      usage: createUsagePlaceholder(),
+      requestArtifact,
+      responseArtifact,
+      params: requestParams(request),
+      recordedAt: startedAt,
+    });
     await pushArtifact(artifacts, artifactRecorder, "editor_pass_normalized_response", {
       operation: "editor_pass",
       provider: provider.provider,
@@ -557,6 +620,56 @@ async function pushArtifact(artifacts, artifactRecorder, kind, value, options) {
   const pointer = await artifactRecorder.write(kind, value, options);
   artifacts.push(pointer);
   return pointer;
+}
+
+async function recordLiveLlmCall({
+  llmCallLedger,
+  ledgerContext,
+  operation,
+  provider,
+  attempt,
+  status,
+  errorCode,
+  usage,
+  requestArtifact,
+  responseArtifact,
+  params,
+  recordedAt,
+}) {
+  const promptVersion = operation === "editor_pass" ? liveEditorPassPromptVersion : liveFullExtractPromptVersion;
+  const schemaVersion = operation === "editor_pass" ? editorSchemaVersion : extractionSchemaVersion;
+  const runId = ledgerContext.runId ?? operation;
+  const subjectId = ledgerContext.pipelineStepId ?? ledgerContext.articleBundleId ?? "call";
+  return recordLlmCall(llmCallLedger, {
+    callId: `${runId}-${subjectId}-${operation}-${attempt}`,
+    pipelineRunId: ledgerContext.pipelineRunId ?? ledgerContext.runId,
+    pipelineStepId: ledgerContext.pipelineStepId,
+    dataClass: ledgerContext.dataClass ?? "eval",
+    operation,
+    provider: provider.provider,
+    model: provider.model,
+    promptVersion,
+    schemaVersion,
+    params,
+    status,
+    errorCode,
+    usage,
+    requestArtifactPath: requestArtifact?.path,
+    responseArtifactPath: responseArtifact?.path,
+    sourceId: ledgerContext.sourceId,
+    sourceUrl: ledgerContext.sourceUrl,
+    articleBundleId: ledgerContext.articleBundleId,
+    evaluationRunId: ledgerContext.evaluationRunId,
+    recordedAt,
+  });
+}
+
+function requestParams(request) {
+  return {
+    temperature: request.temperature,
+    responseFormat: request.responseFormat,
+    metadata: request.metadata,
+  };
 }
 
 function fullExtractMessages({ normalized, packet, triage, imageEvidence, priorExtraction, validatorIssues }) {

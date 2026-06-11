@@ -412,6 +412,16 @@ describe("supabase admin store", () => {
           reasoning_output_tokens: 0,
           cost_micro_cny: 0,
           latency_ms: 900,
+          pipeline_run_id: "pipe-1",
+          pipeline_step_id: "step-full-extract-1",
+          source_id: "source-1",
+          source_url: "https://mp.weixin.qq.com/s/failure",
+          prompt_version: "prompt-v2",
+          schema_version: "schema-v2",
+          params: { temperature: 0, responseFormat: { type: "json_object" } },
+          error_code: "model_provider_http_error",
+          request_artifact_path: "runs/pipe-1/full_extract/request.json",
+          response_artifact_path: "runs/pipe-1/full_extract/response.json",
           source_run_id: "run-1",
           collector_job_id: "job-1",
           article_bundle_id: null,
@@ -438,6 +448,16 @@ describe("supabase admin store", () => {
           reasoning_output_tokens: 40,
           cost_micro_cny: 2100,
           latency_ms: 1800,
+          pipeline_run_id: "pipe-1",
+          pipeline_step_id: "step-full-extract-2",
+          source_id: "source-1",
+          source_url: "https://mp.weixin.qq.com/s/example",
+          prompt_version: "prompt-v1",
+          schema_version: "schema-v1",
+          params: { temperature: 0 },
+          error_code: null,
+          request_artifact_path: "runs/pipe-1/full_extract/request-2.json",
+          response_artifact_path: "runs/pipe-1/full_extract/response-2.json",
           source_run_id: "run-1",
           collector_job_id: "job-1",
           article_bundle_id: "bundle-1",
@@ -542,6 +562,16 @@ describe("supabase admin store", () => {
           id: "usage-2",
           status: "failed",
           dataClass: "eval",
+          pipelineRunId: "pipe-1",
+          pipelineStepId: "step-full-extract-1",
+          sourceId: "source-1",
+          sourceUrl: "https://mp.weixin.qq.com/s/failure",
+          promptVersion: "prompt-v2",
+          schemaVersion: "schema-v2",
+          params: { temperature: 0, responseFormat: { type: "json_object" } },
+          errorCode: "model_provider_http_error",
+          requestArtifactPath: "runs/pipe-1/full_extract/request.json",
+          responseArtifactPath: "runs/pipe-1/full_extract/response.json",
           evaluationRunId: "eval-1",
           metadata: {
             failureReason: "analysis_request_failed",
@@ -552,6 +582,15 @@ describe("supabase admin store", () => {
           id: "usage-1",
           operation: "event_extraction",
           dataClass: "production",
+          pipelineRunId: "pipe-1",
+          pipelineStepId: "step-full-extract-2",
+          sourceId: "source-1",
+          sourceUrl: "https://mp.weixin.qq.com/s/example",
+          promptVersion: "prompt-v1",
+          schemaVersion: "schema-v1",
+          params: { temperature: 0 },
+          requestArtifactPath: "runs/pipe-1/full_extract/request-2.json",
+          responseArtifactPath: "runs/pipe-1/full_extract/response-2.json",
           totalTokens: 1150,
           metadata: {
             schemaVersion: "event-analysis-schema-v1",
@@ -565,6 +604,39 @@ describe("supabase admin store", () => {
       "recorded_at",
       "2026-06-03T16:00:00.000Z",
     ]);
+  });
+
+  it("applies agent audit filters to LLM usage ledger queries", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(
+      supabaseClientReturningLlmUsage([], calls),
+    );
+
+    await store.getLlmUsageSummary({
+      range: { key: "7d", label: "Last 7 days", startsAt: "2026-05-28T03:00:00.000Z" },
+      startsAt: "2026-05-28T03:00:00.000Z",
+      filters: {
+        dataClass: "eval",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        operation: "full_extract",
+        status: "failed",
+        sourceId: "source-1",
+        articleBundleId: "bundle-1",
+      },
+    });
+
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        ["eq", "data_class", "eval"],
+        ["eq", "provider", "dashscope"],
+        ["eq", "model", "qwen3-vl-plus"],
+        ["eq", "operation", "full_extract"],
+        ["eq", "status", "failed"],
+        ["eq", "source_id", "source-1"],
+        ["eq", "article_bundle_id", "bundle-1"],
+      ]),
+    );
   });
 
   it("does not apply a recorded_at lower bound for all-time LLM usage", async () => {
@@ -1152,6 +1224,10 @@ function supabaseClientReturningLlmUsage(rows: unknown[], calls: unknown[] = [])
     },
     gte(column: string, value: string) {
       calls.push(["gte", column, value]);
+      return query;
+    },
+    eq(column: string, value: string) {
+      calls.push(["eq", column, value]);
       return query;
     },
     range(from: number, to: number) {
