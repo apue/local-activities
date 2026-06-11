@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildUpcomingEventFilter,
   filterUpcomingPublishedEvents,
+  formatPublicEventOccurrences,
   formatPublicEventSchedule,
   formatReservationStatus,
   formatPublicEventTime,
   getPublicEventFromClient,
+  isPublicEventEnded,
+  listPublicArchiveEventsFromClient,
   listPublicUpcomingEventsFromClient,
   shapePublicEvent,
   type CanonicalEventRow,
@@ -130,6 +133,56 @@ describe("public event helpers", () => {
         now,
       ).map((event) => event.event_id),
     ).toEqual(["weekly-library"]);
+  });
+
+  it("lists archive events including ended published public-renderable rows", async () => {
+    const query = {
+      select() {
+        return query;
+      },
+      eq() {
+        return query;
+      },
+      order() {
+        return query;
+      },
+      async limit() {
+        return {
+          data: [
+            {
+              ...baseEvent,
+              event_id: "ended-public",
+              starts_at: "2026-05-01T06:00:00.000Z",
+              ends_at: "2026-05-01T08:00:00.000Z",
+              schedule_text: null,
+              occurrence_starts_at: null,
+            },
+            {
+              ...baseEvent,
+              event_id: "upcoming-public",
+              starts_at: "2026-06-10T06:00:00.000Z",
+              ends_at: "2026-06-10T08:00:00.000Z",
+            },
+            {
+              ...baseEvent,
+              event_id: "not-public",
+              public_eligibility: "not_public",
+            },
+          ],
+          error: null,
+        };
+      },
+    };
+    const client = {
+      from() {
+        return query;
+      },
+    } as unknown as PublicEventsClient;
+
+    await expect(listPublicArchiveEventsFromClient(client)).resolves.toEqual([
+      expect.objectContaining({ eventId: "ended-public" }),
+      expect.objectContaining({ eventId: "upcoming-public" }),
+    ]);
   });
 
   it("deduplicates public cards with the same real-world event key", () => {
@@ -292,6 +345,16 @@ describe("public event helpers", () => {
     expect(detailCalls).toContainEqual(["eq", ["data_class", "production"]]);
   });
 
+  it("scopes public archive queries to production published rows", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    await listPublicArchiveEventsFromClient(archiveListClient(calls));
+
+    expect(calls).toContainEqual(["eq", ["data_class", "production"]]);
+    expect(calls).toContainEqual(["eq", ["status", "published"]]);
+    expect(calls).toContainEqual(["order", ["starts_at", { ascending: false }]]);
+    expect(calls).toContainEqual(["limit", [200]]);
+  });
+
   it("formats public reservation status without exposing unknown", () => {
     expect(formatReservationStatus("required")).toBe("需要预约");
     expect(formatReservationStatus("not_required")).toBe("无需预约");
@@ -328,6 +391,66 @@ describe("public event helpers", () => {
         ],
       }),
     ).toContain("每周");
+  });
+
+  it("formats detail occurrences for recurring and series-like events", () => {
+    expect(
+      formatPublicEventOccurrences({
+        ...baseEvent,
+        schedule_text: null,
+        occurrence_starts_at: [
+          "2026-06-06T06:00:00.000Z",
+          "2026-06-13T06:00:00.000Z",
+        ],
+      }),
+    ).toEqual([
+      expect.stringContaining("6月6日"),
+      expect.stringContaining("6月13日"),
+    ]);
+  });
+
+  it("formats multi-day schedules as date ranges", () => {
+    expect(
+      formatPublicEventSchedule({
+        ...baseEvent,
+        starts_at: "2026-06-06T02:00:00.000Z",
+        ends_at: "2026-06-08T10:00:00.000Z",
+        schedule_text: null,
+        schedule_kind: "multi_day",
+      }),
+    ).toContain("6月6日-6月8日");
+  });
+
+  it("does not mark recurring events with future occurrences as ended", () => {
+    expect(
+      isPublicEventEnded(
+        {
+          ...baseEvent,
+          starts_at: "2026-05-01T06:00:00.000Z",
+          ends_at: null,
+          occurrence_starts_at: [
+            "2026-05-31T06:00:00.000Z",
+            "2026-06-07T06:00:00.000Z",
+          ],
+          schedule_kind: "recurring",
+        },
+        new Date("2026-06-01T00:00:00.000Z"),
+      ),
+    ).toBe(false);
+  });
+
+  it("marks past single events as ended", () => {
+    expect(
+      isPublicEventEnded(
+        {
+          ...baseEvent,
+          starts_at: "2026-05-01T06:00:00.000Z",
+          ends_at: "2026-05-01T08:00:00.000Z",
+          occurrence_starts_at: null,
+        },
+        new Date("2026-06-01T00:00:00.000Z"),
+      ),
+    ).toBe(true);
   });
 
   it("returns an empty public list when the backing store is temporarily unavailable", async () => {
@@ -458,6 +581,28 @@ describe("public event helpers", () => {
     expect(event?.eventId).toBe("event-1");
     expect(event?.posterImageUrl).toBeUndefined();
   });
+
+  it("keeps ended published public-renderable detail pages accessible", async () => {
+    const client = singleEventClient({
+      ...baseEvent,
+      event_id: "ended-public",
+      starts_at: "2026-05-01T06:00:00.000Z",
+      ends_at: "2026-05-01T08:00:00.000Z",
+      schedule_text: null,
+      occurrence_starts_at: null,
+    });
+
+    await expect(
+      getPublicEventFromClient(
+        client,
+        "ended-public",
+        new Date("2026-06-01T00:00:00.000Z"),
+      ),
+    ).resolves.toMatchObject({
+      eventId: "ended-public",
+      status: "published",
+    });
+  });
 });
 
 function fallbackListClient(calls: Array<[string, unknown[]]>) {
@@ -512,6 +657,37 @@ function fallbackListClient(calls: Array<[string, unknown[]]>) {
   } as unknown as PublicEventsClient;
 }
 
+function archiveListClient(calls: Array<[string, unknown[]]>) {
+  const query = {
+    select(...args: unknown[]) {
+      calls.push(["select", args]);
+      return query;
+    },
+    eq(...args: unknown[]) {
+      calls.push(["eq", args]);
+      return query;
+    },
+    order(...args: unknown[]) {
+      calls.push(["order", args]);
+      return query;
+    },
+    async limit(...args: unknown[]) {
+      calls.push(["limit", args]);
+      return {
+        data: [],
+        error: null,
+      };
+    },
+  };
+
+  return {
+    from(...args: unknown[]) {
+      calls.push(["from", args]);
+      return query;
+    },
+  } as unknown as PublicEventsClient;
+}
+
 function fallbackSingleClient(calls: Array<[string, unknown[]]>) {
   let attempts = 0;
   const query = {
@@ -549,6 +725,29 @@ function fallbackSingleClient(calls: Array<[string, unknown[]]>) {
   return {
     from(...args: unknown[]) {
       calls.push(["from", args]);
+      return query;
+    },
+  } as unknown as PublicEventsClient;
+}
+
+function singleEventClient(event: CanonicalEventRow) {
+  const query = {
+    select() {
+      return query;
+    },
+    eq() {
+      return query;
+    },
+    async maybeSingle() {
+      return {
+        data: event,
+        error: null,
+      };
+    },
+  };
+
+  return {
+    from() {
       return query;
     },
   } as unknown as PublicEventsClient;

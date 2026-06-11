@@ -161,6 +161,12 @@ export async function listPublicUpcomingEvents(now = new Date()) {
   );
 }
 
+export async function listPublicArchiveEvents() {
+  return listPublicArchiveEventsFromClient(
+    getSupabaseAdminClient() as unknown as PublicEventsClient,
+  );
+}
+
 export async function listPublicUpcomingEventsFromClient(
   client: PublicEventsClient,
   now = new Date(),
@@ -176,6 +182,22 @@ export async function listPublicUpcomingEventsFromClient(
   return filterUpcomingPublishedEvents(
     (data ?? []) as unknown as CanonicalEventRow[],
     now,
+  ).map(shapePublicEvent);
+}
+
+export async function listPublicArchiveEventsFromClient(
+  client: PublicEventsClient,
+) {
+  const first = await queryPublicArchiveEvents(client, publicEventColumns);
+  const { data, error } =
+    first.error && isMissingOptionalPublicAssetColumnError(first.error)
+      ? await queryPublicArchiveEvents(client, basePublicEventColumns)
+      : first;
+
+  if (error) return [];
+
+  return filterPublicRenderablePublishedEvents(
+    (data ?? []) as unknown as CanonicalEventRow[],
   ).map(shapePublicEvent);
 }
 
@@ -204,7 +226,7 @@ export async function getPublicEventFromClient(
   if (error) throw new Error("public_event_read_failed");
   if (!data) return null;
 
-  const [event] = filterUpcomingPublishedEvents([data], now);
+  const [event] = filterPublicRenderablePublishedEvents([data]);
   if (!event) return null;
   return shapePublicEvent(event);
 }
@@ -222,6 +244,16 @@ function queryPublicUpcomingEvents(
     .or(buildUpcomingEventFilter(now))
     .order("starts_at", { ascending: true })
     .limit(100);
+}
+
+function queryPublicArchiveEvents(client: PublicEventsClient, columns: string) {
+  return client
+    .from("canonical_events")
+    .select(columns)
+    .eq("data_class", "production")
+    .eq("status", "published")
+    .order("starts_at", { ascending: false })
+    .limit(200);
 }
 
 function queryPublicEvent(
@@ -261,9 +293,7 @@ export function filterUpcomingPublishedEvents(
   events: CanonicalEventRow[],
   now = new Date(),
 ) {
-  return events
-    .filter((event) => event.status === "published")
-    .filter(isPublicRenderableEvent)
+  return filterPublicRenderablePublishedEvents(events)
     .filter((event) => {
       return getPublicEventEndTime(event, now) >= now.getTime();
     })
@@ -275,6 +305,12 @@ export function filterUpcomingPublishedEvents(
         index
       );
     });
+}
+
+export function filterPublicRenderablePublishedEvents(events: CanonicalEventRow[]) {
+  return events
+    .filter((event) => event.status === "published")
+    .filter(isPublicRenderableEvent);
 }
 
 export function buildUpcomingEventFilter(now = new Date()) {
@@ -389,6 +425,24 @@ export function formatPublicEventSchedule(
   }
 
   return formatPublicEventTime({ startsAt, endsAt: endsAt ?? undefined });
+}
+
+export function formatPublicEventOccurrences(event: PublicScheduleInput) {
+  const occurrences = event.occurrence_starts_at ?? event.occurrenceStartsAt ?? [];
+  return occurrences.map((startsAt) => formatPublicEventTime({ startsAt }));
+}
+
+export function isPublicEventEnded(event: PublicScheduleInput, now = new Date()) {
+  const occurrences = event.occurrence_starts_at ?? event.occurrenceStartsAt;
+  const upcomingOccurrence = getUpcomingOccurrence(occurrences, now);
+  if (upcomingOccurrence) return false;
+
+  const startsAt = event.starts_at ?? event.startsAt;
+  const endsAt = event.ends_at ?? event.endsAt;
+  if (!startsAt) return false;
+
+  const endTime = Date.parse(endsAt ?? startsAt);
+  return Number.isFinite(endTime) && endTime < now.getTime();
 }
 
 function getPublicEventEndTime(event: CanonicalEventRow, now: Date) {
