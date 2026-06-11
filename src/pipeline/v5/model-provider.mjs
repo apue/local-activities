@@ -28,10 +28,16 @@ export function createOpenAICompatibleChatProvider({
   apiKey,
   fetchImpl,
   defaultHeaders = {},
+  maxTokens,
+  extraBody = {},
 } = {}) {
   const cleanProvider = clean(provider) ?? "openai-compatible";
   const cleanModel = clean(model) ?? "configured-live-model";
   const endpoint = `${String(baseUrl ?? "").replace(/\/+$/g, "")}/chat/completions`;
+  const cleanMaxTokens = positiveInteger(maxTokens);
+  const cleanExtraBody = extraBody && typeof extraBody === "object" && !Array.isArray(extraBody)
+    ? extraBody
+    : {};
 
   return {
     provider: cleanProvider,
@@ -66,9 +72,11 @@ export function createOpenAICompatibleChatProvider({
           ...defaultHeaders,
         },
         body: JSON.stringify({
+          ...cleanExtraBody,
           model: cleanModel,
           messages,
           temperature,
+          ...(cleanMaxTokens ? { max_tokens: cleanMaxTokens } : {}),
           ...(responseFormat ? { response_format: responseFormat } : {}),
           ...(metadata ? { metadata } : {}),
         }),
@@ -207,6 +215,11 @@ function positiveMicroCny({ maxCostMicroCny, maxCostCny }) {
     return micro > 0 ? micro : undefined;
   }
   return undefined;
+}
+
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : undefined;
 }
 
 function nonNegativeInteger(value) {

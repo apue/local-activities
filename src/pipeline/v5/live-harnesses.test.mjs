@@ -44,6 +44,44 @@ describe("V5 live Full Extract and Editor harnesses", () => {
     expect(provider.completeJson).not.toHaveBeenCalled();
   });
 
+  it("sends a strict extraction schema prompt that forbids wrapper keys", async () => {
+    const provider = fakeProvider([
+      {
+        json: {
+          decision: "event",
+          events: [{
+            title: "文化中心讲座",
+            startsAt: "2026-06-20T10:00:00+08:00",
+            city: "Beijing",
+            venue: "北京文化中心",
+          }],
+          publicEligibility: "public",
+          publicEligibilityReason: "open signup",
+          confidence: 0.9,
+          reason: "schema followed",
+        },
+        usage: { costMicroCny: 1 },
+      },
+    ]);
+
+    await runLiveFullExtract({
+      normalized,
+      packet,
+      triage,
+      provider,
+      budgetGuard: createLiveModelBudgetGuard({ maxCostMicroCny: 10 }),
+      now: fixedNow,
+    });
+
+    const [{ messages, responseFormat }] = provider.completeJson.mock.calls[0];
+    expect(responseFormat).toEqual({ type: "json_object" });
+    expect(messages[0].content).toContain("\"decision\": \"event\" | \"non_event\" | \"needs_review\" | \"failed\"");
+    expect(messages[0].content).toContain("\"events\"");
+    expect(messages[0].content).toContain("\"publicEligibility\"");
+    expect(messages[0].content).toContain("Do not invent wrapper keys like event/source/metadata");
+    expect(messages[0].content).toContain("Ignore evaluator labels such as Expected action, Rationale, or Review/exclusion reasons");
+  });
+
   it("runs bounded repair attempts and records validator issues in attempt traces", async () => {
     const provider = fakeProvider([
       {
@@ -234,6 +272,43 @@ describe("V5 live Full Extract and Editor harnesses", () => {
       usage: { costMicroCny: 6 },
       validatorIssues: [],
     });
+  });
+
+  it("sends a strict editor schema prompt with publish guidance", async () => {
+    const provider = fakeProvider([
+      {
+        json: {
+          displayTitle: "文化中心讲座",
+          summary: "6月20日在北京文化中心举办的公开讲座。",
+          tags: ["talk"],
+          category: "talk",
+          audience: "general_public",
+          corrections: [],
+          qualityIssues: [],
+          editorDecision: "publish",
+          reason: "valid extraction and validation",
+        },
+        usage: { costMicroCny: 1 },
+      },
+    ]);
+
+    await runLiveEditorPass({
+      normalized,
+      extraction: {
+        decision: "event",
+        events: [{ title: "文化中心讲座", startsAt: "2026-06-20T10:00:00+08:00", venue: "北京文化中心" }],
+      },
+      validation: { status: "valid", issues: [] },
+      provider,
+      budgetGuard: createLiveModelBudgetGuard({ maxCostMicroCny: 10 }),
+      now: fixedNow,
+    });
+
+    const [{ messages, responseFormat }] = provider.completeJson.mock.calls[0];
+    expect(responseFormat).toEqual({ type: "json_object" });
+    expect(messages[0].content).toContain("\"editorDecision\": \"publish\" | \"exclude\" | \"needs_info\" | \"review\" | \"failed\"");
+    expect(messages[0].content).toContain("If extraction is event and validation.status is valid, return editorDecision=\"publish\"");
+    expect(messages[0].content).toContain("Do not invent wrapper keys");
   });
 
   it("default mock-like path can be provided without network-capable global fetch", async () => {

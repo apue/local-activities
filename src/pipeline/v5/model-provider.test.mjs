@@ -65,6 +65,35 @@ describe("V5 OpenAI-compatible model provider", () => {
     );
   });
 
+  it("passes optional OpenAI-compatible generation parameters in request bodies", async () => {
+    const fetchImpl = vi.fn(async () => responseJson({
+      choices: [{ message: { content: "{\"ok\":true}" } }],
+      usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+    }));
+    const provider = createOpenAICompatibleChatProvider({
+      provider: "siliconflow",
+      model: "Qwen/Qwen3.6-27B",
+      baseUrl: "https://api.siliconflow.cn/v1",
+      apiKey: "test-key",
+      fetchImpl,
+      maxTokens: 1600,
+      extraBody: { enable_thinking: false },
+    });
+
+    await provider.completeJson({
+      messages: [{ role: "user", content: "extract" }],
+      responseFormat: { type: "json_object" },
+    });
+
+    const requestBody = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(requestBody).toMatchObject({
+      model: "Qwen/Qwen3.6-27B",
+      max_tokens: 1600,
+      enable_thinking: false,
+      response_format: { type: "json_object" },
+    });
+  });
+
   it("does not fall back to global fetch when fetchImpl is not injected", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn(() => {

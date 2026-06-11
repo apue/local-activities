@@ -310,4 +310,78 @@ describe("V5 evaluation runner", () => {
     expect(fetchCalls).toHaveLength(2);
     expect(fetchCalls[0].url).toBe("https://llm.example/v1/chat/completions");
   });
+
+  it("passes configured live provider generation options from env", async () => {
+    const fetchCalls = [];
+    const fetchImpl = async (url, init) => {
+      fetchCalls.push({ url, init });
+      const body = fetchCalls.length === 1
+        ? {
+          decision: "event",
+          events: [{
+            title: "讲座《北京南堂的文化交流》",
+            startsAt: "2026-06-10T18:30:00+08:00",
+            city: "Beijing",
+            venue: "北京南堂庞迪我会议室",
+            registrationAction: "not_required",
+            summary: "A public cultural lecture in Beijing.",
+          }],
+          publicEligibility: "public",
+          publicEligibilityReason: "Open to the general public.",
+          confidence: 0.91,
+          reason: "Complete event facts extracted.",
+        }
+        : {
+          displayTitle: "讲座《北京南堂的文化交流》",
+          summary: "6月10日晚在北京南堂举办的公开文化讲座。",
+          tags: ["talk", "culture"],
+          category: "talk",
+          audience: "general_public",
+          corrections: [],
+          qualityIssues: [],
+          editorDecision: "publish",
+          reason: "Facts are complete and public.",
+        };
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            choices: [{ message: { content: JSON.stringify(body) } }],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              total_tokens: 15,
+              cost_micro_cny: 20,
+            },
+          };
+        },
+      };
+    };
+
+    await runV5Evaluation({
+      corpusDir: "tests/regression-corpus",
+      caseIds: ["spanish-nantang-lecture"],
+      variants: ["live-configured"],
+      allowLive: true,
+      maxCostCny: 1,
+      env: {
+        V5_LIVE_PROVIDER: "siliconflow",
+        V5_LIVE_BASE_URL: "https://api.siliconflow.cn/v1",
+        V5_LIVE_MODEL: "Qwen/Qwen3.6-27B",
+        V5_LIVE_API_KEY: "test-key",
+        V5_LIVE_MAX_TOKENS: "1600",
+        V5_LIVE_ENABLE_THINKING: "false",
+      },
+      fetchImpl,
+      now: new Date("2026-06-10T05:00:00.000Z"),
+    });
+
+    const firstRequestBody = JSON.parse(fetchCalls[0].init.body);
+    expect(firstRequestBody).toMatchObject({
+      model: "Qwen/Qwen3.6-27B",
+      max_tokens: 1600,
+      enable_thinking: false,
+    });
+  });
 });

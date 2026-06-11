@@ -263,6 +263,8 @@ export function createLiveConfiguredV5Evaluator({
     apiKey: config.apiKey,
     model: config.model,
     fetchImpl,
+    maxTokens: config.maxTokens,
+    extraBody: config.extraBody,
   });
 
   return async function evaluateLiveConfiguredCase({ caseItem, replayCase } = {}) {
@@ -460,6 +462,11 @@ function liveProviderConfigFromEnv(env = {}) {
     baseUrl: clean(env.V5_LIVE_BASE_URL) ?? clean(env.ANALYSIS_LLM_BASE_URL),
     model: clean(env.V5_LIVE_MODEL) ?? clean(env.ANALYSIS_LLM_MODEL),
     apiKey: clean(env.V5_LIVE_API_KEY) ?? clean(env.ANALYSIS_LLM_API_KEY),
+    maxTokens: parseOptionalPositiveInteger(
+      clean(env.V5_LIVE_MAX_TOKENS) ?? clean(env.ANALYSIS_LLM_MAX_OUTPUT_TOKENS),
+      "V5_LIVE_MAX_TOKENS",
+    ),
+    extraBody: liveProviderExtraBodyFromEnv(env),
   };
   const missing = [
     ["baseUrl", config.baseUrl],
@@ -472,6 +479,30 @@ function liveProviderConfigFromEnv(env = {}) {
     throw new Error(`v5_evaluation_live_provider_config_missing:${missing.join(",")}`);
   }
   return config;
+}
+
+function liveProviderExtraBodyFromEnv(env = {}) {
+  const extraBody = {};
+  const enableThinking = parseOptionalBoolean(clean(env.V5_LIVE_ENABLE_THINKING), "V5_LIVE_ENABLE_THINKING");
+  if (enableThinking !== undefined) extraBody.enable_thinking = enableThinking;
+  return extraBody;
+}
+
+function parseOptionalPositiveInteger(value, name) {
+  if (value === undefined) return undefined;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new Error(`v5_evaluation_live_positive_integer_invalid:${name}`);
+  }
+  return number;
+}
+
+function parseOptionalBoolean(value, name) {
+  if (value === undefined) return undefined;
+  const normalized = value.toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  throw new Error(`v5_evaluation_live_boolean_invalid:${name}`);
 }
 
 function shouldRunEditorPass(extraction) {
