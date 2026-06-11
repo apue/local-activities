@@ -22,8 +22,12 @@ Detailed pipeline artifacts
 -> Private corpus builder
 -> Prompt/model config registry
 -> Baseline vs candidate eval
+-> Weekly audit fact packet
+-> Evidence drilldown interfaces
+-> Project weekly audit skill
 -> Agent audit CLI
 -> Admin feedback surface
+-> Public acceptance surface
 ```
 
 ## 产品约束
