@@ -78,6 +78,7 @@ export async function runV5Evaluation({
   env = process.env,
   fetchImpl = globalThis.fetch,
   liveEvaluator,
+  llmCallLedger,
 } = {}) {
   if (!corpusDir && !replayResult) throw new Error("v5_evaluation_corpus_dir_required");
   const selectedVariants = normalizeVariants(variants);
@@ -115,6 +116,8 @@ export async function runV5Evaluation({
         liveEvaluator: configuredLiveEvaluator,
         writer: evaluationWriter,
         liveArtifactBasePath,
+        llmCallLedger,
+        evaluationRunId: runId,
       });
       const artifactPath = `${runPrefix}/variants/${safeArtifactSegment(variant)}/cases/${safeArtifactSegment(caseItem.case.id)}.json`;
       const caseResultWithArtifact = {
@@ -222,7 +225,16 @@ export function parseV5EvaluationArgs(argv = []) {
   return options;
 }
 
-async function evaluateCaseVariant({ variant, caseItem, replayCase, liveEvaluator, writer, liveArtifactBasePath }) {
+async function evaluateCaseVariant({
+  variant,
+  caseItem,
+  replayCase,
+  liveEvaluator,
+  writer,
+  liveArtifactBasePath,
+  llmCallLedger,
+  evaluationRunId,
+}) {
   const expectedAction = caseItem.expected.action;
   const expectedFinalState = finalStateFromExpectedAction(expectedAction);
   const prediction = liveVariants.has(variant)
@@ -233,6 +245,8 @@ async function evaluateCaseVariant({ variant, caseItem, replayCase, liveEvaluato
       liveEvaluator,
       writer,
       liveArtifactBasePath,
+      llmCallLedger,
+      evaluationRunId,
     })
     : predictionForVariant({ variant, expectedAction, replayCase });
   const actionCorrect = prediction.action === expectedAction;
@@ -283,6 +297,8 @@ export function createLiveConfiguredV5Evaluator({
     replayCase,
     writer,
     liveArtifactBasePath,
+    llmCallLedger,
+    evaluationRunId,
     dataClass = "eval",
   } = {}) {
     if (!caseItem?.bundle) throw new Error(`v5_evaluation_case_has_no_bundle:${caseItem?.case?.id ?? "unknown"}`);
@@ -310,6 +326,8 @@ export function createLiveConfiguredV5Evaluator({
       now,
       imageEvidence: normalized.images ?? [],
       artifactRecorder: fullExtractArtifactRecorder,
+      llmCallLedger,
+      ledgerContext: liveLedgerContext({ caseItem, dataClass, evaluationRunId }),
     });
     const validation = validateV5Extraction({ extraction, normalized, now });
     const validationArtifact = caseArtifactRecorder
@@ -333,6 +351,8 @@ export function createLiveConfiguredV5Evaluator({
         budgetGuard,
         now,
         artifactRecorder: editorArtifactRecorder,
+        llmCallLedger,
+        ledgerContext: liveLedgerContext({ caseItem, dataClass, evaluationRunId }),
       })
       : skippedEditorResult({ extraction, validation, normalized });
     const policy = decideV5PublishState({ extraction, validation, editor });
@@ -384,6 +404,8 @@ async function livePredictionForVariant({
   liveEvaluator,
   writer,
   liveArtifactBasePath,
+  llmCallLedger,
+  evaluationRunId,
 }) {
   if (variant !== "live-configured") throw new Error(`v5_evaluation_variant_unsupported:${variant}`);
   if (typeof liveEvaluator !== "function") throw new Error("v5_evaluation_live_evaluator_required");
@@ -393,6 +415,8 @@ async function livePredictionForVariant({
     variant,
     writer,
     liveArtifactBasePath,
+    llmCallLedger,
+    evaluationRunId,
     dataClass: "eval",
   });
 }
@@ -600,6 +624,19 @@ function skippedEditorDecision(extractionDecision) {
   if (extractionDecision === "non_event") return "exclude";
   if (extractionDecision === "failed") return "failed";
   return "review";
+}
+
+function liveLedgerContext({ caseItem, dataClass, evaluationRunId }) {
+  const bundle = caseItem?.bundle ?? {};
+  return {
+    dataClass,
+    runId: evaluationRunId,
+    pipelineRunId: evaluationRunId,
+    evaluationRunId,
+    articleBundleId: clean(bundle.bundleId ?? caseItem?.case?.id),
+    sourceId: clean(bundle.sourceId),
+    sourceUrl: clean(bundle.sourceUrl),
+  };
 }
 
 function actionFromPublishState(state) {

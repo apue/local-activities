@@ -313,6 +313,16 @@ export type AdminLlmUsageRecord = {
   model: string;
   status: AdminLlmUsageStatus;
   dataClass?: AdminDataClass;
+  pipelineRunId?: string;
+  pipelineStepId?: string;
+  sourceId?: string;
+  sourceUrl?: string;
+  promptVersion?: string;
+  schemaVersion?: string;
+  params: Record<string, unknown>;
+  errorCode?: string;
+  requestArtifactPath?: string;
+  responseArtifactPath?: string;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
@@ -327,6 +337,17 @@ export type AdminLlmUsageRecord = {
   excludedArticleId?: string;
   evaluationRunId?: string;
   metadata: Record<string, unknown>;
+};
+
+export type AdminLlmUsageFilters = {
+  dataClass?: AdminDataClass;
+  provider?: string;
+  model?: string;
+  operation?: string;
+  status?: AdminLlmUsageStatus;
+  sourceId?: string;
+  sourceUrl?: string;
+  articleBundleId?: string;
 };
 
 export type AdminLlmUsageModelSummary = {
@@ -422,6 +443,7 @@ export type AdminStore = {
   getLlmUsageSummary(input: {
     startsAt?: string;
     range: AdminLlmUsageRange;
+    filters?: AdminLlmUsageFilters;
   }): Promise<AdminLlmUsageSummary>;
   publishEventDraft(input: {
     draft: AdminEventDraftRecord;
@@ -482,7 +504,7 @@ export function listAdminEvaluationRuns(
 }
 
 export function listAdminLlmUsageSummary(
-  input: { range?: AdminLlmUsageRangeKey } = {},
+  input: { range?: AdminLlmUsageRangeKey; filters?: AdminLlmUsageFilters } = {},
   store: AdminStore,
   now = new Date(),
 ) {
@@ -490,6 +512,7 @@ export function listAdminLlmUsageSummary(
   return store.getLlmUsageSummary({
     startsAt: range.startsAt,
     range,
+    filters: input.filters,
   });
 }
 

@@ -260,6 +260,16 @@ type LlmUsageRow = {
   model: string;
   status: AdminLlmUsageRecord["status"];
   data_class: AdminLlmUsageRecord["dataClass"] | null;
+  pipeline_run_id: string | null;
+  pipeline_step_id: string | null;
+  source_id: string | null;
+  source_url: string | null;
+  prompt_version: string | null;
+  schema_version: string | null;
+  params: Record<string, unknown> | null;
+  error_code: string | null;
+  request_artifact_path: string | null;
+  response_artifact_path: string | null;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
@@ -284,6 +294,16 @@ const LLM_USAGE_COLUMNS = [
   "model",
   "status",
   "data_class",
+  "pipeline_run_id",
+  "pipeline_step_id",
+  "source_id",
+  "source_url",
+  "prompt_version",
+  "schema_version",
+  "params",
+  "error_code",
+  "request_artifact_path",
+  "response_artifact_path",
   "input_tokens",
   "output_tokens",
   "total_tokens",
@@ -594,6 +614,16 @@ class SupabaseAdminStore implements AdminStore {
   async getLlmUsageSummary(input: {
     startsAt?: string;
     range: AdminLlmUsageRange;
+    filters?: {
+      dataClass?: AdminLlmUsageRecord["dataClass"];
+      provider?: string;
+      model?: string;
+      operation?: string;
+      status?: AdminLlmUsageRecord["status"];
+      sourceId?: string;
+      sourceUrl?: string;
+      articleBundleId?: string;
+    };
   }): Promise<AdminLlmUsageSummary> {
     const rows: LlmUsageRow[] = [];
     const pageSize = 1_000;
@@ -605,6 +635,7 @@ class SupabaseAdminStore implements AdminStore {
       if (input.startsAt) {
         query = query.gte("recorded_at", input.startsAt);
       }
+      query = applyLlmUsageFilters(query, input.filters);
 
       const { data, error } = await query
         .order("recorded_at", { ascending: false })
@@ -853,6 +884,37 @@ function summarizeLlmUsage(
   };
 }
 
+function applyLlmUsageFilters<
+  Query extends { eq(column: string, value: string): Query },
+>(
+  query: Query,
+  filters: {
+    dataClass?: string;
+    provider?: string;
+    model?: string;
+    operation?: string;
+    status?: string;
+    sourceId?: string;
+    sourceUrl?: string;
+    articleBundleId?: string;
+  } = {},
+) {
+  let filtered = query;
+  for (const [column, value] of [
+    ["data_class", filters.dataClass],
+    ["provider", filters.provider],
+    ["model", filters.model],
+    ["operation", filters.operation],
+    ["status", filters.status],
+    ["source_id", filters.sourceId],
+    ["source_url", filters.sourceUrl],
+    ["article_bundle_id", filters.articleBundleId],
+  ] as const) {
+    if (value) filtered = filtered.eq(column, value);
+  }
+  return filtered;
+}
+
 function llmUsageWorkload(record: AdminLlmUsageRecord) {
   const workload = record.metadata.workload;
   return typeof workload === "string" && workload ? workload : record.operation;
@@ -885,6 +947,16 @@ function toLlmUsageRecord(row: LlmUsageRow): AdminLlmUsageRecord {
     model: row.model,
     status: row.status,
     dataClass: row.data_class ?? undefined,
+    pipelineRunId: row.pipeline_run_id ?? undefined,
+    pipelineStepId: row.pipeline_step_id ?? undefined,
+    sourceId: row.source_id ?? undefined,
+    sourceUrl: row.source_url ?? undefined,
+    promptVersion: row.prompt_version ?? undefined,
+    schemaVersion: row.schema_version ?? undefined,
+    params: sanitizeLlmParams(row.params ?? {}),
+    errorCode: row.error_code ?? undefined,
+    requestArtifactPath: row.request_artifact_path ?? undefined,
+    responseArtifactPath: row.response_artifact_path ?? undefined,
     inputTokens: row.input_tokens,
     outputTokens: row.output_tokens,
     totalTokens: row.total_tokens,
@@ -924,6 +996,45 @@ function sanitizeJsonValue(value: unknown): unknown {
     return redactSensitiveUrlParams(value);
   }
   return value;
+}
+
+function sanitizeLlmParams(params: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (isSensitiveParamKey(key)) {
+      sanitized[key] = "[redacted]";
+    } else {
+      sanitized[key] = sanitizeParamValue(value);
+    }
+  }
+  return sanitized;
+}
+
+function sanitizeParamValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeParamValue);
+  if (value && typeof value === "object") {
+    return sanitizeLlmParams(value as Record<string, unknown>);
+  }
+  return typeof value === "string" ? redactSensitiveUrlParams(value) : value;
+}
+
+function isSensitiveParamKey(key: string) {
+  const normalized = key.toLowerCase();
+  return normalized === "authorization" ||
+    normalized === "cookie" ||
+    normalized === "set-cookie" ||
+    normalized === "apikey" ||
+    normalized === "api_key" ||
+    normalized === "api-key" ||
+    normalized === "x-api-key" ||
+    normalized === "secret" ||
+    normalized.endsWith("_secret") ||
+    normalized.endsWith("-secret") ||
+    normalized === "password" ||
+    normalized === "token" ||
+    normalized === "access_token" ||
+    normalized === "refresh_token" ||
+    normalized === "id_token";
 }
 
 function isSensitiveMetadataKey(key: string) {

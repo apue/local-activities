@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createLiveModelBudgetGuard } from "./model-provider.mjs";
 import { createLiveArtifactRecorder } from "./live-artifact-recorder.mjs";
+import { createMemoryLlmCallLedger } from "./llm-call-ledger.mjs";
 import {
   runLiveEditorPass,
   runLiveFullExtract,
@@ -173,6 +174,7 @@ describe("V5 live Full Extract and Editor harnesses", () => {
 
   it("persists sanitized full-extract request, raw response, normalized response, attempts, issues, and usage artifacts", async () => {
     const writer = memoryArtifactWriter();
+    const llmCallLedger = createMemoryLlmCallLedger();
     const artifactRecorder = createLiveArtifactRecorder({
       writer,
       basePath: "runs/live/case-1/full_extract",
@@ -218,6 +220,14 @@ describe("V5 live Full Extract and Editor harnesses", () => {
       budgetGuard: createLiveModelBudgetGuard({ maxCostMicroCny: 20 }),
       now: fixedNow,
       artifactRecorder,
+      llmCallLedger,
+      ledgerContext: {
+        dataClass: "eval",
+        runId: "pipe-1",
+        sourceId: "source-1",
+        sourceUrl: "https://mp.weixin.qq.com/s/example",
+        articleBundleId: "bundle-1",
+      },
     });
 
     expect(result.artifacts).toEqual(
@@ -265,10 +275,27 @@ describe("V5 live Full Extract and Editor harnesses", () => {
     expect(findArtifact(writer, "full_extract_usage")).toMatchObject({
       usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costMicroCny: 4, latencyMs: 8 },
     });
+    expect(llmCallLedger.rows).toEqual([
+      expect.objectContaining({
+        callId: "pipe-1-bundle-1-full_extract-1",
+        dataClass: "eval",
+        operation: "full_extract",
+        provider: "fake-provider",
+        model: "fake-model",
+        promptVersion: "v5-full-extract.live-prompt.v1",
+        schemaVersion: "v5-extraction-result.v1",
+        status: "succeeded",
+        requestArtifactPath: expect.stringContaining("full_extract_request"),
+        responseArtifactPath: expect.stringContaining("full_extract_raw_response"),
+        sourceId: "source-1",
+        articleBundleId: "bundle-1",
+      }),
+    ]);
   });
 
   it("returns deterministic malformed-output result when provider output cannot be parsed", async () => {
     const writer = memoryArtifactWriter();
+    const llmCallLedger = createMemoryLlmCallLedger();
     const artifactRecorder = createLiveArtifactRecorder({
       writer,
       basePath: "runs/live/case-1/full_extract_failure",
@@ -296,6 +323,8 @@ describe("V5 live Full Extract and Editor harnesses", () => {
       budgetGuard: createLiveModelBudgetGuard({ maxCostMicroCny: 10 }),
       now: fixedNow,
       artifactRecorder,
+      llmCallLedger,
+      ledgerContext: { dataClass: "eval", runId: "pipe-1" },
     });
 
     expect(result).toMatchObject({
@@ -320,6 +349,73 @@ describe("V5 live Full Extract and Editor harnesses", () => {
     );
     expect(findArtifact(writer, "full_extract_normalized_response")).toMatchObject({
       error: expect.objectContaining({ code: "model_provider_malformed_json" }),
+    });
+    expect(llmCallLedger.rows[0]).toMatchObject({
+      status: "failed",
+      errorCode: "model_provider_malformed_json",
+      requestArtifactPath: expect.stringContaining("full_extract_request"),
+      responseArtifactPath: expect.stringContaining("full_extract_raw_response"),
+    });
+  });
+
+  it("records budget and timeout-like live failures in the LLM call ledger", async () => {
+    const budgetLedger = createMemoryLlmCallLedger();
+    const provider = fakeProvider([
+      {
+        json: { decision: "event", events: [] },
+        usage: { costMicroCny: 1 },
+      },
+    ]);
+
+    await runLiveFullExtract({
+      normalized,
+      packet,
+      triage,
+      provider,
+      budgetGuard: {
+        assertCanSpend() {
+          throw new Error("live_model_budget_exceeded");
+        },
+        recordUsage() {
+          throw new Error("should_not_record_usage");
+        },
+      },
+      now: fixedNow,
+      llmCallLedger: budgetLedger,
+      ledgerContext: { dataClass: "eval", runId: "pipe-budget" },
+    });
+
+    expect(provider.completeJson).not.toHaveBeenCalled();
+    expect(budgetLedger.rows[0]).toMatchObject({
+      status: "failed",
+      errorCode: "live_model_budget_exceeded",
+      usage: { totalTokens: 0, costMicroCny: 0 },
+    });
+
+    const timeoutLedger = createMemoryLlmCallLedger();
+    await runLiveFullExtract({
+      normalized,
+      packet,
+      triage,
+      provider: {
+        provider: "fake-provider",
+        model: "fake-model",
+        completeJson: vi.fn(async () => {
+          const error = new Error("provider timed out");
+          error.code = "model_provider_timeout";
+          throw error;
+        }),
+      },
+      budgetGuard: createLiveModelBudgetGuard({ maxCostMicroCny: 10 }),
+      now: fixedNow,
+      llmCallLedger: timeoutLedger,
+      ledgerContext: { dataClass: "eval", runId: "pipe-timeout" },
+    });
+
+    expect(timeoutLedger.rows[0]).toMatchObject({
+      callId: "pipe-timeout-call-full_extract-1",
+      status: "failed",
+      errorCode: "model_provider_timeout",
     });
   });
 

@@ -21,6 +21,11 @@ Deno.test("runAnalysisPipeline writes production bundle, usage, evidence, draft,
   assert(db.table("canonical_events").length === 1);
   assert(db.table("dedupe_decisions").length === 1);
   assert(db.table("processing_ledger").length === 1);
+  assertEquals(db.table("llm_usage_ledger")[0].source_id, "embassy-feed");
+  assertEquals(db.table("llm_usage_ledger")[0].source_url, "https://mp.weixin.qq.com/s/example");
+  assertEquals(db.table("llm_usage_ledger")[0].prompt_version, "analyze-article-bundle-v1");
+  assertEquals(db.table("llm_usage_ledger")[0].schema_version, "analysis-output-v1");
+  assertEquals(db.table("llm_usage_ledger")[0].params, { responseFormat: "json_object" });
 });
 
 Deno.test("runAnalysisPipeline writes article bundle status through protected status writer", async () => {
@@ -255,6 +260,7 @@ Deno.test("runAnalysisPipeline writes failed ledger and failed usage when provid
 
   assertEquals(result.status, "failed");
   assertEquals(db.table("llm_usage_ledger")[0].status, "failed");
+  assertEquals(db.table("llm_usage_ledger")[0].error_code, "provider_timeout");
   assertEquals(db.table("processing_ledger")[0].state, "failed");
   const ledger = db.table("processing_ledger")[0] as {
     error_details: { message: string };
