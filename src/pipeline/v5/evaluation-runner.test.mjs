@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   createMemoryV5EvaluationWriter,
   parseV5EvaluationArgs,
+  runV5EvaluationComparison,
   runV5Evaluation,
 } from "./evaluation-runner.mjs";
 
@@ -161,6 +162,189 @@ describe("V5 evaluation runner", () => {
       actionAccuracy: 9 / 17,
       finalStateAccuracy: 9 / 17,
     });
+  });
+
+  it("compares baseline and candidate configs with recommendation gates and case regressions", async () => {
+    const writer = createMemoryV5EvaluationWriter();
+
+    const report = await runV5EvaluationComparison({
+      corpusDir: "tests/regression-corpus",
+      all: true,
+      writer,
+      baselineConfig: {
+        configId: "baseline-active",
+        variant: "mock-expected-v1",
+      },
+      candidateConfig: {
+        configId: "candidate-overfilter",
+        variant: "mock-overfilter-v1",
+      },
+      now: new Date("2026-06-10T05:00:00.000Z"),
+    });
+
+    expect(report).toMatchObject({
+      kind: "v5_baseline_candidate_eval_comparison",
+      runId: "v5-eval-20260610050000",
+      recommended: false,
+      baseline: {
+        configId: "baseline-active",
+        variant: "mock-expected-v1",
+        metrics: {
+          actionAccuracy: 1,
+          finalStateAccuracy: 1,
+          falsePositiveRate: 0,
+          falseNegativeRate: 0,
+          publicEventRecall: 1,
+        },
+      },
+      candidate: {
+        configId: "candidate-overfilter",
+        variant: "mock-overfilter-v1",
+        metrics: {
+          falsePositiveRate: 0,
+          falseNegativeRate: 10 / 17,
+          publicEventRecall: 0,
+          costPerPublishedEventMicroCny: null,
+        },
+      },
+    });
+    expect(report.gates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "known_bad_regressions",
+          passed: false,
+          value: 10,
+          threshold: 0,
+        }),
+        expect.objectContaining({
+          name: "auto_publish_precision_at_least_baseline",
+          passed: false,
+        }),
+      ]),
+    );
+    expect(report.regressions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          caseId: "beiping-beer-festival-guide",
+          failureTypes: expect.arrayContaining(["false_negative", "action_mismatch"]),
+          baselineAction: "extract",
+          candidateAction: "exclude",
+        }),
+      ]),
+    );
+    expect(writer.state.artifacts.get(report.comparisonPath)).toEqual(report);
+  });
+
+  it("marks a candidate recommended only when comparison gates pass", async () => {
+    const report = await runV5EvaluationComparison({
+      corpusDir: "tests/regression-corpus",
+      all: true,
+      store: "memory",
+      baselineConfig: {
+        configId: "baseline-active",
+        variant: "mock-expected-v1",
+      },
+      candidateConfig: {
+        configId: "candidate-expected",
+        variant: "mock-expected-v1",
+        configFingerprint: "candidate-expected-v1",
+      },
+      gates: {
+        monthlyEstimatedCostMicroCny: 0,
+      },
+      now: new Date("2026-06-10T05:00:00.000Z"),
+    });
+
+    expect(report.recommended).toBe(true);
+    expect(report.candidate.metrics.caseCount).toBe(17);
+    expect(report.recommendation).toMatchObject({
+      status: "recommended",
+      failedGates: [],
+    });
+    expect(report.regressions).toEqual([]);
+  });
+
+  it("refuses comparison when baseline and candidate have no executable difference", async () => {
+    await expect(runV5EvaluationComparison({
+      corpusDir: "tests/regression-corpus",
+      all: true,
+      store: "memory",
+      baselineConfig: {
+        configId: "baseline-active",
+        variant: "mock-expected-v1",
+      },
+      candidateConfig: {
+        configId: "candidate-same-variant",
+        variant: "mock-expected-v1",
+      },
+      now: new Date("2026-06-10T05:00:00.000Z"),
+    })).rejects.toThrow("v5_evaluation_candidate_config_has_no_executable_difference");
+  });
+
+  it("does not recommend candidates when monthly cost estimate is missing", async () => {
+    const report = await runV5EvaluationComparison({
+      corpusDir: "tests/regression-corpus",
+      all: true,
+      store: "memory",
+      baselineConfig: {
+        configId: "baseline-active",
+        variant: "mock-expected-v1",
+      },
+      candidateConfig: {
+        configId: "candidate-expected",
+        variant: "mock-expected-v1",
+        configFingerprint: "candidate-expected-v1",
+      },
+      gates: { requireMonthlyEstimatedCost: true },
+      now: new Date("2026-06-10T05:00:00.000Z"),
+    });
+
+    expect(report.recommended).toBe(false);
+    expect(report.gates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "monthly_estimated_token_cost_cny",
+          passed: false,
+          value: null,
+        }),
+      ]),
+    );
+  });
+
+  it("writes local comparison report artifacts", async () => {
+    const artifactDir = await mkdtemp(path.join(os.tmpdir(), "v5-compare-"));
+    try {
+      const report = await runV5EvaluationComparison({
+        corpusDir: "tests/regression-corpus",
+        caseIds: ["beiping-beer-festival-guide"],
+        store: "local",
+        artifactDir,
+        baselineConfig: {
+          configId: "baseline-active",
+          variant: "mock-expected-v1",
+        },
+        candidateConfig: {
+          configId: "candidate-overfilter",
+          variant: "mock-overfilter-v1",
+        },
+        now: new Date("2026-06-10T05:00:00.000Z"),
+      });
+
+      const comparisonArtifact = JSON.parse(
+        await readFile(path.join(artifactDir, report.comparisonPath), "utf8"),
+      );
+      expect(comparisonArtifact).toMatchObject({
+        kind: "v5_baseline_candidate_eval_comparison",
+        recommended: false,
+        regressions: [
+          expect.objectContaining({
+            caseId: "beiping-beer-festival-guide",
+          }),
+        ],
+      });
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
+    }
   });
 
   it("writes local evaluation summary artifacts", async () => {

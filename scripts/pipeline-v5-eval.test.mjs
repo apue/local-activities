@@ -48,6 +48,78 @@ describe("pipeline-v5-eval CLI", () => {
     });
   });
 
+  it("prints JSON comparison report for baseline and candidate variants", async () => {
+    let printed = "";
+    const result = await runV5EvaluationCli(
+      [
+        "--corpus-dir",
+        "tests/regression-corpus",
+        "--all",
+        "--store",
+        "memory",
+        "--baseline-config-id",
+        "baseline-active",
+        "--baseline-variant",
+        "mock-expected-v1",
+        "--candidate-config-id",
+        "candidate-underfilter",
+        "--candidate-variant",
+        "mock-underfilter-v1",
+      ],
+      {
+        log: (value) => {
+          printed += value;
+        },
+      },
+    );
+
+    const output = JSON.parse(printed);
+    expect(result.kind).toBe("v5_baseline_candidate_eval_comparison");
+    expect(output).toMatchObject({
+      kind: "v5_baseline_candidate_eval_comparison",
+      recommended: false,
+      baseline: {
+        configId: "baseline-active",
+        variant: "mock-expected-v1",
+      },
+      candidate: {
+        configId: "candidate-underfilter",
+        variant: "mock-underfilter-v1",
+      },
+      gates: expect.arrayContaining([
+        expect.objectContaining({
+          name: "false_positive_rate",
+          passed: false,
+        }),
+      ]),
+      regressions: expect.arrayContaining([
+        expect.objectContaining({
+          failureTypes: expect.arrayContaining(["false_positive"]),
+        }),
+      ]),
+      comparisonPath: expect.stringContaining("/comparison.json"),
+    });
+  });
+
+  it("requires explicit baseline and candidate config ids for comparison mode", async () => {
+    await expect(runV5EvaluationCli(
+      [
+        "--corpus-dir",
+        "tests/regression-corpus",
+        "--all",
+        "--store",
+        "memory",
+        "--baseline-variant",
+        "mock-expected-v1",
+        "--candidate-config-id",
+        "candidate",
+        "--candidate-variant",
+        "mock-expected-v1",
+      ],
+      { log: () => {} },
+    )).rejects.toThrow("v5_evaluation_baseline_config_id_required");
+  });
+
   it("loads env files before running explicit live-configured evaluation", async () => {
     let loadedEnvFile = "";
     let printed = "";
