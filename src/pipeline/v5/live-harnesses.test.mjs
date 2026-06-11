@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createLiveModelBudgetGuard } from "./model-provider.mjs";
+import { createLiveArtifactRecorder } from "./live-artifact-recorder.mjs";
 import {
   runLiveEditorPass,
   runLiveFullExtract,
@@ -170,7 +171,109 @@ describe("V5 live Full Extract and Editor harnesses", () => {
     });
   });
 
+  it("persists sanitized full-extract request, raw response, normalized response, attempts, issues, and usage artifacts", async () => {
+    const writer = memoryArtifactWriter();
+    const artifactRecorder = createLiveArtifactRecorder({
+      writer,
+      basePath: "runs/live/case-1/full_extract",
+      dataClass: "eval",
+    });
+    const provider = fakeProvider([
+      {
+        json: {
+          decision: "event",
+          events: [{
+            title: "文化中心讲座",
+            startsAt: "2026-06-20T10:00:00+08:00",
+            city: "Beijing",
+            venue: "北京文化中心",
+          }],
+          publicEligibility: "public",
+          publicEligibilityReason: "open signup",
+          confidence: 0.9,
+          reason: "schema followed",
+        },
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costMicroCny: 4, latencyMs: 8 },
+        raw: {
+          authorization: "Bearer secret-provider-token",
+          headers: {
+            cookie: "session=secret-cookie",
+            "x-api-key": "secret-key",
+          },
+          choices: [{ message: { content: "{\"decision\":\"event\"}" } }],
+        },
+      },
+    ]);
+    const validator = vi.fn(() => ({
+      status: "valid",
+      issues: [{ code: "soft_note", severity: "info" }],
+    }));
+
+    const result = await runLiveFullExtract({
+      normalized,
+      packet,
+      triage,
+      provider,
+      validator,
+      budgetGuard: createLiveModelBudgetGuard({ maxCostMicroCny: 20 }),
+      now: fixedNow,
+      artifactRecorder,
+    });
+
+    expect(result.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "full_extract_request" }),
+        expect.objectContaining({ kind: "full_extract_raw_response" }),
+        expect.objectContaining({ kind: "full_extract_normalized_response" }),
+        expect.objectContaining({ kind: "full_extract_validator_issues" }),
+        expect.objectContaining({ kind: "full_extract_attempts" }),
+        expect.objectContaining({ kind: "full_extract_usage" }),
+      ]),
+    );
+    const requestArtifact = findArtifact(writer, "full_extract_request");
+    expect(requestArtifact).toMatchObject({
+      dataClass: "eval",
+      operation: "full_extract",
+      provider: "fake-provider",
+      model: "fake-model",
+      metadata: {
+        promptVersion: "v5-full-extract.live-prompt.v1",
+        schemaVersion: "v5-extraction-result.v1",
+        attempt: 1,
+      },
+    });
+    const rawArtifact = findArtifact(writer, "full_extract_raw_response");
+    expect(JSON.stringify(rawArtifact)).not.toContain("secret-provider-token");
+    expect(JSON.stringify(rawArtifact)).not.toContain("secret-cookie");
+    expect(JSON.stringify(rawArtifact)).not.toContain("secret-key");
+    expect(rawArtifact.raw).toMatchObject({
+      authorization: "[REDACTED]",
+      headers: {
+        cookie: "[REDACTED]",
+        "x-api-key": "[REDACTED]",
+      },
+    });
+    expect(findArtifact(writer, "full_extract_normalized_response")).toMatchObject({
+      normalizedResponse: expect.objectContaining({
+        decision: "event",
+        events: [expect.objectContaining({ title: "文化中心讲座" })],
+      }),
+    });
+    expect(findArtifact(writer, "full_extract_validator_issues")).toMatchObject({
+      validatorIssues: [expect.objectContaining({ code: "soft_note" })],
+    });
+    expect(findArtifact(writer, "full_extract_usage")).toMatchObject({
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costMicroCny: 4, latencyMs: 8 },
+    });
+  });
+
   it("returns deterministic malformed-output result when provider output cannot be parsed", async () => {
+    const writer = memoryArtifactWriter();
+    const artifactRecorder = createLiveArtifactRecorder({
+      writer,
+      basePath: "runs/live/case-1/full_extract_failure",
+      dataClass: "eval",
+    });
     const provider = {
       provider: "fake-provider",
       model: "fake-model",
@@ -192,6 +295,7 @@ describe("V5 live Full Extract and Editor harnesses", () => {
       provider,
       budgetGuard: createLiveModelBudgetGuard({ maxCostMicroCny: 10 }),
       now: fixedNow,
+      artifactRecorder,
     });
 
     expect(result).toMatchObject({
@@ -204,6 +308,18 @@ describe("V5 live Full Extract and Editor harnesses", () => {
       attempts: [expect.objectContaining({
         reason: "model_provider_malformed_json",
       })],
+    });
+    expect(result.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "full_extract_request" }),
+        expect.objectContaining({ kind: "full_extract_raw_response" }),
+        expect.objectContaining({ kind: "full_extract_normalized_response" }),
+        expect.objectContaining({ kind: "full_extract_attempts" }),
+        expect.objectContaining({ kind: "full_extract_usage" }),
+      ]),
+    );
+    expect(findArtifact(writer, "full_extract_normalized_response")).toMatchObject({
+      error: expect.objectContaining({ code: "model_provider_malformed_json" }),
     });
   });
 
@@ -271,6 +387,66 @@ describe("V5 live Full Extract and Editor harnesses", () => {
       reason: "editor_pass_completed",
       usage: { costMicroCny: 6 },
       validatorIssues: [],
+    });
+  });
+
+  it("persists sanitized editor request, raw response, normalized response, quality issues, attempts, and usage artifacts", async () => {
+    const writer = memoryArtifactWriter();
+    const artifactRecorder = createLiveArtifactRecorder({
+      writer,
+      basePath: "runs/live/case-1/editor_pass",
+      dataClass: "eval",
+    });
+    const provider = fakeProvider([
+      {
+        json: {
+          displayTitle: "文化中心讲座",
+          summary: "6月20日在北京文化中心举办的公开讲座。",
+          tags: ["talk", "culture"],
+          category: "talk",
+          audience: "general_public",
+          corrections: [],
+          qualityIssues: [{ code: "summary_short", severity: "info" }],
+          editorDecision: "publish",
+          reason: "facts are complete",
+        },
+        usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20, costMicroCny: 6, latencyMs: 5 },
+        raw: {
+          cookie: "session=secret-cookie",
+          choices: [{ message: { content: "{\"editorDecision\":\"publish\"}" } }],
+        },
+      },
+    ]);
+
+    const result = await runLiveEditorPass({
+      normalized,
+      extraction: {
+        decision: "event",
+        events: [{ title: "文化中心讲座报名", startsAt: "2026-06-20T10:00:00+08:00", venue: "北京文化中心" }],
+      },
+      validation: { status: "valid", issues: [] },
+      provider,
+      budgetGuard: createLiveModelBudgetGuard({ maxCostMicroCny: 20 }),
+      now: fixedNow,
+      artifactRecorder,
+    });
+
+    expect(result.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "editor_pass_request" }),
+        expect.objectContaining({ kind: "editor_pass_raw_response" }),
+        expect.objectContaining({ kind: "editor_pass_normalized_response" }),
+        expect.objectContaining({ kind: "editor_pass_quality_issues" }),
+        expect.objectContaining({ kind: "editor_pass_attempts" }),
+        expect.objectContaining({ kind: "editor_pass_usage" }),
+      ]),
+    );
+    expect(JSON.stringify(findArtifact(writer, "editor_pass_raw_response"))).not.toContain("secret-cookie");
+    expect(findArtifact(writer, "editor_pass_normalized_response")).toMatchObject({
+      normalizedResponse: expect.objectContaining({
+        editorDecision: "publish",
+        qualityIssues: [expect.objectContaining({ code: "summary_short" })],
+      }),
     });
   });
 
@@ -375,4 +551,20 @@ function fakeProvider(outputs) {
       };
     }),
   };
+}
+
+function memoryArtifactWriter() {
+  const artifacts = new Map();
+  return {
+    state: { artifacts },
+    async writeArtifact(artifactPath, value) {
+      artifacts.set(artifactPath, value);
+    },
+  };
+}
+
+function findArtifact(writer, kind) {
+  const match = [...writer.state.artifacts.values()].find((artifact) => artifact.kind === kind);
+  if (!match) throw new Error(`artifact_missing:${kind}`);
+  return match;
 }
