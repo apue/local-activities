@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  adminQuickFeedbackOptions,
   canRunDraftReviewAction,
+  computeAdminQualitySummary,
   formatUsageTimestamp,
   getDraftEvidenceItems,
   getDraftBlockingReasons,
@@ -161,5 +163,95 @@ describe("admin portal utils", () => {
     expect(getUsageRangeLabel("all")).toBe("All");
     expect(formatUsageTimestamp(undefined)).toBe("No records");
     expect(formatUsageTimestamp("2026-06-04T02:05:00.000Z")).toContain("6月4日");
+  });
+
+  it("computes a compact production quality summary from read models", () => {
+    const summary = computeAdminQualitySummary({
+      now: new Date("2026-06-11T08:00:00.000Z"),
+      ledger: [
+        {
+          id: "ledger-1",
+          articleBundleId: "bundle-1",
+          state: "published",
+          createdAt: "2026-06-11T01:00:00.000Z",
+        },
+        {
+          id: "ledger-2",
+          articleBundleId: "bundle-2",
+          state: "needs_review",
+          createdAt: "2026-06-11T02:00:00.000Z",
+        },
+        {
+          id: "ledger-3",
+          articleBundleId: "bundle-3",
+          state: "excluded",
+          createdAt: "2026-06-11T03:00:00.000Z",
+        },
+        {
+          id: "ledger-4",
+          articleBundleId: "bundle-4",
+          state: "failed",
+          createdAt: "2026-06-11T04:00:00.000Z",
+        },
+        {
+          id: "ledger-5",
+          articleBundleId: "bundle-old",
+          state: "published",
+          createdAt: "2026-06-09T04:00:00.000Z",
+        },
+      ],
+      feedback: [
+        {
+          id: "feedback-1",
+          status: "open",
+          createdAt: "2026-06-11T05:00:00.000Z",
+        },
+        {
+          id: "feedback-2",
+          status: "resolved",
+          createdAt: "2026-06-11T06:00:00.000Z",
+        },
+      ],
+      usage: {
+        totals: {
+          costMicroCny: 12_345,
+        },
+      },
+      evaluationRuns: [
+        {
+          runId: "eval-latest",
+          status: "completed",
+          passCount: 8,
+          caseCount: 10,
+          startedAt: "2026-06-11T07:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(summary).toEqual({
+      todayArticleCount: 4,
+      publishedCount: 1,
+      needsReviewCount: 1,
+      excludedCount: 1,
+      failedCount: 1,
+      feedbackCount: 2,
+      openFeedbackCount: 1,
+      tokenCostMicroCny: 12_345,
+      auditStatusLabel: "eval-latest · 8/10 passed",
+      auditStatusTone: "warning",
+    });
+  });
+
+  it("defines one-click admin feedback actions without exposing trace internals", () => {
+    expect(adminQuickFeedbackOptions).toEqual([
+      { feedbackType: "not_event", label: "Not event" },
+      { feedbackType: "not_public", label: "Not public" },
+      { feedbackType: "missing_qr", label: "Missing QR" },
+      { feedbackType: "duplicate_event", label: "Duplicate" },
+      { feedbackType: "bad_summary", label: "Bad summary" },
+    ]);
+    expect(JSON.stringify(adminQuickFeedbackOptions)).not.toMatch(
+      /prompt|raw|trace|response/i,
+    );
   });
 });

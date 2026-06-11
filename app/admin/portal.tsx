@@ -11,7 +11,9 @@ import {
   patchAdminDraft,
 } from "../../src/client/admin-portal-api";
 import {
+  adminQuickFeedbackOptions,
   canRunDraftReviewAction,
+  computeAdminQualitySummary,
   formatDateTime,
   formatLlmCostCny,
   formatTokenCount,
@@ -354,6 +356,7 @@ export function AdminPortal() {
   const [ledger, setLedger] = useState<ProcessingLedgerRecord[]>([]);
   const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRun[]>([]);
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
+  const [feedback, setFeedback] = useState<AdminFeedbackRecord[]>([]);
   const [feedbackByDraftId, setFeedbackByDraftId] = useState<
     Record<string, AdminFeedbackRecord[]>
   >({});
@@ -426,6 +429,16 @@ export function AdminPortal() {
   const selectedDraftFeedback = selectedDraft
     ? (feedbackByDraftId[selectedDraft.id] ?? [])
     : [];
+  const qualitySummary = useMemo(
+    () =>
+      computeAdminQualitySummary({
+        ledger,
+        feedback,
+        usage,
+        evaluationRuns,
+      }),
+    [ledger, feedback, usage, evaluationRuns],
+  );
 
   useEffect(() => {
     setOperatorOverrideReason(selectedDraft?.operatorOverrideReason ?? "");
@@ -479,6 +492,7 @@ export function AdminPortal() {
       const loadedEvaluationRuns =
         adminState.evaluationRuns as EvaluationRun[];
       const loadedPipelineRuns = adminState.pipelineRuns as PipelineRun[];
+      const loadedFeedback = adminState.feedback as AdminFeedbackRecord[];
       setJobs(loadedJobs);
       setDrafts(loadedDrafts);
       setUsage(loadedUsage);
@@ -486,6 +500,7 @@ export function AdminPortal() {
       setLedger(loadedLedger);
       setEvaluationRuns(loadedEvaluationRuns);
       setPipelineRuns(loadedPipelineRuns);
+      setFeedback(loadedFeedback);
       setSelectedDraftId((current) =>
         current && loadedDrafts.some((draft) => draft.id === current)
           ? current
@@ -531,26 +546,42 @@ export function AdminPortal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function submitDraftFeedback() {
-    if (!selectedDraft || !feedbackForm.reason.trim()) return;
+  async function submitDraftFeedback(
+    options: {
+      feedbackType?: AdminFeedbackType;
+      reason?: string;
+      metadata?: Record<string, unknown>;
+    } = {},
+  ) {
+    if (!selectedDraft) return;
 
     setStatus("loading");
     setFeedbackAction("submit");
     setMessage("Saving feedback...");
     try {
-      await createAdminFeedback({
+      const response = await createAdminFeedback({
         feedback: {
           dataClass: "production",
-          feedbackType: feedbackForm.feedbackType,
+          feedbackType: options.feedbackType ?? feedbackForm.feedbackType,
           draftId: selectedDraft.id,
           articleBundleId: selectedDraftArticleBundleId,
           eventId: selectedDraft.canonicalEventId,
           fieldName: feedbackForm.fieldName.trim() || undefined,
           oldValue: feedbackForm.oldValue.trim() || undefined,
           correctedValue: feedbackForm.correctedValue.trim() || undefined,
-          reason: feedbackForm.reason.trim(),
+          reason:
+            options.reason ??
+            (feedbackForm.reason.trim()
+              ? feedbackForm.reason.trim()
+              : undefined),
+          metadata: options.metadata,
         },
       });
+      const createdFeedback = response.feedback as AdminFeedbackRecord;
+      setFeedback((current) => [
+        createdFeedback,
+        ...current.filter((item) => item.id !== createdFeedback.id),
+      ]);
       await loadFeedbackForDraft(selectedDraft.id);
       setFeedbackForm({
         feedbackType: "other",
@@ -688,6 +719,43 @@ export function AdminPortal() {
             </div>
           </div>
         </header>
+
+        <section className={styles.qualitySummary} aria-label="Quality summary">
+          <div>
+            <small>Today articles</small>
+            <span>{qualitySummary.todayArticleCount}</span>
+          </div>
+          <div>
+            <small>Published</small>
+            <span>{qualitySummary.publishedCount}</span>
+          </div>
+          <div>
+            <small>Needs review</small>
+            <span>{qualitySummary.needsReviewCount}</span>
+          </div>
+          <div>
+            <small>Excluded</small>
+            <span>{qualitySummary.excludedCount}</span>
+          </div>
+          <div>
+            <small>Failed</small>
+            <span>{qualitySummary.failedCount}</span>
+          </div>
+          <div>
+            <small>Open feedback</small>
+            <span>
+              {qualitySummary.openFeedbackCount}/{qualitySummary.feedbackCount}
+            </span>
+          </div>
+          <div>
+            <small>Token cost</small>
+            <span>{formatLlmCostCny(qualitySummary.tokenCostMicroCny)}</span>
+          </div>
+          <div>
+            <small>Recent audit</small>
+            <span>{qualitySummary.auditStatusLabel}</span>
+          </div>
+        </section>
 
         <section className={styles.grid}>
           <section className={styles.panel}>
@@ -936,6 +1004,28 @@ export function AdminPortal() {
                       {feedbackAction === "loading" ? "Loading..." : "Refresh"}
                     </button>
                   </div>
+                  <div
+                    className={styles.feedbackQuickActions}
+                    aria-label="Quick feedback"
+                  >
+                    {adminQuickFeedbackOptions.map((option) => (
+                      <button
+                        key={option.feedbackType}
+                        type="button"
+                        onClick={() =>
+                          void submitDraftFeedback({
+                            feedbackType: option.feedbackType,
+                            metadata: {
+                              source: "admin_quick_feedback",
+                            },
+                          })
+                        }
+                        disabled={feedbackAction !== null}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                   <div className={styles.feedbackForm}>
                     <label>
                       <span>Type</span>
@@ -1005,15 +1095,14 @@ export function AdminPortal() {
                           }))
                         }
                         rows={2}
+                        placeholder="Optional note"
                       />
                     </label>
                     <button
                       className={styles.primaryButton}
                       type="button"
                       onClick={() => void submitDraftFeedback()}
-                      disabled={
-                        !feedbackForm.reason.trim() || feedbackAction !== null
-                      }
+                      disabled={feedbackAction !== null}
                     >
                       {feedbackAction === "submit"
                         ? "Saving feedback..."

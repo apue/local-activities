@@ -182,6 +182,39 @@
   color: #667062;
 }
 
+.qualitySummary {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.qualitySummary div {
+  min-width: 0;
+  min-height: 74px;
+  border: 1px solid #d6d9d1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.qualitySummary small {
+  display: block;
+  color: #667062;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.qualitySummary span {
+  display: block;
+  margin-top: 6px;
+  color: #20231f;
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
@@ -471,6 +504,29 @@
 .feedbackMeta small,
 .feedbackRow small {
   color: #667062;
+}
+
+.feedbackQuickActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedbackQuickActions button {
+  min-height: 34px;
+  border: 1px solid #c8cec2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #20231f;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 850;
+  padding: 7px 10px;
+}
+
+.feedbackQuickActions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .feedbackForm {
@@ -819,6 +875,10 @@
 
   .metrics {
     width: 100%;
+  }
+
+  .qualitySummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .segmentedControl {

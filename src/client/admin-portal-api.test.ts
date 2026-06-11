@@ -53,7 +53,7 @@ describe("admin portal API client", () => {
     expect(JSON.stringify(calls[0].init)).not.toContain("admin-secret");
   });
 
-  it("loads jobs, drafts, usage, article audit, excluded articles, eval reports, and pipeline traces", async () => {
+  it("loads jobs, drafts, usage, article audit, feedback, eval reports, and pipeline traces", async () => {
     const calls: string[] = [];
     const fetchImpl: typeof fetch = async (url, init = {}) => {
       calls.push(`${init.method ?? "GET"} ${url}`);
@@ -87,6 +87,12 @@ describe("admin portal API client", () => {
           evaluationRuns: [{ runId: "eval-1" }],
         });
       }
+      if (url === "/api/admin/feedback?data_class=production") {
+        return jsonResponse(200, {
+          ok: true,
+          feedback: [{ id: "feedback-1" }],
+        });
+      }
       if (url === "/api/admin/pipeline-runs?dataClass=production") {
         return jsonResponse(200, {
           ok: true,
@@ -109,6 +115,7 @@ describe("admin portal API client", () => {
       excludedArticles: [{ id: "excluded-1" }],
       ledger: [{ id: "ledger-1" }],
       evaluationRuns: [{ runId: "eval-1" }],
+      feedback: [{ id: "feedback-1" }],
       pipelineRuns: [{ runId: "pipe-1" }],
     });
     expect(calls).toEqual([
@@ -118,6 +125,7 @@ describe("admin portal API client", () => {
       "GET /api/admin/excluded-articles",
       "GET /api/admin/processing-ledger?dataClass=production",
       "GET /api/admin/evaluation-runs?validity=valid",
+      "GET /api/admin/feedback?data_class=production",
       "GET /api/admin/pipeline-runs?dataClass=production",
     ]);
   });
