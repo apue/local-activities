@@ -9,12 +9,18 @@ import type {
   AdminFeedbackRecord,
   AdminLlmUsageSummary,
   AdminPipelineRunRecord,
+  AdminPromptModelConfigActivationInput,
+  AdminPromptModelConfigCreateInput,
+  AdminPromptModelConfigRecord,
   AdminProcessingLedgerRecord,
   AdminStore,
 } from "./admin-service";
 import {
   handleAdminDraftAction,
+  handleAdminActivatePromptModelConfig,
   handleAdminCreateFeedback,
+  handleAdminCreatePromptModelConfig,
+  handleAdminGetActivePromptModelConfig,
   handleAdminListFeedback,
   handleAdminListEvaluationRuns,
   handleAdminLogin,
@@ -23,6 +29,7 @@ import {
   handleAdminListEventDrafts,
   handleAdminListLlmUsage,
   handleAdminListPipelineRuns,
+  handleAdminListPromptModelConfigs,
   handleAdminListProcessingLedger,
   handleAdminPromoteExcludedArticle,
   handleAdminPatchEventDraft,
@@ -112,6 +119,33 @@ class RouteAdminStore implements AdminStore {
     createdAt: "2026-06-04T02:00:00.000Z",
   };
   evaluationRunsInput?: Parameters<AdminStore["listEvaluationRuns"]>[0];
+  promptModelConfigs: AdminPromptModelConfigRecord[] = [
+    {
+      configId: "pmc-active",
+      dataClass: "production",
+      operation: "full_extract",
+      stage: "active",
+      provider: "dashscope",
+      model: "qwen3-vl-plus",
+      promptVersion: "full-extract.v1",
+      promptText: "Extract Beijing public activities.",
+      schemaVersion: "v5-extraction-result.v1",
+      params: { temperature: 0 },
+      budgetPolicy: { maxCostMicroCny: 1000 },
+      createdReason: "initial baseline",
+      createdBy: "admin",
+      activationEvalRunId: "eval-1",
+      activationReason: "baseline accepted",
+      activatedAt: "2026-06-10T08:00:00.000Z",
+      metadata: {},
+      createdAt: "2026-06-10T08:00:00.000Z",
+      updatedAt: "2026-06-10T08:00:00.000Z",
+    },
+  ];
+  promptModelConfigInput?: Parameters<AdminStore["listPromptModelConfigs"]>[0];
+  createdPromptModelConfigInput?: AdminPromptModelConfigCreateInput;
+  activePromptModelConfigInput?: Parameters<AdminStore["getActivePromptModelConfig"]>[0];
+  activatedPromptModelConfigInput?: AdminPromptModelConfigActivationInput;
   pipelineRunsInput?: Parameters<AdminStore["listPipelineRuns"]>[0];
   feedbackRows: AdminFeedbackRecord[] = [
     {
@@ -293,6 +327,84 @@ class RouteAdminStore implements AdminStore {
     return [this.evaluationRun];
   }
 
+  async listPromptModelConfigs(
+    input: Parameters<AdminStore["listPromptModelConfigs"]>[0],
+  ): Promise<AdminPromptModelConfigRecord[]> {
+    this.promptModelConfigInput = input;
+    return this.promptModelConfigs.filter(
+      (config) =>
+        (!input.dataClass || config.dataClass === input.dataClass) &&
+        (!input.operation || config.operation === input.operation) &&
+        (!input.stage || config.stage === input.stage),
+    );
+  }
+
+  async createPromptModelConfig(
+    input: AdminPromptModelConfigCreateInput,
+  ): Promise<AdminPromptModelConfigRecord> {
+    this.createdPromptModelConfigInput = input;
+    const config: AdminPromptModelConfigRecord = {
+      configId: "pmc-candidate",
+      dataClass: input.dataClass,
+      operation: input.operation,
+      stage: "candidate",
+      provider: input.provider,
+      model: input.model,
+      promptVersion: input.promptVersion,
+      promptText: input.promptText,
+      schemaVersion: input.schemaVersion,
+      params: input.params ?? {},
+      budgetPolicy: input.budgetPolicy ?? {},
+      createdReason: input.createdReason,
+      createdBy: input.createdBy,
+      metadata: input.metadata ?? {},
+      createdAt: "2026-06-11T12:00:00.000Z",
+      updatedAt: "2026-06-11T12:00:00.000Z",
+    };
+    this.promptModelConfigs.unshift(config);
+    return config;
+  }
+
+  async getActivePromptModelConfig(
+    input: Parameters<AdminStore["getActivePromptModelConfig"]>[0],
+  ): Promise<AdminPromptModelConfigRecord | null> {
+    this.activePromptModelConfigInput = input;
+    return this.promptModelConfigs.find(
+      (config) =>
+        config.dataClass === input.dataClass &&
+        config.operation === input.operation &&
+        config.stage === "active",
+    ) ?? null;
+  }
+
+  async activatePromptModelConfig(
+    input: AdminPromptModelConfigActivationInput,
+  ): Promise<AdminPromptModelConfigRecord | null> {
+    this.activatedPromptModelConfigInput = input;
+    const config = this.promptModelConfigs.find(
+      (candidate) =>
+        candidate.configId === input.configId &&
+        candidate.dataClass === input.dataClass &&
+        candidate.operation === input.operation,
+    );
+    if (!config) return null;
+    for (const candidate of this.promptModelConfigs) {
+      if (
+        candidate.dataClass === input.dataClass &&
+        candidate.operation === input.operation &&
+        candidate.stage === "active" &&
+        candidate.configId !== input.configId
+      ) {
+        candidate.stage = "archived";
+      }
+    }
+    config.stage = "active";
+    config.activationEvalRunId = input.evalRunId;
+    config.activationReason = input.activationReason;
+    config.activatedAt = input.activatedAt;
+    return config;
+  }
+
   async listPipelineRuns(
     input: Parameters<AdminStore["listPipelineRuns"]>[0],
   ): Promise<AdminPipelineRunRecord[]> {
@@ -421,6 +533,10 @@ class FailingListAdminStore extends RouteAdminStore {
 
   async listPipelineRuns(): Promise<AdminPipelineRunRecord[]> {
     throw new Error("admin_pipeline_run_list_failed");
+  }
+
+  async listPromptModelConfigs(): Promise<AdminPromptModelConfigRecord[]> {
+    throw new Error("admin_prompt_model_config_list_failed");
   }
 }
 
@@ -624,6 +740,263 @@ describe("admin route handlers", () => {
     expect(store.evaluationRunsInput).toMatchObject({
       status: "completed",
       validity: "valid",
+    });
+  });
+
+  it("lists prompt/model configs with data-class, operation, and stage filters", async () => {
+    const store = new RouteAdminStore();
+    const response = await handleAdminListPromptModelConfigs(
+      new Request(
+        "https://example.com/api/admin/prompt-model-configs?data_class=production&operation=full_extract&stage=active",
+        {
+          headers: { authorization: "Bearer admin-secret" },
+        },
+      ),
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      configs: [
+        {
+          configId: "pmc-active",
+          dataClass: "production",
+          operation: "full_extract",
+          stage: "active",
+          provider: "dashscope",
+          model: "qwen3-vl-plus",
+        },
+      ],
+    });
+    expect(store.promptModelConfigInput).toEqual({
+      dataClass: "production",
+      operation: "full_extract",
+      stage: "active",
+    });
+  });
+
+  it("gets the deterministic active prompt/model config for one scoped operation", async () => {
+    const store = new RouteAdminStore();
+    const response = await handleAdminGetActivePromptModelConfig(
+      new Request(
+        "https://example.com/api/admin/prompt-model-configs/active?dataClass=production&operation=full_extract",
+        {
+          headers: { authorization: "Bearer admin-secret" },
+        },
+      ),
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      config: {
+        configId: "pmc-active",
+        stage: "active",
+        activationEvalRunId: "eval-1",
+      },
+    });
+    expect(store.activePromptModelConfigInput).toEqual({
+      dataClass: "production",
+      operation: "full_extract",
+    });
+  });
+
+  it("creates prompt/model configs only as non-production-impacting candidates", async () => {
+    const store = new RouteAdminStore();
+    const response = await handleAdminCreatePromptModelConfig(
+      new Request("https://example.com/api/admin/prompt-model-configs", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          dataClass: "production",
+          operation: "full_extract",
+          provider: "siliconflow",
+          model: "Qwen/Qwen3.6-27B",
+          promptVersion: "full-extract.candidate.v2",
+          promptText: "Extract Beijing public activities from bundle input.",
+          schemaVersion: "v5-extraction-result.v1",
+          params: { temperature: 0, maxTokens: 3000 },
+          budgetPolicy: { maxCostMicroCny: 5000 },
+          createdReason: "Evaluate cheaper candidate against private corpus.",
+          createdBy: "spoofed@example.com",
+        }),
+      }),
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      config: {
+        configId: "pmc-candidate",
+        stage: "candidate",
+        provider: "siliconflow",
+        createdBy: "admin",
+      },
+    });
+    expect(store.createdPromptModelConfigInput).toMatchObject({
+      dataClass: "production",
+      operation: "full_extract",
+      createdBy: "admin",
+    });
+  });
+
+  it("rejects prompt/model configs with invalid params or missing required prompt fields", async () => {
+    const invalidParams = await handleAdminCreatePromptModelConfig(
+      new Request("https://example.com/api/admin/prompt-model-configs", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          dataClass: "production",
+          operation: "full_extract",
+          provider: "siliconflow",
+          model: "Qwen/Qwen3.6-27B",
+          promptVersion: "full-extract.candidate.v2",
+          promptText: "Extract Beijing public activities.",
+          schemaVersion: "v5-extraction-result.v1",
+          params: ["temperature", 0],
+          createdReason: "Evaluate cheaper candidate.",
+        }),
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+    expect(invalidParams.status).toBe(400);
+
+    const secretParams = await handleAdminCreatePromptModelConfig(
+      new Request("https://example.com/api/admin/prompt-model-configs", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          dataClass: "production",
+          operation: "full_extract",
+          provider: "siliconflow",
+          model: "Qwen/Qwen3.6-27B",
+          promptVersion: "full-extract.candidate.v2",
+          promptText: "Extract Beijing public activities.",
+          schemaVersion: "v5-extraction-result.v1",
+          params: { temperature: 0, apiKey: "must-not-store" },
+          createdReason: "Evaluate cheaper candidate.",
+        }),
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+    expect(secretParams.status).toBe(400);
+
+    const missingPromptText = await handleAdminCreatePromptModelConfig(
+      new Request("https://example.com/api/admin/prompt-model-configs", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          dataClass: "production",
+          operation: "full_extract",
+          provider: "siliconflow",
+          model: "Qwen/Qwen3.6-27B",
+          promptVersion: "full-extract.candidate.v2",
+          schemaVersion: "v5-extraction-result.v1",
+          createdReason: "Evaluate cheaper candidate.",
+        }),
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+    expect(missingPromptText.status).toBe(400);
+
+    const missingSchemaVersion = await handleAdminCreatePromptModelConfig(
+      new Request("https://example.com/api/admin/prompt-model-configs", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          dataClass: "production",
+          operation: "full_extract",
+          provider: "siliconflow",
+          model: "Qwen/Qwen3.6-27B",
+          promptVersion: "full-extract.candidate.v2",
+          promptText: "Extract Beijing public activities.",
+          createdReason: "Evaluate cheaper candidate.",
+        }),
+      }),
+      new RouteAdminStore(),
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+    expect(missingSchemaVersion.status).toBe(400);
+  });
+
+  it("requires explicit eval justification when activating a prompt/model config", async () => {
+    const store = new RouteAdminStore();
+    await store.createPromptModelConfig({
+      dataClass: "production",
+      operation: "full_extract",
+      provider: "siliconflow",
+      model: "Qwen/Qwen3.6-27B",
+      promptVersion: "full-extract.candidate.v2",
+      promptText: "Extract Beijing public activities.",
+      schemaVersion: "v5-extraction-result.v1",
+      createdReason: "candidate eval",
+      createdBy: "admin",
+    });
+
+    const rejected = await handleAdminActivatePromptModelConfig(
+      new Request(
+        "https://example.com/api/admin/prompt-model-configs/pmc-candidate/activate",
+        {
+          method: "POST",
+          headers: { authorization: "Bearer admin-secret" },
+          body: JSON.stringify({
+            dataClass: "production",
+            operation: "full_extract",
+          }),
+        },
+      ),
+      "pmc-candidate",
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+    expect(rejected.status).toBe(400);
+
+    const response = await handleAdminActivatePromptModelConfig(
+      new Request(
+        "https://example.com/api/admin/prompt-model-configs/pmc-candidate/activate",
+        {
+          method: "POST",
+          headers: { authorization: "Bearer admin-secret" },
+          body: JSON.stringify({
+            dataClass: "production",
+            operation: "full_extract",
+            evalRunId: "eval-2",
+            activationReason: "Candidate met false-positive and budget gates.",
+          }),
+        },
+      ),
+      "pmc-candidate",
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+      new Date("2026-06-11T12:30:00.000Z"),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      config: {
+        configId: "pmc-candidate",
+        stage: "active",
+        activationEvalRunId: "eval-2",
+        activationReason: "Candidate met false-positive and budget gates.",
+      },
+    });
+    expect(store.activatedPromptModelConfigInput).toMatchObject({
+      configId: "pmc-candidate",
+      dataClass: "production",
+      operation: "full_extract",
+      evalRunId: "eval-2",
+      activatedAt: "2026-06-11T12:30:00.000Z",
     });
   });
 

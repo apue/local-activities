@@ -10,6 +10,7 @@ import {
   listAdminEvaluationRuns,
   listAdminLlmUsageSummary,
   listAdminPipelineRuns,
+  listAdminPromptModelConfigs,
   listAdminProcessingLedger,
   listAdminEventDrafts,
   markAdminEventDraftNeedsInfo,
@@ -17,12 +18,18 @@ import {
   publishAdminEventDraft,
   rejectAdminEventDraft,
   resolveAdminLlmUsageRange,
+  activateAdminPromptModelConfig,
+  createAdminPromptModelConfig,
+  getAdminActivePromptModelConfig,
   type AdminExcludedArticleRecord,
   type AdminEventDraftRecord,
   type AdminEvaluationRunRecord,
   type AdminFeedbackInput,
   type AdminFeedbackRecord,
   type AdminPipelineRunRecord,
+  type AdminPromptModelConfigActivationInput,
+  type AdminPromptModelConfigCreateInput,
+  type AdminPromptModelConfigRecord,
   type AdminProcessingLedgerRecord,
   type AdminStore,
 } from "./admin-service";
@@ -34,6 +41,11 @@ class MemoryAdminStore implements AdminStore {
   ledgerRows: AdminProcessingLedgerRecord[] = [];
   evaluationRuns: AdminEvaluationRunRecord[] = [];
   evaluationRunsInput?: Parameters<AdminStore["listEvaluationRuns"]>[0];
+  promptModelConfigs: AdminPromptModelConfigRecord[] = [];
+  promptModelConfigInput?: Parameters<AdminStore["listPromptModelConfigs"]>[0];
+  createdPromptModelConfigInput?: AdminPromptModelConfigCreateInput;
+  activePromptModelConfigInput?: Parameters<AdminStore["getActivePromptModelConfig"]>[0];
+  activatedPromptModelConfigInput?: AdminPromptModelConfigActivationInput;
   pipelineRuns: AdminPipelineRunRecord[] = [];
   pipelineRunsInput?: Parameters<AdminStore["listPipelineRuns"]>[0];
   feedbackRows: AdminFeedbackRecord[] = [];
@@ -171,6 +183,77 @@ class MemoryAdminStore implements AdminStore {
         (!input.status || run.status === input.status) &&
         (!input.validity || run.validity === input.validity),
     );
+  }
+
+  async listPromptModelConfigs(input: Parameters<AdminStore["listPromptModelConfigs"]>[0]) {
+    this.promptModelConfigInput = input;
+    return this.promptModelConfigs.filter(
+      (config) =>
+        (!input.dataClass || config.dataClass === input.dataClass) &&
+        (!input.operation || config.operation === input.operation) &&
+        (!input.stage || config.stage === input.stage),
+    );
+  }
+
+  async createPromptModelConfig(input: AdminPromptModelConfigCreateInput) {
+    this.createdPromptModelConfigInput = input;
+    const config: AdminPromptModelConfigRecord = {
+      configId: "pmc-1",
+      dataClass: input.dataClass,
+      operation: input.operation,
+      stage: "candidate",
+      provider: input.provider,
+      model: input.model,
+      promptVersion: input.promptVersion,
+      promptText: input.promptText,
+      schemaVersion: input.schemaVersion,
+      params: input.params ?? {},
+      budgetPolicy: input.budgetPolicy ?? {},
+      createdReason: input.createdReason,
+      createdBy: input.createdBy,
+      metadata: input.metadata ?? {},
+      createdAt: "2026-06-11T11:00:00.000Z",
+      updatedAt: "2026-06-11T11:00:00.000Z",
+    };
+    this.promptModelConfigs.unshift(config);
+    return config;
+  }
+
+  async getActivePromptModelConfig(input: Parameters<AdminStore["getActivePromptModelConfig"]>[0]) {
+    this.activePromptModelConfigInput = input;
+    return this.promptModelConfigs.find(
+      (config) =>
+        config.dataClass === input.dataClass &&
+        config.operation === input.operation &&
+        config.stage === "active",
+    ) ?? null;
+  }
+
+  async activatePromptModelConfig(input: AdminPromptModelConfigActivationInput) {
+    this.activatedPromptModelConfigInput = input;
+    const config = this.promptModelConfigs.find(
+      (candidate) =>
+        candidate.configId === input.configId &&
+        candidate.dataClass === input.dataClass &&
+        candidate.operation === input.operation,
+    );
+    if (!config) return null;
+    for (const candidate of this.promptModelConfigs) {
+      if (
+        candidate.dataClass === input.dataClass &&
+        candidate.operation === input.operation &&
+        candidate.stage === "active" &&
+        candidate.configId !== input.configId
+      ) {
+        candidate.stage = "archived";
+      }
+    }
+    config.stage = "active";
+    config.activationEvalRunId = input.evalRunId;
+    config.activationReason = input.activationReason;
+    config.activatedAt = input.activatedAt;
+    config.updatedAt = input.activatedAt;
+    return config;
   }
 
   async listPipelineRuns(input: Parameters<AdminStore["listPipelineRuns"]>[0]) {
@@ -326,6 +409,104 @@ describe("admin service", () => {
         }),
       }),
     ]);
+  });
+
+  it("lists, creates, looks up, and explicitly activates scoped prompt/model configs", async () => {
+    const store = new MemoryAdminStore();
+    store.promptModelConfigs = [
+      {
+        configId: "pmc-active",
+        dataClass: "production",
+        operation: "full_extract",
+        stage: "active",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        promptVersion: "full-extract.v1",
+        promptText: "Extract events.",
+        schemaVersion: "v5-extraction-result.v1",
+        params: { temperature: 0 },
+        budgetPolicy: { maxCostMicroCny: 1000 },
+        createdReason: "initial active",
+        createdBy: "admin",
+        activationEvalRunId: "eval-1",
+        activationReason: "baseline passed",
+        activatedAt: "2026-06-10T08:00:00.000Z",
+        metadata: {},
+        createdAt: "2026-06-10T08:00:00.000Z",
+        updatedAt: "2026-06-10T08:00:00.000Z",
+      },
+    ];
+
+    await expect(
+      listAdminPromptModelConfigs(
+        { operation: "full_extract", stage: "active" },
+        store,
+      ),
+    ).resolves.toHaveLength(1);
+    expect(store.promptModelConfigInput).toEqual({
+      dataClass: "production",
+      operation: "full_extract",
+      stage: "active",
+    });
+
+    await expect(
+      createAdminPromptModelConfig(
+        {
+          dataClass: "production",
+          operation: "full_extract",
+          provider: "siliconflow",
+          model: "Qwen/Qwen3.6-27B",
+          promptVersion: "full-extract.candidate.v2",
+          promptText: "Extract Beijing public events.",
+          schemaVersion: "v5-extraction-result.v1",
+          params: { temperature: 0 },
+          budgetPolicy: { maxCostMicroCny: 5000 },
+          createdReason: "compare cheaper model",
+          createdBy: "admin",
+        },
+        store,
+      ),
+    ).resolves.toMatchObject({
+      configId: "pmc-1",
+      stage: "candidate",
+      provider: "siliconflow",
+    });
+    expect(store.createdPromptModelConfigInput?.createdReason).toBe(
+      "compare cheaper model",
+    );
+
+    await expect(
+      getAdminActivePromptModelConfig(
+        { dataClass: "production", operation: "full_extract" },
+        store,
+      ),
+    ).resolves.toMatchObject({ configId: "pmc-active" });
+
+    await expect(
+      activateAdminPromptModelConfig(
+        {
+          configId: "pmc-1",
+          dataClass: "production",
+          operation: "full_extract",
+          evalRunId: "eval-2",
+          activationReason: "candidate met false-positive and budget gates",
+        },
+        store,
+        new Date("2026-06-11T12:00:00.000Z"),
+      ),
+    ).resolves.toMatchObject({
+      configId: "pmc-1",
+      stage: "active",
+      activationEvalRunId: "eval-2",
+      activationReason: "candidate met false-positive and budget gates",
+    });
+    expect(store.activatedPromptModelConfigInput).toMatchObject({
+      activatedAt: "2026-06-11T12:00:00.000Z",
+    });
+    expect(
+      store.promptModelConfigs.find((config) => config.configId === "pmc-active")
+        ?.stage,
+    ).toBe("archived");
   });
 
   it("returns the read-only LLM usage summary from the admin store", async () => {
