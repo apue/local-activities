@@ -26,8 +26,8 @@ export const requiredV5CoverageLabels = [
 ];
 
 const manifestFileName = "manifest.json";
-const successCaseFiles = ["case.json", "captured-bundle.json", "expected.json"];
-const failureCaseFiles = ["case.json", "capture-result.json", "expected.json"];
+const successCaseFiles = ["case.json", "captured-bundle.json"];
+const failureCaseFiles = ["case.json", "capture-result.json"];
 
 export async function loadV5RegressionCorpus({ corpusDir } = {}) {
   if (!corpusDir) throw new Error("v5_regression_corpus_dir_required");
@@ -72,7 +72,9 @@ async function loadRegressionCase({ caseId, corpusDir, manifestEntry }) {
   }
 
   const caseMeta = await readJson(path.join(caseDir, "case.json"));
-  const expected = await readJson(path.join(caseDir, "expected.json"));
+  const expected = fileNames.includes("expected.json")
+    ? await readJson(path.join(caseDir, "expected.json"))
+    : expectedFromCaseMeta({ caseMeta, caseId });
   validateCaseMeta({ caseMeta, manifestEntry, caseId });
   validateExpected({ expected, caseId });
 
@@ -129,6 +131,32 @@ async function resolveCaseLocalImageAsset({ image, caseDir, caseId }) {
     ...image,
     contentType,
     dataUrl: `data:${contentType};base64,${bytes.toString("base64")}`,
+  };
+}
+
+function expectedFromCaseMeta({ caseMeta, caseId }) {
+  const expected = caseMeta.expected && typeof caseMeta.expected === "object"
+    ? caseMeta.expected
+    : {};
+  const action =
+    expected.action ??
+    caseMeta.expected_action ??
+    caseMeta.expectedAction;
+  const eventCount =
+    expected.eventCount ??
+    expected.event_count ??
+    caseMeta.expected_event_count ??
+    caseMeta.expectedEventCount;
+  if (!action) {
+    throw new Error(`v5_regression_corpus_expected_action_required:${caseId}`);
+  }
+  return {
+    action,
+    eventCount,
+    evidence: expected.evidence ?? {},
+    eventDrafts: expected.eventDrafts ?? [],
+    dedupe: expected.dedupe,
+    publish: expected.publish,
   };
 }
 
