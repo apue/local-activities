@@ -1,4 +1,5 @@
 import { createAttemptTrace, createUsagePlaceholder } from "./contracts.mjs";
+import { redactSecrets } from "./live-artifact-recorder.mjs";
 
 export const liveFullExtractVersion = "v5-live-full-extract.v1";
 export const liveEditorPassVersion = "v5-live-editor-pass.v1";
@@ -72,28 +73,45 @@ export async function runLiveFullExtract({
   budgetGuard,
   now = new Date(),
   imageEvidence = [],
+  artifactRecorder,
 } = {}) {
   requireInputs({ normalized, provider, budgetGuard, errorPrefix: "live_full_extract" });
   const startedAt = isoTimestamp(now);
   const attempts = [];
   const errors = [];
+  const artifacts = [];
   let latestExtraction;
   let latestIssues = [];
   const totalUsage = createUsageAccumulator();
   const boundedAttempts = positiveInteger(maxAttempts, 2);
 
   for (let attemptNumber = 1; attemptNumber <= boundedAttempts; attemptNumber += 1) {
+    const messages = fullExtractMessages({
+      normalized,
+      packet,
+      triage,
+      imageEvidence,
+      priorExtraction: latestExtraction,
+      validatorIssues: latestIssues,
+    });
+    const request = {
+      operation: "full_extract",
+      provider: provider.provider,
+      model: provider.model,
+      messages,
+      temperature: 0,
+      responseFormat: { type: "json_object" },
+      metadata: {
+        promptVersion: liveFullExtractPromptVersion,
+        schemaVersion: extractionSchemaVersion,
+        attempt: attemptNumber,
+      },
+    };
     try {
       budgetGuard.assertCanSpend();
+      await pushArtifact(artifacts, artifactRecorder, "full_extract_request", request);
       const completion = await provider.completeJson({
-        messages: fullExtractMessages({
-          normalized,
-          packet,
-          triage,
-          imageEvidence,
-          priorExtraction: latestExtraction,
-          validatorIssues: latestIssues,
-        }),
+        messages,
         temperature: 0,
         responseFormat: { type: "json_object" },
         metadata: {
@@ -102,16 +120,36 @@ export async function runLiveFullExtract({
           attempt: attemptNumber,
         },
       });
+      await pushArtifact(artifacts, artifactRecorder, "full_extract_raw_response", {
+        operation: "full_extract",
+        provider: completion.provider ?? provider.provider,
+        model: completion.model ?? provider.model,
+        attempt: attemptNumber,
+        raw: completion.raw,
+      });
       const usage = createUsagePlaceholder(completion.usage, {
         latencyMs: completion.latencyMs,
       });
       budgetGuard.recordUsage(usage);
       totalUsage.add(usage);
       latestExtraction = normalizeExtraction(completion.json);
+      await pushArtifact(artifacts, artifactRecorder, "full_extract_normalized_response", {
+        operation: "full_extract",
+        provider: provider.provider,
+        model: provider.model,
+        attempt: attemptNumber,
+        normalizedResponse: latestExtraction,
+      });
       const validation = typeof validator === "function"
         ? validator({ extraction: latestExtraction, normalized, packet, triage })
         : { status: "not_run", issues: [] };
       latestIssues = Array.isArray(validation?.issues) ? validation.issues : [];
+      await pushArtifact(artifacts, artifactRecorder, "full_extract_validator_issues", {
+        operation: "full_extract",
+        attempt: attemptNumber,
+        validatorStatus: validation?.status,
+        validatorIssues: latestIssues,
+      });
       const shouldRepair = latestIssues.some((issue) => issue?.repairable === true);
       const passed = validation?.status === "valid" || latestIssues.length === 0;
       const reason = passed
@@ -132,6 +170,23 @@ export async function runLiveFullExtract({
     } catch (error) {
       const normalizedError = errorShape(error);
       errors.push(normalizedError);
+      if (normalizedError.raw !== undefined) {
+        await pushArtifact(artifacts, artifactRecorder, "full_extract_raw_response", {
+          operation: "full_extract",
+          provider: provider.provider,
+          model: provider.model,
+          attempt: attemptNumber,
+          status: normalizedError.status,
+          raw: normalizedError.raw,
+        });
+      }
+      await pushArtifact(artifacts, artifactRecorder, "full_extract_normalized_response", {
+        operation: "full_extract",
+        provider: provider.provider,
+        model: provider.model,
+        attempt: attemptNumber,
+        error: normalizedError,
+      });
       attempts.push(attemptTrace({
         kind: "full_extract",
         attempt: attemptNumber,
@@ -141,6 +196,15 @@ export async function runLiveFullExtract({
         reason: normalizedError.code,
         validatorIssues: latestIssues,
       }));
+      await pushArtifact(artifacts, artifactRecorder, "full_extract_attempts", {
+        operation: "full_extract",
+        attempts,
+        errors,
+      });
+      await pushArtifact(artifacts, artifactRecorder, "full_extract_usage", {
+        operation: "full_extract",
+        usage: totalUsage.value(),
+      });
       return failedExtractionResult({
         provider,
         startedAt,
@@ -148,9 +212,20 @@ export async function runLiveFullExtract({
         errors,
         usage: totalUsage.value(),
         reason: normalizedError.code,
+        artifacts,
       });
     }
   }
+
+  await pushArtifact(artifacts, artifactRecorder, "full_extract_attempts", {
+    operation: "full_extract",
+    attempts,
+    errors,
+  });
+  await pushArtifact(artifacts, artifactRecorder, "full_extract_usage", {
+    operation: "full_extract",
+    usage: totalUsage.value(),
+  });
 
   return {
     version: liveFullExtractVersion,
@@ -168,6 +243,7 @@ export async function runLiveFullExtract({
     usage: totalUsage.value(),
     attempts,
     errors,
+    artifacts,
     createdAt: startedAt,
   };
 }
@@ -179,6 +255,7 @@ export async function runLiveEditorPass({
   provider,
   budgetGuard,
   now = new Date(),
+  artifactRecorder,
 } = {}) {
   requireInputs({ normalized, provider, budgetGuard, errorPrefix: "live_editor_pass" });
   if (!extraction || typeof extraction !== "object") {
@@ -187,12 +264,28 @@ export async function runLiveEditorPass({
   const startedAt = isoTimestamp(now);
   const attempts = [];
   const errors = [];
+  const artifacts = [];
   const totalUsage = createUsageAccumulator();
+  const messages = editorPassMessages({ normalized, extraction, validation });
+  const request = {
+    operation: "editor_pass",
+    provider: provider.provider,
+    model: provider.model,
+    messages,
+    temperature: 0,
+    responseFormat: { type: "json_object" },
+    metadata: {
+      promptVersion: liveEditorPassPromptVersion,
+      schemaVersion: editorSchemaVersion,
+      attempt: 1,
+    },
+  };
 
   try {
     budgetGuard.assertCanSpend();
+    await pushArtifact(artifacts, artifactRecorder, "editor_pass_request", request);
     const completion = await provider.completeJson({
-      messages: editorPassMessages({ normalized, extraction, validation }),
+      messages,
       temperature: 0,
       responseFormat: { type: "json_object" },
       metadata: {
@@ -201,12 +294,31 @@ export async function runLiveEditorPass({
         attempt: 1,
       },
     });
+    await pushArtifact(artifacts, artifactRecorder, "editor_pass_raw_response", {
+      operation: "editor_pass",
+      provider: completion.provider ?? provider.provider,
+      model: completion.model ?? provider.model,
+      attempt: 1,
+      raw: completion.raw,
+    });
     const usage = createUsagePlaceholder(completion.usage, {
       latencyMs: completion.latencyMs,
     });
     budgetGuard.recordUsage(usage);
     totalUsage.add(usage);
     const editor = normalizeEditorOutput(completion.json);
+    await pushArtifact(artifacts, artifactRecorder, "editor_pass_normalized_response", {
+      operation: "editor_pass",
+      provider: provider.provider,
+      model: provider.model,
+      attempt: 1,
+      normalizedResponse: editor,
+    });
+    await pushArtifact(artifacts, artifactRecorder, "editor_pass_quality_issues", {
+      operation: "editor_pass",
+      attempt: 1,
+      qualityIssues: editor.qualityIssues,
+    });
     attempts.push(attemptTrace({
       kind: "editor_pass",
       attempt: 1,
@@ -216,6 +328,15 @@ export async function runLiveEditorPass({
       reason: "editor_pass_completed",
       validatorIssues: validation?.issues ?? [],
     }));
+    await pushArtifact(artifacts, artifactRecorder, "editor_pass_attempts", {
+      operation: "editor_pass",
+      attempts,
+      errors,
+    });
+    await pushArtifact(artifacts, artifactRecorder, "editor_pass_usage", {
+      operation: "editor_pass",
+      usage: totalUsage.value(),
+    });
     return {
       version: liveEditorPassVersion,
       ...editor,
@@ -226,11 +347,29 @@ export async function runLiveEditorPass({
       usage: totalUsage.value(),
       attempts,
       errors,
+      artifacts,
       createdAt: startedAt,
     };
   } catch (error) {
     const normalizedError = errorShape(error);
     errors.push(normalizedError);
+    if (normalizedError.raw !== undefined) {
+      await pushArtifact(artifacts, artifactRecorder, "editor_pass_raw_response", {
+        operation: "editor_pass",
+        provider: provider.provider,
+        model: provider.model,
+        attempt: 1,
+        status: normalizedError.status,
+        raw: normalizedError.raw,
+      });
+    }
+    await pushArtifact(artifacts, artifactRecorder, "editor_pass_normalized_response", {
+      operation: "editor_pass",
+      provider: provider.provider,
+      model: provider.model,
+      attempt: 1,
+      error: normalizedError,
+    });
     attempts.push(attemptTrace({
       kind: "editor_pass",
       attempt: 1,
@@ -240,6 +379,20 @@ export async function runLiveEditorPass({
       reason: normalizedError.code,
       validatorIssues: validation?.issues ?? [],
     }));
+    await pushArtifact(artifacts, artifactRecorder, "editor_pass_quality_issues", {
+      operation: "editor_pass",
+      attempt: 1,
+      qualityIssues: validation?.issues ?? [],
+    });
+    await pushArtifact(artifacts, artifactRecorder, "editor_pass_attempts", {
+      operation: "editor_pass",
+      attempts,
+      errors,
+    });
+    await pushArtifact(artifacts, artifactRecorder, "editor_pass_usage", {
+      operation: "editor_pass",
+      usage: totalUsage.value(),
+    });
     return {
       version: liveEditorPassVersion,
       displayTitle: clean(normalized?.title) ?? "Untitled",
@@ -259,6 +412,7 @@ export async function runLiveEditorPass({
       usage: totalUsage.value(),
       attempts,
       errors,
+      artifacts,
       createdAt: startedAt,
     };
   }
@@ -328,7 +482,7 @@ function normalizeCorrection(correction = {}) {
   };
 }
 
-function failedExtractionResult({ provider, startedAt, attempts, errors, usage, reason }) {
+function failedExtractionResult({ provider, startedAt, attempts, errors, usage, reason, artifacts = [] }) {
   return {
     version: liveFullExtractVersion,
     decision: "failed",
@@ -344,6 +498,7 @@ function failedExtractionResult({ provider, startedAt, attempts, errors, usage, 
     usage,
     attempts,
     errors,
+    artifacts,
     createdAt: startedAt,
   };
 }
@@ -393,8 +548,15 @@ function errorShape(error) {
     code: clean(error?.code) ?? clean(error?.message) ?? "live_model_error",
     message: clean(error?.message),
     status: error?.status,
-    raw: error?.raw,
+    raw: redactSecrets(error?.raw),
   };
+}
+
+async function pushArtifact(artifacts, artifactRecorder, kind, value, options) {
+  if (!artifactRecorder) return undefined;
+  const pointer = await artifactRecorder.write(kind, value, options);
+  artifacts.push(pointer);
+  return pointer;
 }
 
 function fullExtractMessages({ normalized, packet, triage, imageEvidence, priorExtraction, validatorIssues }) {

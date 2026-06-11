@@ -225,6 +225,7 @@ describe("V5 evaluation runner", () => {
 
   it("runs live-configured evaluation through injected provider config and budget", async () => {
     const fetchCalls = [];
+    const writer = createMemoryV5EvaluationWriter();
     const fetchImpl = async (url, init) => {
       fetchCalls.push({ url, init });
       const body = fetchCalls.length === 1
@@ -278,6 +279,7 @@ describe("V5 evaluation runner", () => {
       variants: ["live-configured"],
       allowLive: true,
       maxCostCny: 1,
+      writer,
       env: {
         V5_LIVE_PROVIDER: "test-openai-compatible",
         V5_LIVE_BASE_URL: "https://llm.example/v1",
@@ -306,6 +308,32 @@ describe("V5 evaluation runner", () => {
       predictedAction: "extract",
       predictedFinalState: "published",
       status: "passed",
+    });
+    expect(result.cases[0].artifactPaths).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("/live/full_extract/"),
+        expect.stringContaining("/live/editor_pass/"),
+        expect.stringContaining("/live/deterministic_validator-result.json"),
+        expect.stringContaining("/live/publish-policy-decision.json"),
+      ]),
+    );
+    const policyArtifact = findEvaluationArtifact(writer, "publish_policy_decision");
+    expect(policyArtifact).toMatchObject({
+      kind: "publish_policy_decision",
+      dataClass: "eval",
+      policy: {
+        state: "published",
+        reasons: expect.any(Array),
+      },
+      sourceStepReferences: {
+        extraction: expect.arrayContaining([
+          expect.objectContaining({ kind: "full_extract_normalized_response" }),
+        ]),
+        validation: expect.objectContaining({ kind: "deterministic_validator_result" }),
+        editor: expect.arrayContaining([
+          expect.objectContaining({ kind: "editor_pass_normalized_response" }),
+        ]),
+      },
     });
     expect(fetchCalls).toHaveLength(2);
     expect(fetchCalls[0].url).toBe("https://llm.example/v1/chat/completions");
@@ -385,3 +413,9 @@ describe("V5 evaluation runner", () => {
     });
   });
 });
+
+function findEvaluationArtifact(writer, kind) {
+  const match = [...writer.state.artifacts.values()].find((artifact) => artifact.kind === kind);
+  if (!match) throw new Error(`artifact_missing:${kind}`);
+  return match;
+}

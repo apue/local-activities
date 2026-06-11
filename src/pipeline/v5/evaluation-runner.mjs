@@ -4,6 +4,7 @@ import path from "node:path";
 import { buildCandidatePacket } from "./candidate-packet.mjs";
 import { runCheapTriage } from "./cheap-triage.mjs";
 import { cleanCapturedArticleBundle } from "./content-cleaner.mjs";
+import { createLiveArtifactRecorder } from "./live-artifact-recorder.mjs";
 import { runLiveEditorPass, runLiveFullExtract } from "./live-harnesses.mjs";
 import { createLiveModelBudgetGuard, createOpenAICompatibleChatProvider } from "./model-provider.mjs";
 import { decideV5PublishState } from "./publish-policy-v2.mjs";
@@ -106,11 +107,14 @@ export async function runV5Evaluation({
   for (const variant of selectedVariants) {
     for (const caseItem of selectedCases) {
       const replayCase = replayCasesById.get(caseItem.case.id);
+      const liveArtifactBasePath = `${runPrefix}/variants/${safeArtifactSegment(variant)}/cases/${safeArtifactSegment(caseItem.case.id)}/live`;
       const caseResult = await evaluateCaseVariant({
         variant,
         caseItem,
         replayCase,
         liveEvaluator: configuredLiveEvaluator,
+        writer: evaluationWriter,
+        liveArtifactBasePath,
       });
       const artifactPath = `${runPrefix}/variants/${safeArtifactSegment(variant)}/cases/${safeArtifactSegment(caseItem.case.id)}.json`;
       const caseResultWithArtifact = {
@@ -218,11 +222,18 @@ export function parseV5EvaluationArgs(argv = []) {
   return options;
 }
 
-async function evaluateCaseVariant({ variant, caseItem, replayCase, liveEvaluator }) {
+async function evaluateCaseVariant({ variant, caseItem, replayCase, liveEvaluator, writer, liveArtifactBasePath }) {
   const expectedAction = caseItem.expected.action;
   const expectedFinalState = finalStateFromExpectedAction(expectedAction);
   const prediction = liveVariants.has(variant)
-    ? await livePredictionForVariant({ variant, caseItem, replayCase, liveEvaluator })
+    ? await livePredictionForVariant({
+      variant,
+      caseItem,
+      replayCase,
+      liveEvaluator,
+      writer,
+      liveArtifactBasePath,
+    })
     : predictionForVariant({ variant, expectedAction, replayCase });
   const actionCorrect = prediction.action === expectedAction;
   const finalStateCorrect = prediction.finalState === expectedFinalState;
@@ -267,8 +278,20 @@ export function createLiveConfiguredV5Evaluator({
     extraBody: config.extraBody,
   });
 
-  return async function evaluateLiveConfiguredCase({ caseItem, replayCase } = {}) {
+  return async function evaluateLiveConfiguredCase({
+    caseItem,
+    replayCase,
+    writer,
+    liveArtifactBasePath,
+    dataClass = "eval",
+  } = {}) {
     if (!caseItem?.bundle) throw new Error(`v5_evaluation_case_has_no_bundle:${caseItem?.case?.id ?? "unknown"}`);
+    const caseArtifactRecorder = writer && liveArtifactBasePath
+      ? createLiveArtifactRecorder({ writer, basePath: liveArtifactBasePath, dataClass })
+      : undefined;
+    const fullExtractArtifactRecorder = writer && liveArtifactBasePath
+      ? createLiveArtifactRecorder({ writer, basePath: `${liveArtifactBasePath}/full_extract`, dataClass })
+      : undefined;
     const normalized = cleanCapturedArticleBundle(caseItem.bundle);
     const signalScore = scoreNormalizedContent(normalized);
     const packet = buildCandidatePacket({ normalized, signalScore });
@@ -286,8 +309,21 @@ export function createLiveConfiguredV5Evaluator({
       }),
       now,
       imageEvidence: normalized.images ?? [],
+      artifactRecorder: fullExtractArtifactRecorder,
     });
     const validation = validateV5Extraction({ extraction, normalized, now });
+    const validationArtifact = caseArtifactRecorder
+      ? await caseArtifactRecorder.write("deterministic_validator_result", {
+        operation: "deterministic_validator",
+        validation,
+        sourceStepReferences: {
+          extraction: extraction.artifacts ?? [],
+        },
+      }, { fileName: "deterministic_validator-result.json" })
+      : undefined;
+    const editorArtifactRecorder = writer && liveArtifactBasePath
+      ? createLiveArtifactRecorder({ writer, basePath: `${liveArtifactBasePath}/editor_pass`, dataClass })
+      : undefined;
     const editor = shouldRunEditorPass(extraction)
       ? await runLiveEditorPass({
         normalized,
@@ -296,13 +332,34 @@ export function createLiveConfiguredV5Evaluator({
         provider,
         budgetGuard,
         now,
+        artifactRecorder: editorArtifactRecorder,
       })
       : skippedEditorResult({ extraction, validation, normalized });
     const policy = decideV5PublishState({ extraction, validation, editor });
+    const policyArtifact = caseArtifactRecorder
+      ? await caseArtifactRecorder.write("publish_policy_decision", {
+        operation: "publish_policy",
+        policy,
+        sourceStepReferences: {
+          extraction: extraction.artifacts ?? [],
+          validation: validationArtifact,
+          editor: editor.artifacts ?? [],
+        },
+      }, { fileName: "publish-policy-decision.json" })
+      : undefined;
+    const liveArtifactPaths = [
+      ...(fullExtractArtifactRecorder?.paths() ?? []),
+      ...(validationArtifact ? [validationArtifact.path] : []),
+      ...(editorArtifactRecorder?.paths() ?? []),
+      ...(policyArtifact ? [policyArtifact.path] : []),
+    ];
     return {
       action: actionFromPublishState(policy.state),
       finalState: policy.state,
-      artifactPaths: artifactPathsFromReplayCase(replayCase),
+      artifactPaths: [
+        ...artifactPathsFromReplayCase(replayCase),
+        ...liveArtifactPaths,
+      ],
       usage: sumUsage([
         extraction.usage,
         editor.usage,
@@ -320,10 +377,24 @@ export function createLiveConfiguredV5Evaluator({
   };
 }
 
-async function livePredictionForVariant({ variant, caseItem, replayCase, liveEvaluator }) {
+async function livePredictionForVariant({
+  variant,
+  caseItem,
+  replayCase,
+  liveEvaluator,
+  writer,
+  liveArtifactBasePath,
+}) {
   if (variant !== "live-configured") throw new Error(`v5_evaluation_variant_unsupported:${variant}`);
   if (typeof liveEvaluator !== "function") throw new Error("v5_evaluation_live_evaluator_required");
-  return liveEvaluator({ caseItem, replayCase, variant });
+  return liveEvaluator({
+    caseItem,
+    replayCase,
+    variant,
+    writer,
+    liveArtifactBasePath,
+    dataClass: "eval",
+  });
 }
 
 function predictionForVariant({ variant, expectedAction, replayCase }) {
