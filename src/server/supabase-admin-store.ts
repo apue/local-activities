@@ -16,6 +16,11 @@ import type {
   AdminLlmUsageRecord,
   AdminLlmUsageSummary,
   AdminDataClass,
+  AdminPromptModelConfigActivationInput,
+  AdminPromptModelConfigCreateInput,
+  AdminPromptModelConfigFilters,
+  AdminPromptModelConfigRecord,
+  AdminPromptModelOperation,
   AdminPipelineArtifactRecord,
   AdminPipelineAttemptRecord,
   AdminPipelineRunRecord,
@@ -303,6 +308,28 @@ type AdminFeedbackRow = {
   reason: string | null;
   created_by: string;
   status: AdminFeedbackRecord["status"];
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PromptModelConfigRow = {
+  config_id: string;
+  data_class: AdminDataClass;
+  operation: AdminPromptModelOperation;
+  stage: AdminPromptModelConfigRecord["stage"];
+  provider: string;
+  model: string;
+  prompt_version: string;
+  prompt_text: string;
+  schema_version: string;
+  params: Record<string, unknown> | null;
+  budget_policy: Record<string, unknown> | null;
+  created_reason: string;
+  created_by: string;
+  activation_eval_run_id: string | null;
+  activation_reason: string | null;
+  activated_at: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -631,6 +658,94 @@ class SupabaseAdminStore implements AdminStore {
     return runRows.map((row) =>
       toEvaluationRunRecord(row, casesByRun.get(row.run_id) ?? []),
     );
+  }
+
+  async listPromptModelConfigs(
+    input: AdminPromptModelConfigFilters,
+  ): Promise<AdminPromptModelConfigRecord[]> {
+    let query = this.client
+      .from("prompt_model_configs")
+      .select("*")
+      .eq("data_class", input.dataClass ?? "production");
+
+    if (input.operation) {
+      query = query.eq("operation", input.operation);
+    }
+    if (input.stage) {
+      query = query.eq("stage", input.stage);
+    }
+
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw new Error("admin_prompt_model_config_list_failed");
+    return ((data ?? []) as PromptModelConfigRow[]).map(
+      toPromptModelConfigRecord,
+    );
+  }
+
+  async createPromptModelConfig(
+    input: AdminPromptModelConfigCreateInput,
+  ): Promise<AdminPromptModelConfigRecord> {
+    const { data, error } = await this.client
+      .from("prompt_model_configs")
+      .insert({
+        config_id: `pmc-${randomUUID()}`,
+        data_class: input.dataClass,
+        operation: input.operation,
+        stage: "candidate",
+        provider: input.provider,
+        model: input.model,
+        prompt_version: input.promptVersion,
+        prompt_text: input.promptText,
+        schema_version: input.schemaVersion,
+        params: input.params ?? {},
+        budget_policy: input.budgetPolicy ?? {},
+        created_reason: input.createdReason,
+        created_by: input.createdBy,
+        metadata: input.metadata ?? {},
+      })
+      .select("*")
+      .maybeSingle<PromptModelConfigRow>();
+
+    if (error || !data) throw new Error("admin_prompt_model_config_create_failed");
+    return toPromptModelConfigRecord(data);
+  }
+
+  async getActivePromptModelConfig(input: {
+    dataClass: AdminDataClass;
+    operation: AdminPromptModelOperation;
+  }): Promise<AdminPromptModelConfigRecord | null> {
+    const { data, error } = await this.client
+      .from("prompt_model_configs")
+      .select("*")
+      .eq("data_class", input.dataClass)
+      .eq("operation", input.operation)
+      .eq("stage", "active")
+      .order("activated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<PromptModelConfigRow>();
+
+    if (error) throw new Error("admin_prompt_model_config_active_lookup_failed");
+    return data ? toPromptModelConfigRecord(data) : null;
+  }
+
+  async activatePromptModelConfig(
+    input: AdminPromptModelConfigActivationInput,
+  ): Promise<AdminPromptModelConfigRecord | null> {
+    const { data, error } = await this.client
+      .rpc("activate_prompt_model_config", {
+        p_config_id: input.configId,
+        p_data_class: input.dataClass,
+        p_operation: input.operation,
+        p_eval_run_id: input.evalRunId,
+        p_activation_reason: input.activationReason,
+        p_activated_at: input.activatedAt,
+      })
+      .maybeSingle<PromptModelConfigRow>();
+
+    if (error) throw new Error("admin_prompt_model_config_activate_failed");
+    return data ? toPromptModelConfigRecord(data) : null;
   }
 
   async getLlmUsageSummary(input: {
@@ -1076,6 +1191,32 @@ function toFeedbackRecord(row: AdminFeedbackRow): AdminFeedbackRecord {
   };
 }
 
+function toPromptModelConfigRecord(
+  row: PromptModelConfigRow,
+): AdminPromptModelConfigRecord {
+  return removeUndefined({
+    configId: row.config_id,
+    dataClass: row.data_class,
+    operation: row.operation,
+    stage: row.stage,
+    provider: row.provider,
+    model: row.model,
+    promptVersion: row.prompt_version,
+    promptText: row.prompt_text,
+    schemaVersion: row.schema_version,
+    params: sanitizeConfigObject(row.params ?? {}),
+    budgetPolicy: sanitizeConfigObject(row.budget_policy ?? {}),
+    createdReason: row.created_reason,
+    createdBy: row.created_by,
+    activationEvalRunId: row.activation_eval_run_id ?? undefined,
+    activationReason: row.activation_reason ?? undefined,
+    activatedAt: row.activated_at ?? undefined,
+    metadata: sanitizeJsonObject(row.metadata ?? {}),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
 function sanitizeLlmMetadata(
   metadata: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -1416,6 +1557,16 @@ function sanitizeJsonObject(
   input: Record<string, unknown>,
 ): Record<string, unknown> {
   return sanitizeLlmMetadata(input);
+}
+
+function sanitizeConfigObject(input: Record<string, unknown>): Record<string, unknown> {
+  return sanitizeLlmParams(input);
+}
+
+function removeUndefined<T extends Record<string, unknown>>(input: T): T {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  ) as T;
 }
 
 function sanitizeUsageObject(input: Record<string, unknown>): Record<string, unknown> {

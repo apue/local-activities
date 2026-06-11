@@ -794,6 +794,144 @@ describe("supabase admin store", () => {
     ]);
   });
 
+  it("maps prompt/model configs and filters active lookup by scoped operation", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(
+      supabaseClientForPromptModelConfigs(calls),
+    );
+
+    await expect(
+      store.listPromptModelConfigs({
+        dataClass: "production",
+        operation: "full_extract",
+        stage: "active",
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        configId: "pmc-active",
+        dataClass: "production",
+        operation: "full_extract",
+        stage: "active",
+        provider: "dashscope",
+        model: "qwen3-vl-plus",
+        promptVersion: "full-extract.v1",
+        schemaVersion: "v5-extraction-result.v1",
+        params: {
+          temperature: 0,
+          responseFormat: { type: "json_object" },
+          imageBudget: { maxImages: 6 },
+          nested: {
+            safe: "kept",
+            api_key: "[redacted]",
+          },
+        },
+        budgetPolicy: { maxCostMicroCny: 1000 },
+      }),
+    ]);
+    const configsJson = JSON.stringify(
+      await store.listPromptModelConfigs({ dataClass: "production" }),
+    );
+    expect(configsJson).not.toContain("secret");
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        ["eq", "data_class", "production"],
+        ["eq", "operation", "full_extract"],
+        ["eq", "stage", "active"],
+      ]),
+    );
+
+    await expect(
+      store.getActivePromptModelConfig({
+        dataClass: "production",
+        operation: "full_extract",
+      }),
+    ).resolves.toMatchObject({
+      configId: "pmc-active",
+      stage: "active",
+    });
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        ["eq", "data_class", "production"],
+        ["eq", "operation", "full_extract"],
+        ["eq", "stage", "active"],
+        ["order", "activated_at", false],
+      ]),
+    );
+  });
+
+  it("creates candidate prompt/model configs and explicitly activates one with eval justification", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(
+      supabaseClientForPromptModelConfigs(calls),
+    );
+
+    await expect(
+      store.createPromptModelConfig({
+        dataClass: "production",
+        operation: "full_extract",
+        provider: "siliconflow",
+        model: "Qwen/Qwen3.6-27B",
+        promptVersion: "full-extract.candidate.v2",
+        promptText: "Extract Beijing public activities.",
+        schemaVersion: "v5-extraction-result.v1",
+        params: { temperature: 0 },
+        budgetPolicy: { maxCostMicroCny: 5000 },
+        createdReason: "Evaluate cheaper candidate.",
+        createdBy: "admin",
+      }),
+    ).resolves.toMatchObject({
+      configId: "pmc-created",
+      stage: "candidate",
+      provider: "siliconflow",
+    });
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        [
+          "insert",
+          expect.objectContaining({
+            data_class: "production",
+            operation: "full_extract",
+            stage: "candidate",
+            provider: "siliconflow",
+            prompt_text: "Extract Beijing public activities.",
+          }),
+        ],
+      ]),
+    );
+
+    await expect(
+      store.activatePromptModelConfig({
+        configId: "pmc-created",
+        dataClass: "production",
+        operation: "full_extract",
+        evalRunId: "eval-2",
+        activationReason: "Candidate met eval gates.",
+        activatedAt: "2026-06-11T12:00:00.000Z",
+      }),
+    ).resolves.toMatchObject({
+      configId: "pmc-created",
+      stage: "active",
+      activationEvalRunId: "eval-2",
+      activationReason: "Candidate met eval gates.",
+    });
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        [
+          "rpc",
+          "activate_prompt_model_config",
+          {
+            p_config_id: "pmc-created",
+            p_data_class: "production",
+            p_operation: "full_extract",
+            p_eval_run_id: "eval-2",
+            p_activation_reason: "Candidate met eval gates.",
+            p_activated_at: "2026-06-11T12:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+  });
+
   it("publishes drafts without poster fields when poster columns are pending", async () => {
     const inserts: Array<{ table: string; payload: Record<string, unknown> }> =
       [];
@@ -1417,6 +1555,122 @@ function supabaseClientForAdminFeedback(
       calls.push(["from", table]);
       expect(table).toBe("admin_feedback_ledger");
       return query;
+    },
+  } as never;
+}
+
+function supabaseClientForPromptModelConfigs(calls: unknown[] = []) {
+  const activeRow = {
+    config_id: "pmc-active",
+    data_class: "production",
+    operation: "full_extract",
+    stage: "active",
+    provider: "dashscope",
+    model: "qwen3-vl-plus",
+    prompt_version: "full-extract.v1",
+    prompt_text: "Extract Beijing public activities.",
+    schema_version: "v5-extraction-result.v1",
+    params: {
+      temperature: 0,
+      responseFormat: { type: "json_object" },
+      imageBudget: { maxImages: 6 },
+      nested: {
+        safe: "kept",
+        api_key: "secret",
+      },
+    },
+    budget_policy: { maxCostMicroCny: 1000 },
+    created_reason: "initial baseline",
+    created_by: "admin",
+    activation_eval_run_id: "eval-1",
+    activation_reason: "baseline accepted",
+    activated_at: "2026-06-10T08:00:00.000Z",
+    metadata: {
+      safe: "kept",
+      authorization: "Bearer secret",
+    },
+    created_at: "2026-06-10T08:00:00.000Z",
+    updated_at: "2026-06-10T08:00:00.000Z",
+  };
+  const createdRow = {
+    ...activeRow,
+    config_id: "pmc-created",
+    stage: "candidate",
+    provider: "siliconflow",
+    model: "Qwen/Qwen3.6-27B",
+    prompt_version: "full-extract.candidate.v2",
+    prompt_text: "Extract Beijing public activities.",
+    activation_eval_run_id: null,
+    activation_reason: null,
+    activated_at: null,
+    created_reason: "Evaluate cheaper candidate.",
+    created_at: "2026-06-11T12:00:00.000Z",
+    updated_at: "2026-06-11T12:00:00.000Z",
+  };
+  const activatedRow = {
+    ...createdRow,
+    stage: "active",
+    activation_eval_run_id: "eval-2",
+    activation_reason: "Candidate met eval gates.",
+    activated_at: "2026-06-11T12:00:00.000Z",
+    updated_at: "2026-06-11T12:00:00.000Z",
+  };
+
+  return {
+    from(table: string) {
+      calls.push(["from", table]);
+      expect(table).toBe("prompt_model_configs");
+      let didInsert = false;
+      const query = {
+        select() {
+          calls.push(["select", table]);
+          return query;
+        },
+        eq(column: string, value: string) {
+          calls.push(["eq", column, value]);
+          return query;
+        },
+        neq(column: string, value: string) {
+          calls.push(["neq", column, value]);
+          return query;
+        },
+        order(column: string, options?: { ascending?: boolean }) {
+          calls.push(["order", column, Boolean(options?.ascending)]);
+          return query;
+        },
+        limit(count: number) {
+          calls.push(["limit", count]);
+          return Object.assign(Promise.resolve({ data: [activeRow], error: null }), {
+            maybeSingle: query.maybeSingle,
+          });
+        },
+        insert(payload: Record<string, unknown>) {
+          didInsert = true;
+          calls.push(["insert", payload]);
+          return query;
+        },
+        update(payload: Record<string, unknown>) {
+          calls.push(["update", payload]);
+          return query;
+        },
+        maybeSingle() {
+          calls.push(["maybeSingle"]);
+          if (didInsert) {
+            return Promise.resolve({ data: createdRow, error: null });
+          }
+          return Promise.resolve({ data: activeRow, error: null });
+        },
+      };
+      return query;
+    },
+    rpc(name: string, payload: Record<string, unknown>) {
+      calls.push(["rpc", name, payload]);
+      return {
+        maybeSingle() {
+          calls.push(["maybeSingle"]);
+          return Promise.resolve({ data: activatedRow, error: null });
+        },
+      };
     },
   } as never;
 }

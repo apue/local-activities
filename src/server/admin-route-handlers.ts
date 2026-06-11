@@ -4,7 +4,10 @@ import { adminSessionCookie } from "./admin-auth";
 import { authenticateAdminRequest } from "./admin-auth";
 import {
   AdminDraftPublishBlockedError,
+  activateAdminPromptModelConfig,
   createAdminFeedback,
+  createAdminPromptModelConfig,
+  getAdminActivePromptModelConfig,
   getAdminEventDraftDetail,
   listAdminFeedback,
   listAdminCollectorJobs,
@@ -13,6 +16,7 @@ import {
   listAdminEventDrafts,
   listAdminLlmUsageSummary,
   listAdminPipelineRuns,
+  listAdminPromptModelConfigs,
   listAdminProcessingLedger,
   markAdminEventDraftNeedsInfo,
   patchAdminEventDraft,
@@ -109,6 +113,18 @@ const dataClassSchema = z
   .optional()
   .default("production");
 
+const promptModelOperationSchema = z.enum([
+  "cheap_triage",
+  "full_extract",
+  "editor_pass",
+  "judge_eval",
+  "eval",
+]);
+
+const promptModelConfigStageSchema = z
+  .enum(["active", "candidate", "archived"])
+  .optional();
+
 const feedbackTypeSchema = z.enum([
   "not_event",
   "not_public",
@@ -133,6 +149,41 @@ const jsonObjectSchema = z.custom<Record<string, unknown>>(
     typeof value === "object" && value !== null && !Array.isArray(value),
   { message: "Expected a JSON object." },
 );
+
+const configObjectSchema = jsonObjectSchema.refine(
+  (value) => !containsSensitiveConfigKey(value),
+  { message: "Config objects must not contain secrets." },
+);
+
+const promptModelConfigCreateSchema = z
+  .object({
+    dataClass: z
+      .enum(["production", "eval", "test", "smoke"])
+      .default("production"),
+    operation: promptModelOperationSchema,
+    provider: z.string().trim().min(1).max(200),
+    model: z.string().trim().min(1).max(300),
+    promptVersion: z.string().trim().min(1).max(300),
+    promptText: z.string().trim().min(1).max(100_000),
+    schemaVersion: z.string().trim().min(1).max(300),
+    params: configObjectSchema.default({}),
+    budgetPolicy: configObjectSchema.default({}),
+    createdReason: z.string().trim().min(1).max(4_000),
+    createdBy: z.string().trim().min(1).max(200).default("admin"),
+    metadata: configObjectSchema.default({}),
+  })
+  .strict();
+
+const promptModelConfigActivationSchema = z
+  .object({
+    dataClass: z
+      .enum(["production", "eval", "test", "smoke"])
+      .default("production"),
+    operation: promptModelOperationSchema,
+    evalRunId: z.string().trim().min(1).max(300),
+    activationReason: z.string().trim().min(1).max(4_000),
+  })
+  .strict();
 
 const feedbackCreateSchema = z
   .object({
@@ -383,6 +434,166 @@ export async function handleAdminListEvaluationRuns(
         },
       },
     );
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminListPromptModelConfigs(
+  request: Request,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const url = new URL(request.url);
+  const parsedDataClass = dataClassSchema.safeParse(
+    optionalSearchParam(url, "data_class") ??
+      optionalSearchParam(url, "dataClass") ??
+      undefined,
+  );
+  if (!parsedDataClass.success) {
+    return invalidRequestResponse(parsedDataClass.error);
+  }
+  const parsedOperation = promptModelOperationSchema.optional().safeParse(
+    optionalSearchParam(url, "operation"),
+  );
+  if (!parsedOperation.success) {
+    return invalidRequestResponse(parsedOperation.error);
+  }
+  const parsedStage = promptModelConfigStageSchema.safeParse(
+    optionalSearchParam(url, "stage"),
+  );
+  if (!parsedStage.success) return invalidRequestResponse(parsedStage.error);
+
+  try {
+    const configs = await listAdminPromptModelConfigs(
+      {
+        dataClass: parsedDataClass.data,
+        operation: parsedOperation.data,
+        stage: parsedStage.data,
+      },
+      store,
+    );
+    return Response.json(
+      {
+        ok: true,
+        configs,
+      },
+      {
+        headers: {
+          "cache-control": "no-store",
+        },
+      },
+    );
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminGetActivePromptModelConfig(
+  request: Request,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const url = new URL(request.url);
+  const parsedDataClass = dataClassSchema.safeParse(
+    optionalSearchParam(url, "data_class") ??
+      optionalSearchParam(url, "dataClass") ??
+      undefined,
+  );
+  if (!parsedDataClass.success) {
+    return invalidRequestResponse(parsedDataClass.error);
+  }
+  const parsedOperation = promptModelOperationSchema.safeParse(
+    optionalSearchParam(url, "operation"),
+  );
+  if (!parsedOperation.success) {
+    return invalidRequestResponse(parsedOperation.error);
+  }
+
+  try {
+    const config = await getAdminActivePromptModelConfig(
+      {
+        dataClass: parsedDataClass.data,
+        operation: parsedOperation.data,
+      },
+      store,
+    );
+    return Response.json(
+      {
+        ok: true,
+        config,
+      },
+      {
+        headers: {
+          "cache-control": "no-store",
+        },
+      },
+    );
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminCreatePromptModelConfig(
+  request: Request,
+  store: AdminStore,
+  env: AdminEnv,
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const parsed = promptModelConfigCreateSchema.safeParse(await parseJson(request));
+  if (!parsed.success) return invalidRequestResponse(parsed.error);
+
+  try {
+    const config = await createAdminPromptModelConfig(
+      {
+        ...parsed.data,
+        createdBy: "admin",
+      },
+      store,
+    );
+    return Response.json({
+      ok: true,
+      config,
+    });
+  } catch (error) {
+    return serviceErrorResponse(error);
+  }
+}
+
+export async function handleAdminActivatePromptModelConfig(
+  request: Request,
+  configId: string,
+  store: AdminStore,
+  env: AdminEnv,
+  now = new Date(),
+) {
+  const auth = authenticateAdminRequest(request, env);
+  if (!auth.ok) return authErrorResponse(auth);
+
+  const parsed = promptModelConfigActivationSchema.safeParse(await parseJson(request));
+  if (!parsed.success) return invalidRequestResponse(parsed.error);
+
+  try {
+    const config = await activateAdminPromptModelConfig(
+      {
+        configId,
+        ...parsed.data,
+      },
+      store,
+      now,
+    );
+    return Response.json({
+      ok: true,
+      config,
+    });
   } catch (error) {
     return serviceErrorResponse(error);
   }
@@ -646,6 +857,34 @@ function authErrorResponse(
 function optionalSearchParam(url: URL, name: string) {
   const value = url.searchParams.get(name);
   return value && value.trim() ? value.trim() : undefined;
+}
+
+function containsSensitiveConfigKey(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsSensitiveConfigKey);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).some(([key, nestedValue]) => {
+    if (isSensitiveConfigKey(key)) return true;
+    return containsSensitiveConfigKey(nestedValue);
+  });
+}
+
+function isSensitiveConfigKey(key: string) {
+  const normalized = key.toLowerCase();
+  return normalized === "authorization" ||
+    normalized === "cookie" ||
+    normalized === "set-cookie" ||
+    normalized === "apikey" ||
+    normalized === "api_key" ||
+    normalized === "api-key" ||
+    normalized === "x-api-key" ||
+    normalized === "secret" ||
+    normalized.endsWith("_secret") ||
+    normalized.endsWith("-secret") ||
+    normalized === "password" ||
+    normalized === "token" ||
+    normalized === "access_token" ||
+    normalized === "refresh_token" ||
+    normalized === "id_token";
 }
 
 function invalidRequestResponse(error: z.ZodError) {

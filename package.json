@@ -14,6 +14,7 @@
     "env:check": "node scripts/env-inventory.mjs",
     "agent:regression-gate": "node scripts/agent-operable-regression-gate.mjs",
     "agent:export-case": "node scripts/agent-export-case.mjs",
+    "agent:config": "node scripts/agent-config.mjs",
     "pipeline:v5:replay": "node scripts/pipeline-v5-replay.mjs",
     "pipeline:v5:eval": "node scripts/pipeline-v5-eval.mjs",
     "data:audit": "node scripts/data-hygiene.mjs audit",

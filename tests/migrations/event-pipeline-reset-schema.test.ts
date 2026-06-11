@@ -223,6 +223,59 @@ describe("event pipeline reset migration", () => {
     );
   });
 
+  it("adds prompt/model config registry for scoped candidate and active configs", () => {
+    expect(allMigrationSql).toContain("create table public.prompt_model_configs");
+    for (const column of [
+      "config_id text not null unique",
+      "data_class text not null default 'production'",
+      "operation text not null",
+      "stage text not null default 'candidate'",
+      "provider text not null",
+      "model text not null",
+      "prompt_version text not null",
+      "prompt_text text not null",
+      "schema_version text not null",
+      "params jsonb not null default '{}'::jsonb",
+      "budget_policy jsonb not null default '{}'::jsonb",
+      "created_reason text not null",
+      "created_by text not null",
+      "activation_eval_run_id text",
+      "activation_reason text",
+      "activated_at timestamptz",
+    ]) {
+      expect(allMigrationSql).toContain(column);
+    }
+    expect(allMigrationSql).toContain(
+      "check (operation in ('cheap_triage', 'full_extract', 'editor_pass', 'judge_eval', 'eval'))",
+    );
+    expect(allMigrationSql).toContain(
+      "check (stage in ('active', 'candidate', 'archived'))",
+    );
+    expect(allMigrationSql).toContain("prompt_model_configs_active_unique_idx");
+    expect(allMigrationSql).toContain("where stage = 'active'");
+    expect(allMigrationSql).toContain(
+      "prompt_model_configs_scope_stage_created_idx",
+    );
+    expect(allMigrationSql).toContain(
+      "prompt_model_configs_activation_metadata_check",
+    );
+    expect(allMigrationSql).toContain(
+      "create or replace function public.activate_prompt_model_config",
+    );
+    expect(allMigrationSql).toContain(
+      "raise exception 'prompt_model_config_not_found:%'",
+    );
+    expect(allMigrationSql).toContain(
+      "set stage = 'archived'",
+    );
+    expect(allMigrationSql).toContain(
+      "returning * into activated",
+    );
+    expect(allMigrationSql).toContain(
+      "alter table public.prompt_model_configs enable row level security",
+    );
+  });
+
   it("does not reintroduce removed active collector and Vercel asset paths", () => {
     expect(sql).not.toMatch(/vercel[_-]?sandbox/i);
     expect(sql).not.toContain(["BLOB", "READ", "WRITE", "TOKEN"].join("_"));

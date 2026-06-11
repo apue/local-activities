@@ -169,6 +169,70 @@ export type AdminProcessingLedgerState =
 
 export type AdminDataClass = "production" | "eval" | "test" | "smoke";
 
+export type AdminPromptModelOperation =
+  | "cheap_triage"
+  | "full_extract"
+  | "editor_pass"
+  | "judge_eval"
+  | "eval";
+
+export type AdminPromptModelConfigStage =
+  | "active"
+  | "candidate"
+  | "archived";
+
+export type AdminPromptModelConfigRecord = {
+  configId: string;
+  dataClass: AdminDataClass;
+  operation: AdminPromptModelOperation;
+  stage: AdminPromptModelConfigStage;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  promptText: string;
+  schemaVersion: string;
+  params: Record<string, unknown>;
+  budgetPolicy: Record<string, unknown>;
+  createdReason: string;
+  createdBy: string;
+  activationEvalRunId?: string;
+  activationReason?: string;
+  activatedAt?: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminPromptModelConfigFilters = {
+  dataClass?: AdminDataClass;
+  operation?: AdminPromptModelOperation;
+  stage?: AdminPromptModelConfigStage;
+};
+
+export type AdminPromptModelConfigCreateInput = {
+  dataClass: AdminDataClass;
+  operation: AdminPromptModelOperation;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  promptText: string;
+  schemaVersion: string;
+  params?: Record<string, unknown>;
+  budgetPolicy?: Record<string, unknown>;
+  createdReason: string;
+  createdBy: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AdminPromptModelConfigActivationInput = {
+  configId: string;
+  dataClass: AdminDataClass;
+  operation: AdminPromptModelOperation;
+  evalRunId: string;
+  activationReason: string;
+  activatedAt: string;
+};
+
 export type AdminFeedbackType =
   | "not_event"
   | "not_public"
@@ -503,6 +567,19 @@ export type AdminStore = {
     status?: AdminEvaluationRunRecord["status"];
     validity?: AdminEvaluationRunRecord["validity"];
   }): Promise<AdminEvaluationRunRecord[]>;
+  listPromptModelConfigs(
+    input: AdminPromptModelConfigFilters,
+  ): Promise<AdminPromptModelConfigRecord[]>;
+  createPromptModelConfig(
+    input: AdminPromptModelConfigCreateInput,
+  ): Promise<AdminPromptModelConfigRecord>;
+  getActivePromptModelConfig(input: {
+    dataClass: AdminDataClass;
+    operation: AdminPromptModelOperation;
+  }): Promise<AdminPromptModelConfigRecord | null>;
+  activatePromptModelConfig(
+    input: AdminPromptModelConfigActivationInput,
+  ): Promise<AdminPromptModelConfigRecord | null>;
   getLlmUsageSummary(input: {
     startsAt?: string;
     range: AdminLlmUsageRange;
@@ -566,6 +643,47 @@ export function listAdminEvaluationRuns(
   store: AdminStore,
 ) {
   return store.listEvaluationRuns({ validity: "valid", ...input });
+}
+
+export function listAdminPromptModelConfigs(
+  input: AdminPromptModelConfigFilters,
+  store: AdminStore,
+) {
+  return store.listPromptModelConfigs({
+    dataClass: input.dataClass ?? "production",
+    operation: input.operation,
+    stage: input.stage,
+  });
+}
+
+export function createAdminPromptModelConfig(
+  input: AdminPromptModelConfigCreateInput,
+  store: AdminStore,
+) {
+  return store.createPromptModelConfig(input);
+}
+
+export function getAdminActivePromptModelConfig(
+  input: {
+    dataClass: AdminDataClass;
+    operation: AdminPromptModelOperation;
+  },
+  store: AdminStore,
+) {
+  return store.getActivePromptModelConfig(input);
+}
+
+export async function activateAdminPromptModelConfig(
+  input: Omit<AdminPromptModelConfigActivationInput, "activatedAt">,
+  store: AdminStore,
+  now = new Date(),
+) {
+  const config = await store.activatePromptModelConfig({
+    ...input,
+    activatedAt: now.toISOString(),
+  });
+  if (!config) throw new Error("prompt_model_config_not_found");
+  return config;
 }
 
 export function listAdminLlmUsageSummary(
