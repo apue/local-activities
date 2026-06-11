@@ -20,6 +20,8 @@
     "agent:inspect-cluster": "node scripts/agent-inspect-cluster.mjs",
     "agent:inspect-event": "node scripts/agent-inspect-event.mjs",
     "agent:inspect-source": "node scripts/agent-inspect-source.mjs",
+    "agent:report": "node scripts/agent-report.mjs",
+    "agent:eval": "node scripts/pipeline-v5-eval.mjs",
     "pipeline:v5:replay": "node scripts/pipeline-v5-replay.mjs",
     "pipeline:v5:eval": "node scripts/pipeline-v5-eval.mjs",
     "data:audit": "node scripts/data-hygiene.mjs audit",
