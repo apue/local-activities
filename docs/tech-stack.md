@@ -96,6 +96,8 @@ the MVP reset.
 ## Active References
 
 - [Event Pipeline Architecture](event-pipeline-architecture.md)
+- [Agent-Operable Event Pipeline](agent-operable-event-pipeline.zh.md)
+- [Agent-Operable Event Pipeline Phase 1 Goal](agent-operable-event-pipeline-goal.md)
 - [Event Pipeline V5 Phase 2 Goal](event-pipeline-v5-phase2-goal.md)
 - [Technical Baseline](technical-baseline.md)
 - [Testing Strategy](testing-strategy.md)
