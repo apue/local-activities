@@ -127,6 +127,27 @@ public-safe corpus cannot exercise poster, QR, or long-image behavior. They must
 follow the same corpus contract as `tests/regression-corpus`, stay outside the
 repository, and write only evaluation artifacts.
 
+## Agent-Operable Phase 1 Regression Gate
+
+Agent-operable work must keep the V5 baseline stable while adding audit,
+feedback, private-corpus, config, and public-acceptance surfaces. The default
+gate is:
+
+```bash
+pnpm agent:regression-gate
+```
+
+This command runs, in order:
+
+- `pnpm test`
+- `pnpm typecheck`
+- `pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store memory`
+- `pnpm pipeline:v5:eval -- --corpus-dir tests/regression-corpus --all --store memory`
+
+Use `pnpm agent:regression-gate -- --dry-run` to inspect the gate plan without
+running it. The gate must remain deterministic and must not require live WeChat,
+live LLM, or production writes.
+
 ## Admin/Public UI
 
 Public checks:

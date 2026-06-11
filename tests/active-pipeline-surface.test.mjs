@@ -12,6 +12,8 @@ const legacyActiveCommands = [
 const activeDocs = [
   "docs/event-pipeline-architecture.md",
   "docs/event-pipeline-v5-phase1-goal.md",
+  "docs/agent-operable-event-pipeline-goal.md",
+  "docs/agent-operable-event-pipeline.zh.md",
   "docs/testing-strategy.md",
   "docs/tech-stack.md",
   "docs/regression-corpus.md",
@@ -27,6 +29,16 @@ describe("active pipeline surface", () => {
     }
 
     expect(packageJson.scripts).toHaveProperty("pipeline:v5:replay");
+    expect(packageJson.scripts).toHaveProperty("pipeline:v5:eval");
+    expect(packageJson.scripts).toHaveProperty("agent:regression-gate");
+  });
+
+  it("exposes the agent-operable regression gate as a deterministic package script", () => {
+    const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+
+    expect(packageJson.scripts["agent:regression-gate"]).toBe(
+      "node scripts/agent-operable-regression-gate.mjs",
+    );
   });
 
   it("does not direct agents to run reset-era replay or eval commands in active docs", () => {
