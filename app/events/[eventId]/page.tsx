@@ -3,6 +3,7 @@ import Link from "next/link";
 import styles from "../../public-event-ui.module.css";
 import {
   formatReservationStatus,
+  formatPublicEventOccurrences,
   formatPublicEventSchedule,
   getPublicEvent,
 } from "../../../src/server/public-events";
@@ -16,12 +17,16 @@ export default async function EventDetailPage({
 }) {
   const { eventId } = await params;
   const event = await getPublicEvent(eventId);
+  const occurrences = formatPublicEventOccurrences(event);
 
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
         <Link className={styles.backLink} href="/">
           Back to upcoming
+        </Link>
+        <Link className={styles.backLink} href="/archive">
+          View all activities
         </Link>
 
         <section className={styles.detailHero}>
@@ -69,6 +74,16 @@ export default async function EventDetailPage({
               <span>Time</span>
               <strong>{formatPublicEventSchedule(event)}</strong>
             </div>
+            {occurrences.length ? (
+              <div className={styles.field}>
+                <span>Occurrences</span>
+                <ul className={styles.occurrenceList}>
+                  {occurrences.map((occurrence) => (
+                    <li key={occurrence}>{occurrence}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div className={styles.field}>
               <span>Venue</span>
               <strong>{event.venueName ?? event.venueAddress ?? "Venue TBA"}</strong>

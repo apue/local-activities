@@ -45,6 +45,53 @@
   line-height: 1.65;
 }
 
+.heroLinks,
+.topNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.heroLinks a,
+.topNav a,
+.topNav span {
+  border: 1px solid #d6d9d1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #315b7c;
+  font-weight: 850;
+  padding: 8px 10px;
+  text-decoration: none;
+}
+
+.topNav {
+  margin-top: 0;
+  margin-bottom: 22px;
+}
+
+.topNav span {
+  color: #20231f;
+}
+
+.archiveHeader {
+  padding: 22px 0 24px;
+}
+
+.archiveHeader h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", "Noto Serif SC", serif;
+  font-size: clamp(2.2rem, 9vw, 4.7rem);
+  line-height: 0.96;
+  font-weight: 500;
+}
+
+.archiveHeader p:last-child {
+  max-width: 650px;
+  color: #566052;
+  line-height: 1.65;
+}
+
 .eventList {
   display: grid;
   gap: 12px;
@@ -245,9 +292,23 @@
 }
 
 .backLink {
+  display: inline-flex;
+  margin-right: 14px;
+  margin-bottom: 8px;
   color: #315b7c;
   font-weight: 850;
   text-decoration: none;
+}
+
+.occurrenceList {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+
+.occurrenceList li {
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 760px) {

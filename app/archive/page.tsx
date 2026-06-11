@@ -1,34 +1,38 @@
 import Link from "next/link";
 
-import styles from "./public-event-ui.module.css";
+import styles from "../public-event-ui.module.css";
 import {
-  formatReservationStatus,
   formatPublicEventSchedule,
-  listPublicUpcomingEvents,
-} from "../src/server/public-events";
+  formatReservationStatus,
+  isPublicEventEnded,
+  listPublicArchiveEvents,
+  type PublicEvent,
+} from "../../src/server/public-events";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
-  const events = await listPublicUpcomingEvents();
+export default async function ArchivePage() {
+  const events = await listPublicArchiveEvents();
+  const now = new Date();
 
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
-        <section className={styles.hero}>
-          <div>
-            <p className={styles.eyebrow}>Beijing activity calendar</p>
-            <h1>Local Activities</h1>
-            <p>
-              Admin-curated activities worth planning for the coming days.
-            </p>
-            <div className={styles.heroLinks}>
-              <Link href="/archive">View all published activities</Link>
-            </div>
-          </div>
+        <nav className={styles.topNav} aria-label="Public views">
+          <Link href="/">Upcoming</Link>
+          <span>All activities</span>
+        </nav>
+
+        <section className={styles.archiveHeader}>
+          <p className={styles.eyebrow}>Published archive</p>
+          <h1>All activities</h1>
+          <p>
+            A public record of published activities, including events that have
+            already ended.
+          </p>
         </section>
 
-        <section className={styles.eventList} aria-label="Upcoming events">
+        <section className={styles.eventList} aria-label="All activities">
           {events.map((event) => (
             <Link
               key={event.eventId}
@@ -46,7 +50,7 @@ export default async function HomePage() {
                 </div>
               ) : null}
               <div className={styles.dateBlock}>
-                {formatPublicEventSchedule(event)}
+                {formatPublicEventSchedule(event, now)}
               </div>
               <div>
                 <h2>{event.title}</h2>
@@ -55,26 +59,22 @@ export default async function HomePage() {
                   <span>{event.organizer ?? "Organizer TBA"}</span>
                   <span>{event.venueName ?? event.venueAddress ?? "Venue TBA"}</span>
                 </div>
-                {event.registrationUrl || event.registrationQrImageUrl ? (
-                  <div className={styles.registrationEvidence}>
-                    {event.registrationUrl ? <span>报名链接</span> : null}
-                    {event.registrationQrImageUrl ? <span>报名二维码</span> : null}
-                  </div>
-                ) : null}
               </div>
               <span className={styles.statusPill}>
-                {formatReservationStatus(event.reservationStatus)}
+                {archiveStatusLabel(event, now)}
               </span>
             </Link>
           ))}
           {events.length === 0 ? (
-            <div className={styles.empty}>
-              No published upcoming activities yet. Check back after the next
-              collector review.
-            </div>
+            <div className={styles.empty}>No published activities yet.</div>
           ) : null}
         </section>
       </div>
     </main>
   );
+}
+
+function archiveStatusLabel(event: PublicEvent, now: Date) {
+  if (isPublicEventEnded(event, now)) return "已结束";
+  return formatReservationStatus(event.reservationStatus);
 }
