@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { AdminCollectorJobRecord } from "./admin-collector-jobs";
 import {
   AdminDraftPublishBlockedError,
+  createAdminFeedback,
   getAdminEventDraftDetail,
+  listAdminFeedback,
   listAdminExcludedArticles,
   listAdminEvaluationRuns,
   listAdminLlmUsageSummary,
@@ -18,6 +20,8 @@ import {
   type AdminExcludedArticleRecord,
   type AdminEventDraftRecord,
   type AdminEvaluationRunRecord,
+  type AdminFeedbackInput,
+  type AdminFeedbackRecord,
   type AdminPipelineRunRecord,
   type AdminProcessingLedgerRecord,
   type AdminStore,
@@ -32,6 +36,9 @@ class MemoryAdminStore implements AdminStore {
   evaluationRunsInput?: Parameters<AdminStore["listEvaluationRuns"]>[0];
   pipelineRuns: AdminPipelineRunRecord[] = [];
   pipelineRunsInput?: Parameters<AdminStore["listPipelineRuns"]>[0];
+  feedbackRows: AdminFeedbackRecord[] = [];
+  feedbackInput?: Parameters<AdminStore["listFeedback"]>[0];
+  createdFeedbackInput?: AdminFeedbackInput;
   llmUsageInput?: Parameters<AdminStore["getLlmUsageSummary"]>[0];
   llmUsageSummary = {
     range: {
@@ -183,6 +190,44 @@ class MemoryAdminStore implements AdminStore {
     };
   }
 
+  async listFeedback(input: Parameters<AdminStore["listFeedback"]>[0]) {
+    this.feedbackInput = input;
+    return this.feedbackRows.filter(
+      (row) =>
+        (!input.dataClass || row.dataClass === input.dataClass) &&
+        (!input.draftId || row.draftId === input.draftId) &&
+        (!input.eventId || row.eventId === input.eventId) &&
+        (!input.articleBundleId ||
+          row.articleBundleId === input.articleBundleId) &&
+        (!input.pipelineRunId || row.pipelineRunId === input.pipelineRunId) &&
+        (!input.status || row.status === input.status),
+    );
+  }
+
+  async createFeedback(input: AdminFeedbackInput) {
+    this.createdFeedbackInput = input;
+    const feedback: AdminFeedbackRecord = {
+      id: "feedback-1",
+      dataClass: input.dataClass,
+      feedbackType: input.feedbackType,
+      pipelineRunId: input.pipelineRunId,
+      articleBundleId: input.articleBundleId,
+      draftId: input.draftId,
+      eventId: input.eventId,
+      fieldName: input.fieldName,
+      oldValue: input.oldValue,
+      correctedValue: input.correctedValue,
+      reason: input.reason,
+      createdBy: input.createdBy,
+      status: "open",
+      metadata: input.metadata ?? {},
+      createdAt: "2026-06-11T10:00:00.000Z",
+      updatedAt: "2026-06-11T10:00:00.000Z",
+    };
+    this.feedbackRows.unshift(feedback);
+    return feedback;
+  }
+
   async promoteExcludedArticle(excludedArticleId: string, promotedAt: string) {
     const article = this.excludedArticles.get(excludedArticleId);
     if (!article) return null;
@@ -304,6 +349,93 @@ describe("admin service", () => {
     expect(store.llmUsageInput).toMatchObject({
       startsAt: "2026-06-03T16:00:00.000Z",
     });
+  });
+
+  it("records structured feedback without mutating draft review or publication state", async () => {
+    const store = new MemoryAdminStore([completeDraft]);
+
+    const feedback = await createAdminFeedback(
+      {
+        dataClass: "production",
+        feedbackType: "wrong_time",
+        draftId: "draft-1",
+        articleBundleId: "bundle-1",
+        fieldName: "startsAt",
+        oldValue: "2026-06-06T06:00:00.000Z",
+        correctedValue: "2026-06-06T07:00:00.000Z",
+        reason: "Human checked the source poster.",
+        createdBy: "operator@example.com",
+      },
+      store,
+    );
+
+    expect(feedback).toMatchObject({
+      id: "feedback-1",
+      feedbackType: "wrong_time",
+      draftId: "draft-1",
+      status: "open",
+    });
+    expect(store.createdFeedbackInput).toMatchObject({
+      dataClass: "production",
+      feedbackType: "wrong_time",
+      draftId: "draft-1",
+      fieldName: "startsAt",
+    });
+    expect(store.drafts.get("draft-1")?.reviewState).toBe("ready_for_review");
+    expect(store.publishedEvents).toEqual([]);
+  });
+
+  it("lists feedback with production defaults and explicit filters", async () => {
+    const store = new MemoryAdminStore();
+    store.feedbackRows = [
+      {
+        id: "feedback-1",
+        dataClass: "production",
+        feedbackType: "missing_qr",
+        articleBundleId: "bundle-1",
+        draftId: "draft-1",
+        fieldName: "registrationQrAssetId",
+        reason: "QR exists in the article image.",
+        createdBy: "operator@example.com",
+        status: "open",
+        metadata: {},
+        createdAt: "2026-06-11T10:00:00.000Z",
+        updatedAt: "2026-06-11T10:00:00.000Z",
+      },
+      {
+        id: "feedback-2",
+        dataClass: "eval",
+        feedbackType: "not_event",
+        articleBundleId: "bundle-2",
+        createdBy: "operator@example.com",
+        status: "resolved",
+        metadata: {},
+        createdAt: "2026-06-11T10:05:00.000Z",
+        updatedAt: "2026-06-11T10:05:00.000Z",
+      },
+    ];
+
+    await expect(
+      listAdminFeedback({ draftId: "draft-1" }, store),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "feedback-1",
+        feedbackType: "missing_qr",
+      }),
+    ]);
+    expect(store.feedbackInput).toEqual({
+      dataClass: "production",
+      draftId: "draft-1",
+    });
+
+    await expect(
+      listAdminFeedback({ dataClass: "eval", status: "resolved" }, store),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "feedback-2",
+        dataClass: "eval",
+      }),
+    ]);
   });
 
   it("returns pipeline runs scoped to production by default", async () => {

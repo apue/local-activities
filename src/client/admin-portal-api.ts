@@ -90,6 +90,51 @@ export async function patchAdminDraft({
   });
 }
 
+export async function listAdminFeedback({
+  dataClass = "production",
+  pipelineRunId,
+  articleBundleId,
+  draftId,
+  eventId,
+  status,
+  fetchImpl = fetch,
+}: AdminPortalApiOptions & {
+  dataClass?: string;
+  pipelineRunId?: string;
+  articleBundleId?: string;
+  draftId?: string;
+  eventId?: string;
+  status?: string;
+}) {
+  const params = new URLSearchParams();
+  params.set("data_class", dataClass);
+  if (pipelineRunId) params.set("pipeline_run_id", pipelineRunId);
+  if (articleBundleId) params.set("article_bundle_id", articleBundleId);
+  if (draftId) params.set("draft_id", draftId);
+  if (eventId) params.set("event_id", eventId);
+  if (status) params.set("status", status);
+
+  return adminApiRequest<{ feedback: unknown[] }>(
+    `/api/admin/feedback?${params.toString()}`,
+    {
+      fetchImpl,
+    },
+  );
+}
+
+export async function createAdminFeedback({
+  feedback,
+  fetchImpl = fetch,
+}: AdminPortalApiOptions & {
+  feedback: Record<string, unknown>;
+}) {
+  return adminApiRequest<{ feedback: unknown }>("/api/admin/feedback", {
+    fetchImpl,
+    method: "POST",
+    body: JSON.stringify(feedback),
+  });
+}
+
 export async function adminApiRequest<T>(
   path: string,
   {

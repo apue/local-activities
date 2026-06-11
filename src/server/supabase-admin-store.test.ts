@@ -660,6 +660,140 @@ describe("supabase admin store", () => {
     );
   });
 
+  it("lists structured admin feedback rows with agent audit filters", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(
+      supabaseClientForAdminFeedback(
+        [
+          {
+            feedback_id: "feedback-1",
+            data_class: "production",
+            feedback_type: "missing_qr",
+            pipeline_run_id: "pipe-1",
+            article_bundle_id: "bundle-1",
+            draft_id: "draft-1",
+            event_id: null,
+            field_name: "registrationQrAssetId",
+            old_value: null,
+            corrected_value: "asset-qr-1",
+            reason: "QR is visible in the source poster.",
+            created_by: "operator@example.com",
+            status: "open",
+            metadata: { safe: "kept" },
+            created_at: "2026-06-11T10:00:00.000Z",
+            updated_at: "2026-06-11T10:00:00.000Z",
+          },
+        ],
+        calls,
+      ),
+    );
+
+    await expect(
+      store.listFeedback({
+        dataClass: "production",
+        draftId: "draft-1",
+        articleBundleId: "bundle-1",
+        status: "open",
+      }),
+    ).resolves.toEqual([
+      {
+        id: "feedback-1",
+        dataClass: "production",
+        feedbackType: "missing_qr",
+        pipelineRunId: "pipe-1",
+        articleBundleId: "bundle-1",
+        draftId: "draft-1",
+        eventId: undefined,
+        fieldName: "registrationQrAssetId",
+        oldValue: undefined,
+        correctedValue: "asset-qr-1",
+        reason: "QR is visible in the source poster.",
+        createdBy: "operator@example.com",
+        status: "open",
+        metadata: { safe: "kept" },
+        createdAt: "2026-06-11T10:00:00.000Z",
+        updatedAt: "2026-06-11T10:00:00.000Z",
+      },
+    ]);
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        ["eq", "data_class", "production"],
+        ["eq", "draft_id", "draft-1"],
+        ["eq", "article_bundle_id", "bundle-1"],
+        ["eq", "status", "open"],
+        ["order", "created_at", false],
+        ["limit", 200],
+      ]),
+    );
+  });
+
+  it("creates structured admin feedback without updating canonical state", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(
+      supabaseClientForAdminFeedback([], calls, {
+        feedback_id: "feedback-created",
+        data_class: "production",
+        feedback_type: "wrong_time",
+        pipeline_run_id: "pipe-1",
+        article_bundle_id: "bundle-1",
+        draft_id: "draft-1",
+        event_id: "event-1",
+        field_name: "startsAt",
+        old_value: "2026-06-06T06:00:00.000Z",
+        corrected_value: "2026-06-06T07:00:00.000Z",
+        reason: "Human verified the poster time.",
+        created_by: "operator@example.com",
+        status: "open",
+        metadata: {},
+        created_at: "2026-06-11T10:00:00.000Z",
+        updated_at: "2026-06-11T10:00:00.000Z",
+      }),
+    );
+
+    await expect(
+      store.createFeedback({
+        dataClass: "production",
+        feedbackType: "wrong_time",
+        pipelineRunId: "pipe-1",
+        articleBundleId: "bundle-1",
+        draftId: "draft-1",
+        eventId: "event-1",
+        fieldName: "startsAt",
+        oldValue: "2026-06-06T06:00:00.000Z",
+        correctedValue: "2026-06-06T07:00:00.000Z",
+        reason: "Human verified the poster time.",
+        createdBy: "operator@example.com",
+      }),
+    ).resolves.toMatchObject({
+      id: "feedback-created",
+      feedbackType: "wrong_time",
+      fieldName: "startsAt",
+      status: "open",
+    });
+
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        [
+          "insert",
+          expect.objectContaining({
+            data_class: "production",
+            feedback_type: "wrong_time",
+            draft_id: "draft-1",
+            event_id: "event-1",
+            field_name: "startsAt",
+            status: "open",
+          }),
+        ],
+        ["select", "admin_feedback_ledger"],
+        ["maybeSingle"],
+      ]),
+    );
+    expect(calls).not.toContainEqual([
+      "from",
+      expect.stringMatching(/event_drafts|canonical_events/),
+    ]);
+  });
+
   it("publishes drafts without poster fields when poster columns are pending", async () => {
     const inserts: Array<{ table: string; payload: Record<string, unknown> }> =
       [];
@@ -1241,6 +1375,47 @@ function supabaseClientReturningLlmUsage(rows: unknown[], calls: unknown[] = [])
   return {
     from(table: string) {
       expect(table).toBe("llm_usage_ledger");
+      return query;
+    },
+  } as never;
+}
+
+function supabaseClientForAdminFeedback(
+  rows: unknown[],
+  calls: unknown[] = [],
+  insertedRow?: unknown,
+) {
+  const query = {
+    select() {
+      calls.push(["select", "admin_feedback_ledger"]);
+      return query;
+    },
+    eq(column: string, value: string) {
+      calls.push(["eq", column, value]);
+      return query;
+    },
+    order(column: string, options?: { ascending?: boolean }) {
+      calls.push(["order", column, Boolean(options?.ascending)]);
+      return query;
+    },
+    limit(count: number) {
+      calls.push(["limit", count]);
+      return Promise.resolve({ data: rows, error: null });
+    },
+    insert(payload: unknown) {
+      calls.push(["insert", payload]);
+      return query;
+    },
+    maybeSingle() {
+      calls.push(["maybeSingle"]);
+      return Promise.resolve({ data: insertedRow, error: null });
+    },
+  };
+
+  return {
+    from(table: string) {
+      calls.push(["from", table]);
+      expect(table).toBe("admin_feedback_ledger");
       return query;
     },
   } as never;

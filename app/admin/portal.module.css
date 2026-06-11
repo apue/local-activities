@@ -444,6 +444,101 @@
   overflow-wrap: anywhere;
 }
 
+.feedbackPanel {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #d6d9d1;
+}
+
+.feedbackHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.feedbackHeader div,
+.feedbackMeta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedbackHeader small,
+.feedbackMeta small,
+.feedbackRow small {
+  color: #667062;
+}
+
+.feedbackForm {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.6fr) minmax(140px, 0.8fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.feedbackForm label {
+  display: grid;
+  gap: 6px;
+}
+
+.feedbackForm label:nth-of-type(3),
+.feedbackForm label:nth-of-type(4),
+.feedbackForm label:nth-of-type(5) {
+  grid-column: span 3;
+}
+
+.feedbackForm span {
+  color: #667062;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.feedbackForm input,
+.feedbackForm select,
+.feedbackForm textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #c8cec2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #20231f;
+  font: inherit;
+  padding: 10px 11px;
+}
+
+.feedbackForm textarea {
+  resize: vertical;
+}
+
+.feedbackList {
+  display: grid;
+  gap: 8px;
+}
+
+.feedbackRow {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #d6d9d1;
+  border-radius: 8px;
+  background: #fbfcf8;
+}
+
+.feedbackRow strong,
+.feedbackRow span,
+.feedbackRow small,
+.feedbackRow p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feedbackRow p {
+  margin: 0;
+}
+
 .blockers {
   display: flex;
   flex-wrap: wrap;
@@ -746,8 +841,15 @@
   .evalRow,
   .pipelineRunHeader,
   .evidenceGrid,
+  .feedbackForm,
   .usageSummary,
   .usageRow {
     grid-template-columns: 1fr;
+  }
+
+  .feedbackForm label:nth-of-type(3),
+  .feedbackForm label:nth-of-type(4),
+  .feedbackForm label:nth-of-type(5) {
+    grid-column: auto;
   }
 }

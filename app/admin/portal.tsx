@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   adminApiRequest,
+  createAdminFeedback,
+  listAdminFeedback,
   loadAdminState,
   loginAdmin,
   patchAdminDraft,
@@ -66,6 +68,7 @@ type EventDraft = {
   softBlockers?: PublishBlocker[];
   operatorOverrideReason?: string;
   publishDecision?: PublishDecision;
+  canonicalEventId?: string;
   confidence: number;
   reviewState: string;
   evidenceAssetIds: string[];
@@ -168,6 +171,7 @@ type ExcludedArticle = {
 
 type ProcessingLedgerRecord = {
   id: string;
+  articleBundleId?: string;
   sourceUrl: string;
   state: string;
   decision?: string;
@@ -181,6 +185,39 @@ type ProcessingLedgerRecord = {
   dataClass: "production" | "eval" | "test" | "smoke";
   errorDetails?: Record<string, unknown>;
   createdAt: string;
+};
+
+type AdminFeedbackType =
+  | "not_event"
+  | "not_public"
+  | "should_publish"
+  | "missing_event"
+  | "wrong_time"
+  | "wrong_location"
+  | "missing_registration"
+  | "missing_qr"
+  | "duplicate_event"
+  | "bad_summary"
+  | "bad_category_or_tags"
+  | "other";
+
+type AdminFeedbackRecord = {
+  id: string;
+  dataClass: "production" | "eval" | "test" | "smoke";
+  feedbackType: AdminFeedbackType;
+  pipelineRunId?: string;
+  articleBundleId?: string;
+  draftId?: string;
+  eventId?: string;
+  fieldName?: string;
+  oldValue?: unknown;
+  correctedValue?: unknown;
+  reason?: string;
+  createdBy: string;
+  status: "open" | "triaged" | "resolved" | "dismissed";
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type EvaluationRun = {
@@ -291,6 +328,21 @@ const emptyUsageSummary: LlmUsageSummary = {
   recent: [],
 };
 
+const feedbackTypeOptions: Array<{ value: AdminFeedbackType; label: string }> = [
+  { value: "not_event", label: "Not an event" },
+  { value: "not_public", label: "Not public" },
+  { value: "should_publish", label: "Should publish" },
+  { value: "missing_event", label: "Missing event" },
+  { value: "wrong_time", label: "Wrong time" },
+  { value: "wrong_location", label: "Wrong location" },
+  { value: "missing_registration", label: "Missing registration" },
+  { value: "missing_qr", label: "Missing QR" },
+  { value: "duplicate_event", label: "Duplicate event" },
+  { value: "bad_summary", label: "Bad summary" },
+  { value: "bad_category_or_tags", label: "Bad category/tags" },
+  { value: "other", label: "Other" },
+];
+
 export function AdminPortal() {
   const [token, setToken] = useState("");
   const [jobs, setJobs] = useState<CollectorJob[]>([]);
@@ -302,6 +354,9 @@ export function AdminPortal() {
   const [ledger, setLedger] = useState<ProcessingLedgerRecord[]>([]);
   const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRun[]>([]);
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
+  const [feedbackByDraftId, setFeedbackByDraftId] = useState<
+    Record<string, AdminFeedbackRecord[]>
+  >({});
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [reviewFilter, setReviewFilter] = useState("");
   const [usageRange, setUsageRange] = useState<UsageRange>("today");
@@ -317,8 +372,24 @@ export function AdminPortal() {
     summary: "",
     entryNotes: "",
   });
+  const [feedbackForm, setFeedbackForm] = useState<{
+    feedbackType: AdminFeedbackType;
+    fieldName: string;
+    oldValue: string;
+    correctedValue: string;
+    reason: string;
+  }>({
+    feedbackType: "other",
+    fieldName: "",
+    oldValue: "",
+    correctedValue: "",
+    reason: "",
+  });
   const [draftAction, setDraftAction] = useState<
     "save" | "needs-info" | "reject" | "publish" | null
+  >(null);
+  const [feedbackAction, setFeedbackAction] = useState<
+    "loading" | "submit" | null
   >(null);
   const [status, setStatus] = useState<ApiState>("idle");
   const [message, setMessage] = useState("Loading admin state...");
@@ -347,6 +418,14 @@ export function AdminPortal() {
   const selectedDraftSourceUrl = selectedDraft
     ? getDraftSourceUrl(selectedDraft)
     : "";
+  const selectedDraftLedgerRows = selectedDraft
+    ? ledger.filter((row) => row.draftId === selectedDraft.id)
+    : [];
+  const selectedDraftArticleBundleId =
+    selectedDraftLedgerRows.find((row) => row.articleBundleId)?.articleBundleId;
+  const selectedDraftFeedback = selectedDraft
+    ? (feedbackByDraftId[selectedDraft.id] ?? [])
+    : [];
 
   useEffect(() => {
     setOperatorOverrideReason(selectedDraft?.operatorOverrideReason ?? "");
@@ -360,7 +439,22 @@ export function AdminPortal() {
       summary: selectedDraft?.summary ?? "",
       entryNotes: selectedDraft?.entryNotes ?? "",
     });
+    setFeedbackForm({
+      feedbackType: "other",
+      fieldName: "",
+      oldValue: "",
+      correctedValue: "",
+      reason: "",
+    });
   }, [selectedDraft?.id, selectedDraft?.operatorOverrideReason]);
+
+  useEffect(() => {
+    if (!selectedDraft?.id) return;
+    void loadFeedbackForDraft(selectedDraft.id);
+    // Feedback is detail data and should follow the selected draft, not every
+    // full admin refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDraft?.id, selectedDraftArticleBundleId]);
 
   async function refresh(options: { usageRange?: UsageRange } = {}) {
     const enteredToken = token.trim();
@@ -410,11 +504,70 @@ export function AdminPortal() {
     }
   }
 
+  async function loadFeedbackForDraft(draftId: string) {
+    setFeedbackAction("loading");
+    try {
+      const response = await listAdminFeedback({
+        dataClass: "production",
+        draftId,
+        articleBundleId: selectedDraftArticleBundleId,
+      });
+      setFeedbackByDraftId((current) => ({
+        ...current,
+        [draftId]: response.feedback as AdminFeedbackRecord[],
+      }));
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Feedback load failed.",
+      );
+    } finally {
+      setFeedbackAction(null);
+    }
+  }
+
   useEffect(() => {
     void refresh();
     // Run once on mount to let an existing HttpOnly cookie restore the session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function submitDraftFeedback() {
+    if (!selectedDraft || !feedbackForm.reason.trim()) return;
+
+    setStatus("loading");
+    setFeedbackAction("submit");
+    setMessage("Saving feedback...");
+    try {
+      await createAdminFeedback({
+        feedback: {
+          dataClass: "production",
+          feedbackType: feedbackForm.feedbackType,
+          draftId: selectedDraft.id,
+          articleBundleId: selectedDraftArticleBundleId,
+          eventId: selectedDraft.canonicalEventId,
+          fieldName: feedbackForm.fieldName.trim() || undefined,
+          oldValue: feedbackForm.oldValue.trim() || undefined,
+          correctedValue: feedbackForm.correctedValue.trim() || undefined,
+          reason: feedbackForm.reason.trim(),
+        },
+      });
+      await loadFeedbackForDraft(selectedDraft.id);
+      setFeedbackForm({
+        feedbackType: "other",
+        fieldName: "",
+        oldValue: "",
+        correctedValue: "",
+        reason: "",
+      });
+      setStatus("ready");
+      setMessage("Feedback saved.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Feedback failed.");
+    } finally {
+      setFeedbackAction(null);
+    }
+  }
 
   async function actOnDraft(action: "needs-info" | "reject" | "publish") {
     if (!selectedDraft) return;
@@ -764,6 +917,140 @@ export function AdminPortal() {
                 >
                   Open source URL · {selectedDraftSourceUrl}
                 </a>
+                <div className={styles.feedbackPanel}>
+                  <div className={styles.feedbackHeader}>
+                    <div>
+                      <strong>Structured feedback</strong>
+                      <small>
+                        {selectedDraftFeedback.length} records
+                        {selectedDraftArticleBundleId
+                          ? ` · ${selectedDraftArticleBundleId}`
+                          : ""}
+                      </small>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void loadFeedbackForDraft(selectedDraft.id)}
+                      disabled={feedbackAction !== null}
+                    >
+                      {feedbackAction === "loading" ? "Loading..." : "Refresh"}
+                    </button>
+                  </div>
+                  <div className={styles.feedbackForm}>
+                    <label>
+                      <span>Type</span>
+                      <select
+                        value={feedbackForm.feedbackType}
+                        onChange={(event) =>
+                          setFeedbackForm((current) => ({
+                            ...current,
+                            feedbackType: event.target.value as AdminFeedbackType,
+                          }))
+                        }
+                      >
+                        {feedbackTypeOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Field</span>
+                      <input
+                        value={feedbackForm.fieldName}
+                        onChange={(event) =>
+                          setFeedbackForm((current) => ({
+                            ...current,
+                            fieldName: event.target.value,
+                          }))
+                        }
+                        placeholder="startsAt, venueName, summary..."
+                      />
+                    </label>
+                    <label>
+                      <span>Old value</span>
+                      <textarea
+                        value={feedbackForm.oldValue}
+                        onChange={(event) =>
+                          setFeedbackForm((current) => ({
+                            ...current,
+                            oldValue: event.target.value,
+                          }))
+                        }
+                        rows={2}
+                      />
+                    </label>
+                    <label>
+                      <span>Corrected value</span>
+                      <textarea
+                        value={feedbackForm.correctedValue}
+                        onChange={(event) =>
+                          setFeedbackForm((current) => ({
+                            ...current,
+                            correctedValue: event.target.value,
+                          }))
+                        }
+                        rows={2}
+                      />
+                    </label>
+                    <label>
+                      <span>Reason</span>
+                      <textarea
+                        value={feedbackForm.reason}
+                        onChange={(event) =>
+                          setFeedbackForm((current) => ({
+                            ...current,
+                            reason: event.target.value,
+                          }))
+                        }
+                        rows={2}
+                      />
+                    </label>
+                    <button
+                      className={styles.primaryButton}
+                      type="button"
+                      onClick={() => void submitDraftFeedback()}
+                      disabled={
+                        !feedbackForm.reason.trim() || feedbackAction !== null
+                      }
+                    >
+                      {feedbackAction === "submit"
+                        ? "Saving feedback..."
+                        : "Save feedback"}
+                    </button>
+                  </div>
+                  <div className={styles.feedbackList}>
+                    {selectedDraftFeedback.map((feedback) => (
+                      <div key={feedback.id} className={styles.feedbackRow}>
+                        <div className={styles.feedbackMeta}>
+                          <strong>{feedback.feedbackType.replaceAll("_", " ")}</strong>
+                          <span>{feedback.status}</span>
+                          <small>{formatDateTime(feedback.createdAt)}</small>
+                        </div>
+                        {feedback.fieldName ? (
+                          <small>Field · {feedback.fieldName}</small>
+                        ) : null}
+                        {feedback.oldValue !== undefined ? (
+                          <small>
+                            Old · {formatFeedbackValue(feedback.oldValue)}
+                          </small>
+                        ) : null}
+                        {feedback.correctedValue !== undefined ? (
+                          <small>
+                            Corrected · {formatFeedbackValue(feedback.correctedValue)}
+                          </small>
+                        ) : null}
+                        {feedback.reason ? <p>{feedback.reason}</p> : null}
+                      </div>
+                    ))}
+                    {selectedDraftFeedback.length === 0 ? (
+                      <div className={styles.empty}>
+                        No structured feedback for this draft.
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
                 <div className={styles.blockers}>
                   {selectedDecision?.hardBlockers.length ? (
                     selectedDecision.hardBlockers.map((blocker) => (
@@ -1211,6 +1498,15 @@ function compactDraftPatch(input: Record<string, string>) {
       .map(([key, value]) => [key, value.trim()] as const)
       .filter(([, value]) => value.length > 0),
   );
+}
+
+function formatFeedbackValue(value: unknown) {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 function getDraftActionBody({

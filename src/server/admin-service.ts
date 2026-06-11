@@ -169,6 +169,69 @@ export type AdminProcessingLedgerState =
 
 export type AdminDataClass = "production" | "eval" | "test" | "smoke";
 
+export type AdminFeedbackType =
+  | "not_event"
+  | "not_public"
+  | "should_publish"
+  | "missing_event"
+  | "wrong_time"
+  | "wrong_location"
+  | "missing_registration"
+  | "missing_qr"
+  | "duplicate_event"
+  | "bad_summary"
+  | "bad_category_or_tags"
+  | "other";
+
+export type AdminFeedbackStatus =
+  | "open"
+  | "triaged"
+  | "resolved"
+  | "dismissed";
+
+export type AdminFeedbackRecord = {
+  id: string;
+  dataClass: AdminDataClass;
+  feedbackType: AdminFeedbackType;
+  pipelineRunId?: string;
+  articleBundleId?: string;
+  draftId?: string;
+  eventId?: string;
+  fieldName?: string;
+  oldValue?: unknown;
+  correctedValue?: unknown;
+  reason?: string;
+  createdBy: string;
+  status: AdminFeedbackStatus;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminFeedbackInput = {
+  dataClass: AdminDataClass;
+  feedbackType: AdminFeedbackType;
+  pipelineRunId?: string;
+  articleBundleId?: string;
+  draftId?: string;
+  eventId?: string;
+  fieldName?: string;
+  oldValue?: unknown;
+  correctedValue?: unknown;
+  reason?: string;
+  createdBy: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AdminFeedbackFilters = {
+  dataClass?: AdminDataClass;
+  pipelineRunId?: string;
+  articleBundleId?: string;
+  draftId?: string;
+  eventId?: string;
+  status?: AdminFeedbackStatus;
+};
+
 export type AdminProcessingLedgerRecord = {
   id: string;
   articleBundleId?: string;
@@ -445,6 +508,8 @@ export type AdminStore = {
     range: AdminLlmUsageRange;
     filters?: AdminLlmUsageFilters;
   }): Promise<AdminLlmUsageSummary>;
+  listFeedback(input: AdminFeedbackFilters): Promise<AdminFeedbackRecord[]>;
+  createFeedback(input: AdminFeedbackInput): Promise<AdminFeedbackRecord>;
   publishEventDraft(input: {
     draft: AdminEventDraftRecord;
     publishedAt: string;
@@ -514,6 +579,27 @@ export function listAdminLlmUsageSummary(
     range,
     filters: input.filters,
   });
+}
+
+export function listAdminFeedback(
+  input: AdminFeedbackFilters,
+  store: AdminStore,
+) {
+  return store.listFeedback({
+    dataClass: input.dataClass ?? "production",
+    pipelineRunId: input.pipelineRunId,
+    articleBundleId: input.articleBundleId,
+    draftId: input.draftId,
+    eventId: input.eventId,
+    status: input.status,
+  });
+}
+
+export function createAdminFeedback(
+  input: AdminFeedbackInput,
+  store: AdminStore,
+) {
+  return store.createFeedback(input);
 }
 
 export async function promoteAdminExcludedArticle(
