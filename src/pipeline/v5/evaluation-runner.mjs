@@ -83,9 +83,13 @@ export async function runV5Evaluation({
   if (!corpusDir && !replayResult) throw new Error("v5_evaluation_corpus_dir_required");
   const selectedVariants = normalizeVariants(variants);
   guardRuntime({ allowLive, maxCostCny, target, variants: selectedVariants });
-  const unsupportedVariant = selectedVariants.find((variant) => !supportedVariants.has(variant));
+  const unsupportedVariant = selectedVariants.find((variant) => {
+    return !supportedVariants.has(baseVariantFromEvaluationVariant(variant));
+  });
   if (unsupportedVariant) throw new Error(`v5_evaluation_variant_unsupported:${unsupportedVariant}`);
-  const configuredLiveEvaluator = selectedVariants.some((variant) => liveVariants.has(variant))
+  const configuredLiveEvaluator = selectedVariants.some((variant) => {
+    return liveVariants.has(baseVariantFromEvaluationVariant(variant));
+  })
     ? liveEvaluator ?? createLiveConfiguredV5Evaluator({ env, fetchImpl, maxCostCny, now })
     : undefined;
 
@@ -168,6 +172,79 @@ export async function runV5Evaluation({
   return summary;
 }
 
+export async function runV5EvaluationComparison({
+  baselineConfig,
+  candidateConfig,
+  gates,
+  ...evaluationInput
+} = {}) {
+  const baseline = normalizeComparisonConfig(baselineConfig, "baseline");
+  const candidate = normalizeComparisonConfig(candidateConfig, "candidate");
+  assertExecutableDifference({ baseline, candidate });
+  const baselineRunVariant = comparisonRunVariant("baseline", baseline);
+  const candidateRunVariant = comparisonRunVariant("candidate", candidate);
+  const variants = [baselineRunVariant, candidateRunVariant];
+  const evaluationWriter = evaluationInput.writer ?? writerForStore({
+    store: evaluationInput.store ?? "memory",
+    artifactDir: evaluationInput.artifactDir ?? defaultArtifactDir,
+  });
+  const evaluation = await runV5Evaluation({
+    ...evaluationInput,
+    writer: evaluationWriter,
+    variants,
+  });
+  const comparisonPath = evaluation.summaryPath.replace(/summary\.json$/, "comparison.json");
+  const baselineCases = casesForVariant(evaluation.cases, baselineRunVariant);
+  const candidateCases = casesForVariant(evaluation.cases, candidateRunVariant);
+  const baselineMetrics = computeComparisonMetrics(baselineCases);
+  const candidateMetrics = computeComparisonMetrics(candidateCases);
+  const regressions = compareCaseRegressions({
+    baselineCases,
+    candidateCases,
+  });
+  const resolvedGates = evaluateComparisonGates({
+    baselineMetrics,
+    candidateMetrics,
+    regressions,
+    gates,
+  });
+  const failedGates = resolvedGates.filter((gate) => !gate.passed);
+  const report = {
+    kind: "v5_baseline_candidate_eval_comparison",
+    runId: evaluation.runId,
+    corpusVersion: evaluation.corpusVersion,
+    caseCount: evaluation.caseCount,
+    runCount: evaluation.runCount,
+    store: evaluation.store,
+    artifactDir: evaluation.artifactDir,
+    summaryPath: evaluation.summaryPath,
+    comparisonPath,
+    artifactPaths: [comparisonPath, ...evaluation.artifactPaths],
+    baseline: {
+      ...baseline,
+      runVariant: baselineRunVariant,
+      summary: evaluation.variantSummaries.find((summary) => summary.variant === baselineRunVariant),
+      metrics: baselineMetrics,
+    },
+    candidate: {
+      ...candidate,
+      runVariant: candidateRunVariant,
+      summary: evaluation.variantSummaries.find((summary) => summary.variant === candidateRunVariant),
+      metrics: candidateMetrics,
+    },
+    gates: resolvedGates,
+    regressions,
+    recommended: failedGates.length === 0,
+    recommendation: {
+      status: failedGates.length === 0 ? "recommended" : "not_recommended",
+      failedGates: failedGates.map((gate) => gate.name),
+      reasons: failedGates.map((gate) => gate.reason),
+    },
+  };
+  await evaluationWriter.writeArtifact(comparisonPath, report);
+  return report;
+}
+
 export function parseV5EvaluationArgs(argv = []) {
   const options = {
     store: "local",
@@ -177,6 +254,12 @@ export function parseV5EvaluationArgs(argv = []) {
     variants: [],
     allowLive: false,
     envFiles: [],
+  };
+  const comparison = {
+    baselineConfig: {},
+    candidateConfig: {},
+    gates: {},
+    seen: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -201,6 +284,34 @@ export function parseV5EvaluationArgs(argv = []) {
     } else if (arg === "--variant") {
       options.variants.push(requiredValue(argv, index, arg));
       index += 1;
+    } else if (arg === "--baseline-config-id") {
+      comparison.seen = true;
+      comparison.baselineConfig.configId = requiredValue(argv, index, arg);
+      index += 1;
+    } else if (arg === "--baseline-variant") {
+      comparison.seen = true;
+      comparison.baselineConfig.variant = requiredValue(argv, index, arg);
+      index += 1;
+    } else if (arg === "--candidate-config-id") {
+      comparison.seen = true;
+      comparison.candidateConfig.configId = requiredValue(argv, index, arg);
+      index += 1;
+    } else if (arg === "--candidate-variant") {
+      comparison.seen = true;
+      comparison.candidateConfig.variant = requiredValue(argv, index, arg);
+      index += 1;
+    } else if (arg === "--max-false-positive-rate") {
+      comparison.seen = true;
+      comparison.gates.maxFalsePositiveRate = parseNonNegativeNumber(requiredValue(argv, index, arg), arg);
+      index += 1;
+    } else if (arg === "--max-monthly-cost-cny") {
+      comparison.seen = true;
+      comparison.gates.maxMonthlyEstimatedTokenCostCny = parseNonNegativeNumber(requiredValue(argv, index, arg), arg);
+      index += 1;
+    } else if (arg === "--monthly-estimated-cost-micro-cny") {
+      comparison.seen = true;
+      comparison.gates.monthlyEstimatedCostMicroCny = parseNonNegativeNumber(requiredValue(argv, index, arg), arg);
+      index += 1;
     } else if (arg === "--target") {
       options.target = requiredValue(argv, index, arg);
       if (options.target === "production") throw new Error("v5_evaluation_refuses_production_target");
@@ -216,6 +327,19 @@ export function parseV5EvaluationArgs(argv = []) {
     } else {
       throw new Error(`v5_evaluation_arg_unknown:${arg}`);
     }
+  }
+  if (comparison.seen) {
+    options.comparison = {
+      baselineConfig: comparison.baselineConfig,
+      candidateConfig: comparison.candidateConfig,
+      gates: comparison.gates,
+    };
+    normalizeComparisonConfig(options.comparison.baselineConfig, "baseline");
+    normalizeComparisonConfig(options.comparison.candidateConfig, "candidate");
+    options.variants = [
+      options.comparison.baselineConfig.variant,
+      options.comparison.candidateConfig.variant,
+    ];
   }
   if (options.variants.length === 0) options.variants = [...defaultV5EvaluationVariants];
   guardRuntime(options);
@@ -237,9 +361,10 @@ async function evaluateCaseVariant({
 }) {
   const expectedAction = caseItem.expected.action;
   const expectedFinalState = finalStateFromExpectedAction(expectedAction);
-  const prediction = liveVariants.has(variant)
+  const baseVariant = baseVariantFromEvaluationVariant(variant);
+  const prediction = liveVariants.has(baseVariant)
     ? await livePredictionForVariant({
-      variant,
+      variant: baseVariant,
       caseItem,
       replayCase,
       liveEvaluator,
@@ -248,7 +373,7 @@ async function evaluateCaseVariant({
       llmCallLedger,
       evaluationRunId,
     })
-    : predictionForVariant({ variant, expectedAction, replayCase });
+    : predictionForVariant({ variant: baseVariant, expectedAction, replayCase });
   const actionCorrect = prediction.action === expectedAction;
   const finalStateCorrect = prediction.finalState === expectedFinalState;
   const passed = actionCorrect && finalStateCorrect;
@@ -258,6 +383,7 @@ async function evaluateCaseVariant({
   return {
     caseId: caseItem.case.id,
     variant,
+    baseVariant,
     status: passed ? "passed" : "failed",
     expectedAction,
     predictedAction: prediction.action,
@@ -465,6 +591,196 @@ function summarizeResults({ variant, results }) {
   };
 }
 
+function normalizeComparisonConfig(config, role) {
+  if (!config || typeof config !== "object") {
+    throw new Error(`v5_evaluation_${role}_config_required`);
+  }
+  const configId = clean(config.configId ?? config.id);
+  if (!configId) throw new Error(`v5_evaluation_${role}_config_id_required`);
+  const variant = clean(config.variant ?? config.params?.variant);
+  if (!variant) throw new Error(`v5_evaluation_${role}_variant_required`);
+  if (!supportedVariants.has(variant)) {
+    throw new Error(`v5_evaluation_variant_unsupported:${variant}`);
+  }
+  return {
+    configId,
+    variant,
+    configFingerprint: clean(config.configFingerprint),
+    provider: clean(config.provider),
+    model: clean(config.model),
+    promptVersion: clean(config.promptVersion),
+    schemaVersion: clean(config.schemaVersion),
+    dataClass: clean(config.dataClass),
+    params: plainObject(config.params),
+  };
+}
+
+function assertExecutableDifference({ baseline, candidate }) {
+  if (baseline.variant !== candidate.variant) return;
+  if (comparisonFingerprint(baseline) !== comparisonFingerprint(candidate)) return;
+  throw new Error("v5_evaluation_candidate_config_has_no_executable_difference");
+}
+
+function comparisonFingerprint(config) {
+  return JSON.stringify({
+    variant: config.variant,
+    configFingerprint: config.configFingerprint,
+    provider: config.provider,
+    model: config.model,
+    promptVersion: config.promptVersion,
+    schemaVersion: config.schemaVersion,
+    params: config.params,
+  });
+}
+
+function comparisonRunVariant(role, config) {
+  return `${config.variant}@${role}-${safeArtifactSegment(config.configId)}`;
+}
+
+function baseVariantFromEvaluationVariant(variant) {
+  const normalized = clean(variant);
+  return normalized?.split("@")[0];
+}
+
+function plainObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function casesForVariant(cases = [], variant) {
+  return cases.filter((item) => item.variant === variant);
+}
+
+function computeComparisonMetrics(cases = []) {
+  const caseCount = cases.length;
+  const expectedExtractCount = cases.filter((item) => item.expectedAction === "extract").length;
+  const predictedExtractCount = cases.filter((item) => item.predictedAction === "extract").length;
+  const correctExtractCount = cases.filter(
+    (item) => item.expectedAction === "extract" && item.predictedAction === "extract",
+  ).length;
+  const expectedExcludeCount = cases.filter((item) => item.expectedAction === "exclude").length;
+  const correctExcludeCount = cases.filter(
+    (item) => item.expectedAction === "exclude" && item.predictedAction === "exclude",
+  ).length;
+  const reviewCount = cases.filter((item) => item.predictedAction === "review").length;
+  const totalUsage = sumUsage(cases.map((item) => item.totalUsage));
+  const latencies = cases
+    .map((item) => normalizeUsage(item.totalUsage).latencyMs)
+    .filter((value) => value > 0)
+    .sort((a, b) => a - b);
+  return {
+    caseCount,
+    actionAccuracy: ratio(
+      cases.filter((item) => item.actionCorrect).length,
+      caseCount,
+    ),
+    finalStateAccuracy: ratio(
+      cases.filter((item) => item.finalStateCorrect).length,
+      caseCount,
+    ),
+    falsePositiveRate: ratio(
+      cases.filter((item) => item.falsePositive).length,
+      caseCount,
+    ),
+    falseNegativeRate: ratio(
+      cases.filter((item) => item.falseNegative).length,
+      caseCount,
+    ),
+    needsReviewRate: ratio(reviewCount, caseCount),
+    publicEventRecall: ratio(correctExtractCount, expectedExtractCount),
+    nonEventPrecision: ratio(correctExcludeCount, expectedExcludeCount),
+    autoPublishPrecision: ratio(correctExtractCount, predictedExtractCount),
+    costPerArticleMicroCny: ratio(totalUsage.costMicroCny, caseCount),
+    costPerPublishedEventMicroCny: nullableRatio(totalUsage.costMicroCny, predictedExtractCount),
+    latencyP50Ms: percentile(latencies, 0.5),
+    latencyP95Ms: percentile(latencies, 0.95),
+    totalUsage,
+  };
+}
+
+function compareCaseRegressions({ baselineCases = [], candidateCases = [] } = {}) {
+  const baselineByCase = new Map(baselineCases.map((item) => [item.caseId, item]));
+  return candidateCases.flatMap((candidateCase) => {
+    const baselineCase = baselineByCase.get(candidateCase.caseId);
+    if (!baselineCase || baselineCase.status !== "passed" || candidateCase.status === "passed") {
+      return [];
+    }
+    return [{
+      caseId: candidateCase.caseId,
+      failureTypes: failureTypesForCase(candidateCase),
+      expectedAction: candidateCase.expectedAction,
+      baselineAction: baselineCase.predictedAction,
+      candidateAction: candidateCase.predictedAction,
+      expectedFinalState: candidateCase.expectedFinalState,
+      baselineFinalState: baselineCase.predictedFinalState,
+      candidateFinalState: candidateCase.predictedFinalState,
+      baselineArtifactPaths: baselineCase.artifactPaths ?? [],
+      candidateArtifactPaths: candidateCase.artifactPaths ?? [],
+    }];
+  });
+}
+
+function failureTypesForCase(caseResult) {
+  const types = [];
+  if (caseResult.falsePositive) types.push("false_positive");
+  if (caseResult.falseNegative) types.push("false_negative");
+  if (!caseResult.actionCorrect) types.push("action_mismatch");
+  if (!caseResult.finalStateCorrect) types.push("final_state_mismatch");
+  return types.length > 0 ? types : ["unknown_regression"];
+}
+
+function evaluateComparisonGates({
+  baselineMetrics,
+  candidateMetrics,
+  regressions,
+  gates = {},
+}) {
+  const maxFalsePositiveRate = finiteNumber(gates.maxFalsePositiveRate, 0.1);
+  const maxMonthlyEstimatedTokenCostCny = finiteNumber(
+    gates.maxMonthlyEstimatedTokenCostCny,
+    100,
+  );
+  const monthlyEstimateMicroCny = Number(gates.monthlyEstimatedCostMicroCny);
+  const hasMonthlyEstimate = Number.isFinite(monthlyEstimateMicroCny);
+  const monthlyEstimatedTokenCostCny = hasMonthlyEstimate
+    ? microCnyToCny(monthlyEstimateMicroCny)
+    : null;
+  const requireMonthlyEstimatedCost = gates.requireMonthlyEstimatedCost !== false;
+  return [
+    {
+      name: "false_positive_rate",
+      passed: candidateMetrics.falsePositiveRate <= maxFalsePositiveRate,
+      value: candidateMetrics.falsePositiveRate,
+      threshold: maxFalsePositiveRate,
+      reason: `candidate false positive rate ${candidateMetrics.falsePositiveRate} must be <= ${maxFalsePositiveRate}`,
+    },
+    {
+      name: "monthly_estimated_token_cost_cny",
+      passed: monthlyEstimatedTokenCostCny === null
+        ? !requireMonthlyEstimatedCost
+        : monthlyEstimatedTokenCostCny <= maxMonthlyEstimatedTokenCostCny,
+      value: monthlyEstimatedTokenCostCny,
+      threshold: maxMonthlyEstimatedTokenCostCny,
+      reason: monthlyEstimatedTokenCostCny === null
+        ? "candidate estimated monthly token cost is required for recommendation"
+        : `candidate estimated monthly token cost ${monthlyEstimatedTokenCostCny} CNY must be <= ${maxMonthlyEstimatedTokenCostCny} CNY`,
+    },
+    {
+      name: "known_bad_regressions",
+      passed: regressions.length === 0,
+      value: regressions.length,
+      threshold: 0,
+      reason: `candidate must not regress cases that baseline passed`,
+    },
+    {
+      name: "auto_publish_precision_at_least_baseline",
+      passed: candidateMetrics.autoPublishPrecision >= baselineMetrics.autoPublishPrecision,
+      value: candidateMetrics.autoPublishPrecision,
+      baselineValue: baselineMetrics.autoPublishPrecision,
+      reason: `candidate auto-publish precision ${candidateMetrics.autoPublishPrecision} must be >= baseline ${baselineMetrics.autoPublishPrecision}`,
+    },
+  ];
+}
+
 function normalizeVariants(variants) {
   if (!Array.isArray(variants) || variants.length === 0) return [...defaultV5EvaluationVariants];
   return variants;
@@ -535,6 +851,36 @@ function safeNumber(value) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function finiteNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function ratio(numerator, denominator) {
+  if (!Number.isFinite(denominator) || denominator <= 0) return 0;
+  const value = Number(numerator) / denominator;
+  return Number.isFinite(value) ? value : 0;
+}
+
+function nullableRatio(numerator, denominator) {
+  if (!Number.isFinite(denominator) || denominator <= 0) return null;
+  const value = Number(numerator) / denominator;
+  return Number.isFinite(value) ? value : null;
+}
+
+function percentile(values, quantile) {
+  if (!Array.isArray(values) || values.length === 0) return 0;
+  const index = Math.min(
+    values.length - 1,
+    Math.max(0, Math.ceil(values.length * quantile) - 1),
+  );
+  return values[index] ?? 0;
+}
+
+function microCnyToCny(value) {
+  return finiteNumber(value, 0) / 1_000_000;
+}
+
 function writerForStore({ store, artifactDir }) {
   if (store === "memory") return createMemoryV5EvaluationWriter();
   if (store === "local") return createLocalV5EvaluationWriter({ artifactDir });
@@ -543,7 +889,7 @@ function writerForStore({ store, artifactDir }) {
 
 function guardRuntime({ allowLive, maxCostCny, target, variants = [] }) {
   if (target === "production") throw new Error("v5_evaluation_refuses_production_target");
-  if (variants.some((variant) => liveVariants.has(variant)) && allowLive !== true) {
+  if (variants.some((variant) => liveVariants.has(baseVariantFromEvaluationVariant(variant))) && allowLive !== true) {
     throw new Error("v5_evaluation_live_requires_allow_live");
   }
   if (allowLive && !(Number.isFinite(maxCostCny) && maxCostCny > 0)) {
@@ -649,6 +995,12 @@ function actionFromPublishState(state) {
 function parsePositiveNumber(value, arg) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) throw new Error(`v5_evaluation_number_invalid:${arg}`);
+  return number;
+}
+
+function parseNonNegativeNumber(value, arg) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) throw new Error(`v5_evaluation_number_invalid:${arg}`);
   return number;
 }
 
