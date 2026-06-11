@@ -173,6 +173,99 @@ Issue 与模块的关系应是“一个 issue 扩展某个 contract 后面的实
 - eval comparison issue 必须复用 V5 pipeline runner，不能复制 extractor/editor。
 - public acceptance issue 只改 public read model/UI，不改变 event publish policy。
 
+## Agent-Readable Observability Layer
+
+为了让 Codex 自己判断“最近一周行为是否符合期待”，系统需要一层面向 agent 的
+observability，而不是只给人看的 dashboard。
+
+这层可以理解为：
+
+```text
+Project skill = 操作手册、判断流程、权限边界
+Audit scripts = CRUD + 聚合 + evidence pack 生成，类似轻量 audit ETL
+Codex = 读取事实包、推理、归因、决定修复路径
+```
+
+Audit scripts 不应该替 Codex 下最终结论。它们应稳定地产生事实、特征、候选集合
+和证据入口，让 Codex 在这些高质量上下文上推理。
+
+默认流程：
+
+```text
+agent:audit --days 7
+-> audit facts
+-> candidate index
+-> public acceptance snapshot
+-> usage summary
+-> short audit brief
+-> Codex reasoning
+-> evidence drilldown
+-> optional corpus export / eval / PR
+```
+
+建议输出：
+
+```text
+.agent-runs/<run-id>/
+  audit-facts.json
+  candidate-index.json
+  public-snapshot.json
+  usage-summary.json
+  audit-brief.md
+  evidence/
+```
+
+`audit-facts.json` 应覆盖：
+
+- source volume、freshness 和 failure。
+- article -> candidate -> draft -> event 的 pipeline funnel。
+- published / review / excluded / failed counts。
+- public homepage、Archive 和 detail visibility snapshot。
+- LLM usage、cost、provider/model error。
+- feedback 和 review action。
+
+`candidate-index.json` 可以包含值得 Codex 关注的候选，但这些候选不是最终判断：
+
+- volume shift：本周活动明显太多或太少。
+- funnel drop：某个 pipeline stage 转化率异常。
+- duplicate-like cluster：多个 event 可能其实是同一活动。
+- update-like misclassification：更新文章可能被当成新活动。
+- missing evidence：应有 poster/QR/registration 但公开结果缺失。
+- provider error cluster：某个 provider/model/operation 失败集中。
+- public visibility gap：DB 已发布但公开页面不可见，或详情页不可访问。
+- usage spike：token 或成本异常。
+- review backlog：待审核堆积。
+
+每个 candidate 应包含：
+
+```text
+candidate_id
+candidate_type
+severity_hint
+signals
+affected_source_ids
+affected_article_ids
+affected_event_ids
+artifact_paths
+drilldown_command
+```
+
+Drilldown scripts 负责生成 evidence pack，例如：
+
+```bash
+pnpm agent:inspect-finding -- --finding-id <id>
+pnpm agent:inspect-cluster -- --cluster-id <id>
+pnpm agent:inspect-event -- --event-id <id>
+pnpm agent:inspect-source -- --source-id <id>
+```
+
+Evidence pack 应返回相关 DB rows、pipeline steps、LLM artifacts、source bundle、
+public URL snapshot、similarity signals 和 usage/error records。
+
+Project-level skill 可以放在 `.agents/skills/local-activities-weekly-audit/`。
+Skill 只描述何时运行 audit、如何阅读输出、何时 drill down、何时导出 eval case、
+哪些动作需要 approval。Skill 不应复制 SQL、schema 或业务规则。
+
 ## 核心模块
 
 ### 1. Detailed Pipeline Artifacts
@@ -409,20 +502,26 @@ auto_publish_precision 不低于 baseline
 如果 candidate 更便宜但质量明显下降，不应推荐。
 如果 candidate 更贵但显著降低误发，可进入 review。
 
-### 7. Agent Audit CLI
+### 7. Weekly Audit CLI And Report Generator
 
 Agent 不应只能通过 admin UI 分析系统。需要 CLI 或 script 入口。
 
 建议命令：
 
 ```bash
-pnpm agent:audit -- --env-file .env.local --days 7
+pnpm agent:audit -- --env-file .env.local --days 7 --output-dir .agent-runs/<run-id>
+pnpm agent:inspect-finding -- --finding-id <id> --output-dir .agent-runs/<run-id>/evidence
+pnpm agent:inspect-cluster -- --cluster-id <id> --output-dir .agent-runs/<run-id>/evidence
+pnpm agent:inspect-event -- --event-id <id> --output-dir .agent-runs/<run-id>/evidence
+pnpm agent:inspect-source -- --source-id <id> --output-dir .agent-runs/<run-id>/evidence
 pnpm agent:export-case -- --pipeline-run-id <id> --output-dir <private-corpus>
 pnpm agent:eval -- --corpus-dir <private-corpus> --baseline active --candidate <config-id>
 pnpm agent:report -- --eval-run-id <id>
 ```
 
-输出应是结构化 JSON + 简短 Markdown report，方便 agent 和人都能读。
+`agent:audit` 输出 agent-readable fact packet 和 candidate index。Drilldown
+命令输出 evidence pack。`agent:report` 输出结构化 JSON + 简短 Markdown report，
+方便 agent 和人都能读。
 
 ### 8. Admin Surface
 
@@ -552,7 +651,9 @@ operator 点击 “漏二维码”
 - feedback API test。
 - private corpus builder leakage test。
 - baseline/candidate eval comparison test。
-- agent audit CLI fixture test。
+- agent audit packet fixture test。
+- evidence drilldown fixture test。
+- project weekly audit skill smoke test。
 - admin feedback UI API test。
 - public acceptance surface test。
 
@@ -591,7 +692,10 @@ plane。V5 继续提供：
 - private corpus builder。
 - prompt/model config registry。
 - baseline/candidate eval report。
+- weekly audit fact packet。
+- evidence drilldown scripts。
 - agent audit CLI。
+- project weekly audit skill。
 
 ## 非目标
 

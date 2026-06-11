@@ -86,10 +86,12 @@ issue -> branch -> implementation -> tests -> PR -> checks -> merge -> handoff
 5. 基于 pipeline run 和 feedback 的 private corpus builder。
 6. Prompt/model config registry。
 7. Baseline vs candidate eval comparison。
-8. Agent audit CLI 和 report generator。
-9. Admin feedback 与质量摘要界面。
-10. Public acceptance surface。
-11. 最终验证和 handoff。
+8. Weekly audit fact packet 和 evidence drilldown interfaces。
+9. Project weekly audit skill。
+10. Agent audit CLI 和 report generator。
+11. Admin feedback 与质量摘要界面。
+12. Public acceptance surface。
+13. 最终验证和 handoff。
 
 ## 模块边界硬约束
 
@@ -284,12 +286,89 @@ auto_publish_precision >= baseline
 - Report 按 case id 和 failure type 标识回归。
 - 测试比较两个 fake variants，并断言 recommendation 行为。
 
-### 7. Agent Audit CLI
+### 7. Weekly Audit Fact Packet And Drilldown Interfaces
 
 必需命令：
 
 ```bash
-pnpm agent:audit -- --env-file .env.local --days 7
+pnpm agent:audit -- --env-file .env.local --days 7 --output-dir .agent-runs/<run-id>
+pnpm agent:inspect-finding -- --finding-id <id> --output-dir .agent-runs/<run-id>/evidence
+pnpm agent:inspect-cluster -- --cluster-id <id> --output-dir .agent-runs/<run-id>/evidence
+pnpm agent:inspect-event -- --event-id <id> --output-dir .agent-runs/<run-id>/evidence
+pnpm agent:inspect-source -- --source-id <id> --output-dir .agent-runs/<run-id>/evidence
+```
+
+必需行为：
+
+- `agent:audit` 生成 agent-readable audit packet，而不是替 Codex 下最终诊断。
+- 默认只读 production/eval/test/smoke 数据，不执行 production mutation。
+- 输出目录至少包含：
+  - `audit-facts.json`
+  - `candidate-index.json`
+  - `public-snapshot.json`
+  - `usage-summary.json`
+  - `audit-brief.md`
+- `audit-facts.json` 覆盖 source health、pipeline funnel、published/review/excluded/
+  failed counts、public visibility、usage/cost、provider errors、feedback。
+- `candidate-index.json` 只记录值得 Codex 推理的候选，不记录不可追溯的最终结论。
+- 每个 candidate 包含 `candidate_id`、`candidate_type`、`severity_hint`、`signals`、
+  affected ids、artifact paths 和 drilldown command。
+- Drilldown commands 生成 evidence pack，包含相关 DB rows、pipeline steps、LLM
+  artifacts、source bundle、public URL snapshot、similarity signals 和 usage/error
+  records。
+
+建议 candidate types：
+
+```text
+volume_shift
+funnel_drop
+possible_duplicate_cluster
+possible_update_misclassified_as_new
+missing_evidence_assets
+provider_error_cluster
+public_visibility_gap
+usage_spike
+review_backlog
+```
+
+验收标准：
+
+- Codex 可以只通过 audit packet 判断下一步应该 drill down 哪些候选。
+- Drilldown evidence pack 能让 Codex 归因到 source/capture、extractor、editor、
+  dedupe、publish policy、public UI 或 provider/model。
+- 候选生成逻辑不把 `severity_hint` 当成最终根因。
+- 测试使用 fake/local stores，断言输出 schema、candidate links 和 evidence paths。
+- 默认命令不写 production 数据。
+
+### 8. Project Weekly Audit Skill
+
+必需行为：
+
+- 新增或更新 project-level skill，例如：
+  `.agents/skills/local-activities-weekly-audit/SKILL.md`。
+- Skill 描述何时触发 weekly audit，例如用户说“最近一周表现如何”“活动太少”
+  “误发很多”“你自己查一下系统哪里不正常”。
+- Skill 引导 Codex 读取本文档、运行 `agent:audit`、阅读 audit packet、选择
+  drilldown、必要时导出 private corpus 和运行 eval。
+- Skill 明确权限边界：
+  - 允许只读 audit、drilldown、case export、non-production eval、开 issue/PR。
+  - 不允许默认清 production、切 active config、批量 publish/reject、超预算 live
+    eval 或修改 secrets。
+- Skill 不复制 SQL、schema、prompt 或业务规则；这些必须留在 repo contracts、
+  scripts 和文档中。
+
+验收标准：
+
+- Codex 在没有聊天历史的情况下，能根据 skill 和 repo docs 完成一次只读 weekly
+  audit。
+- Skill 正确引用 audit scripts 和相关 docs。
+- Skill 保持精简，不把详细 schema 或 SQL 粘进 `SKILL.md`。
+
+### 9. Agent Audit Report Generator
+
+必需命令：
+
+```bash
 pnpm agent:export-case -- --pipeline-run-id <id> --output-dir <private-corpus>
 pnpm agent:eval -- --corpus-dir <private-corpus> --baseline active --candidate <config-id>
 pnpm agent:report -- --eval-run-id <id>
@@ -297,12 +376,9 @@ pnpm agent:report -- --eval-run-id <id>
 
 必需行为：
 
-- `agent:audit` 汇总 source volume、publish/review/exclude/failed counts、
-  top failure categories、feedback clusters、model cost 和 candidate next
-  actions。
 - `agent:export-case` 委托给 private corpus builder。
 - `agent:eval` 委托给 baseline/candidate eval。
-- `agent:report` 输出 Markdown 和 JSON summaries。
+- `agent:report` 把 audit/eval/finding artifacts 汇总成 Markdown 和 JSON summaries。
 
 验收标准：
 
@@ -310,7 +386,7 @@ pnpm agent:report -- --eval-run-id <id>
 - 除非显式允许，CLI 拒绝 production mutation flags。
 - Reports 包含足够信息，让一个 Codex session 能判断下一步该修什么。
 
-### 8. Admin Feedback And Quality Summary Surface
+### 10. Admin Feedback And Quality Summary Surface
 
 必需行为：
 
@@ -332,7 +408,7 @@ pnpm agent:report -- --eval-run-id <id>
 - 公开页面不得暴露 feedback、prompts、raw model responses 或 trace internals。
 - Mobile admin layout 保持可用。
 
-### 9. Public Acceptance Surface
+### 11. Public Acceptance Surface
 
 当前问题：
 
@@ -399,7 +475,11 @@ pnpm pipeline:v5:eval -- --corpus-dir tests/regression-corpus --all --store memo
 - feedback APIs 的 route handler tests。
 - corpus builder leakage tests。
 - eval comparison tests。
+- audit packet schema tests，覆盖 `audit-facts.json`、`candidate-index.json`、
+  `public-snapshot.json` 和 `usage-summary.json`。
+- evidence drilldown tests，覆盖 finding、cluster、event 和 source inspection。
 - CLI tests。
+- project weekly audit skill smoke test，验证 skill 引用正确命令和权限边界。
 - admin portal API/UI tests。
 - public acceptance surface tests，覆盖首页、详情页和 Archive/全部活动视角。
 
@@ -458,9 +538,13 @@ Phase 1 完成标准：
 5. Agent 可以把真实 case 导出到 private corpus，且不把 expected labels 泄漏进
    model input。
 6. Agent 可以比较 baseline 和 candidate prompt/model configs。
-7. Agent 可以生成包含具体 next actions 的 audit report。
-8. Admin 暴露简单 feedback 和 quality summary controls。
-9. 公开页面支持用户决策和历史回看：upcoming/ongoing 不被历史活动淹没，已结束
+7. `agent:audit` 可以生成 weekly audit fact packet 和 candidate index，供 Codex
+   自己判断异常是否成立。
+8. Drilldown commands 可以生成 evidence pack，供 Codex 归因和决定修复路径。
+9. Project weekly audit skill 可以在无聊天历史情况下指导 Codex 完成一次只读审计。
+10. Agent 可以生成包含具体 next actions 的 audit report。
+11. Admin 暴露简单 feedback 和 quality summary controls。
+12. 公开页面支持用户决策和历史回看：upcoming/ongoing 不被历史活动淹没，已结束
    published events 仍可通过详情页和 Archive/全部活动视角验收。
-10. 默认验证不依赖 live WeChat 或 live LLM，并且可以通过。
-11. 系统保留 destructive 和 production-active changes 的安全边界。
+13. 默认验证不依赖 live WeChat 或 live LLM，并且可以通过。
+14. 系统保留 destructive 和 production-active changes 的安全边界。
