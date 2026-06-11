@@ -79,7 +79,7 @@ issue -> branch -> implementation -> tests -> PR -> checks -> merge -> handoff
 
 建议切分：
 
-1. Agent-operable goal pack 和 schema 计划。
+1. Module contract、依赖方向和 V5 regression gate。
 2. 详细 live artifact 持久化。
 3. LLM 调用 ledger 和 usage/error audit。
 4. 结构化 admin feedback ledger。
@@ -88,7 +88,27 @@ issue -> branch -> implementation -> tests -> PR -> checks -> merge -> handoff
 7. Baseline vs candidate eval comparison。
 8. Agent audit CLI 和 report generator。
 9. Admin feedback 与质量摘要界面。
-10. 最终验证和 handoff。
+10. Public acceptance surface。
+11. 最终验证和 handoff。
+
+## 模块边界硬约束
+
+实现 agent 必须先遵守 `docs/agent-operable-event-pipeline.zh.md` 中的 module
+contract 和依赖方向。Issue 切分不能成为绕过模块边界的理由。
+
+硬性要求：
+
+- 所有跨模块数据结构必须先进入 `contracts` 或同等 schema 层。
+- production、eval、test、smoke 必须复用同一套 pipeline 代码，只替换
+  provider、store、config 和 `data_class`。
+- `pipeline orchestrator` 不得直接拼 prompt、调用 provider 或写 production 表。
+- `pipeline nodes` 不得直接写 production Supabase tables。
+- `llm gateway` 不得决定 publish/reject，只能返回受 schema 校验的 provider
+  result、usage 和 error shape。
+- `eval runner` 不得复制 extractor/editor/publish policy 逻辑。
+- `admin/public UI` 不得复制 publish policy、dedupe 或 validator 逻辑。
+- 每个实现 PR 必须在说明中写明触及的 module contract，以及是否新增或修改
+  contract tests。
 
 ## 必备能力
 
@@ -312,6 +332,37 @@ pnpm agent:report -- --eval-run-id <id>
 - 公开页面不得暴露 feedback、prompts、raw model responses 或 trace internals。
 - Mobile admin layout 保持可用。
 
+### 9. Public Acceptance Surface
+
+当前问题：
+
+公开首页如果只展示 upcoming events，operator 就无法以普通用户身份回看上一轮
+pipeline 是否误发、漏图、重复或摘要质量差。详情页如果对已结束 event 直接
+404，也会让历史公开结果无法验收。
+
+必需行为：
+
+- 首页主视角继续优先服务用户决策，展示 upcoming / ongoing activities。
+- 新增或调整一个公开可访问的最近收录 / 全部活动 / Archive 视角，展示所有
+  `production + published + public renderable` events，包括已结束活动。
+- event detail 只要满足 `production + published + public renderable` 就可访问，
+  不应因为活动已结束而 404。
+- 列表需要能表达 event series 和 occurrences：
+  - 单次活动显示单个时间。
+  - 连续两个周末的同一活动优先显示为一个 series，详情页列出场次。
+  - 每周固定活动首页显示下一次 occurrence，详情页显示 recurrence。
+  - 长期展览显示 date range / ongoing，不按天展开为重复卡片。
+- 这部分只能改 public read model、formatting 和 UI，不改变 publish policy。
+
+验收标准：
+
+- 已结束但 published 的 public event 在详情页可访问。
+- Archive/全部活动视角能看到已结束 published events。
+- 首页不会被历史活动淹没，仍然优先展示 upcoming / ongoing。
+- recurring、multi-day、long-running events 在列表和详情中有清晰可读的时间表达。
+- 测试覆盖 upcoming、ended、recurring、multi-day、long-running 和 duplicate-like
+  series 的 public rendering 行为。
+
 ## 数据和存储要求
 
 - Production、eval、test 和 smoke data classes 必须保持显式。
@@ -321,6 +372,15 @@ pnpm agent:report -- --eval-run-id <id>
 - Agent-generated reports 应有稳定 ID，并能按日期和 config pair 查询。
 
 ## 测试要求
+
+V5 regression gate 是硬门槛。Phase 1 是在 V5 contract 上扩展，不是回退或另起一套
+pipeline。任何实现 issue 在合并前都必须证明：
+
+- V5 replay 行为不回归。
+- V5 eval 行为不回归。
+- publish policy blocker 行为不回归，除非本 goal pack 明确要求改变。
+- public event rendering contract 不回归；如果产品行为改变，必须有新测试覆盖。
+- 新模块通过 contract 接入，不复制 production pipeline 逻辑。
 
 最终完成前至少运行：
 
@@ -333,6 +393,7 @@ pnpm pipeline:v5:eval -- --corpus-dir tests/regression-corpus --all --store memo
 
 每个 issue 的专项验证应包含：
 
+- module contract tests，覆盖新增或修改的跨模块 schema。
 - 新 schema 的 migration tests。
 - LLM ledger 和 artifacts 的 fake provider tests。
 - feedback APIs 的 route handler tests。
@@ -340,6 +401,7 @@ pnpm pipeline:v5:eval -- --corpus-dir tests/regression-corpus --all --store memo
 - eval comparison tests。
 - CLI tests。
 - admin portal API/UI tests。
+- public acceptance surface tests，覆盖首页、详情页和 Archive/全部活动视角。
 
 Live smoke 可选，且必须显式启用预算：
 
@@ -388,12 +450,17 @@ Next:
 
 Phase 1 完成标准：
 
-1. Agent 可以检查最近 pipeline runs 和 LLM calls，不需要重新调用模型。
-2. Operator feedback 是结构化的，并与 pipeline/event records 关联。
-3. Agent 可以把真实 case 导出到 private corpus，且不把 expected labels 泄漏进
+1. 新增能力遵守 module contract 和依赖方向，没有复制 production pipeline 逻辑。
+2. V5 regression gate 通过，已有 replay、eval、publish policy 和 public
+   rendering contract 不回归。
+3. Agent 可以检查最近 pipeline runs 和 LLM calls，不需要重新调用模型。
+4. Operator feedback 是结构化的，并与 pipeline/event records 关联。
+5. Agent 可以把真实 case 导出到 private corpus，且不把 expected labels 泄漏进
    model input。
-4. Agent 可以比较 baseline 和 candidate prompt/model configs。
-5. Agent 可以生成包含具体 next actions 的 audit report。
-6. Admin 暴露简单 feedback 和 quality summary controls。
-7. 默认验证不依赖 live WeChat 或 live LLM，并且可以通过。
-8. 系统保留 destructive 和 production-active changes 的安全边界。
+6. Agent 可以比较 baseline 和 candidate prompt/model configs。
+7. Agent 可以生成包含具体 next actions 的 audit report。
+8. Admin 暴露简单 feedback 和 quality summary controls。
+9. 公开页面支持用户决策和历史回看：upcoming/ongoing 不被历史活动淹没，已结束
+   published events 仍可通过详情页和 Archive/全部活动视角验收。
+10. 默认验证不依赖 live WeChat 或 live LLM，并且可以通过。
+11. 系统保留 destructive 和 production-active changes 的安全边界。

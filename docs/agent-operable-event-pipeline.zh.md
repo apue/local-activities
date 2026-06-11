@@ -127,6 +127,52 @@ Daily capture
 - `agent:propose-config`：生成 prompt/model/policy candidate。
 - `agent:report`：输出人类可读但不要求 operator 分析细节的结论。
 
+## 模块 Contract 和依赖方向
+
+Issue 是交付切分，不是代码模块边界。为了避免细 issue 让代码变成零散胶水，
+实现必须先遵守 module contract 和依赖方向，再按 issue 交付。
+
+核心规则：
+
+- `contracts` 定义跨模块数据结构和 schema，是其它模块共享的边界。
+- `pipeline orchestrator` 只编排节点、传递 run context、记录 step 状态。
+- `pipeline nodes` 只做输入到输出的业务转换，不直接写 production 表。
+- `llm gateway` 只负责 provider 调用、重试、usage、error shape 和 request /
+  response artifact，不决定是否发布。
+- `artifact store` 只负责 artifact 读写和脱敏，不解释业务含义。
+- `ledger stores` 只负责 pipeline、LLM、feedback、eval report 的持久化。
+- `corpus builder` 只从 artifact/ledger/feedback 导出 case，不调用 live LLM。
+- `eval runner` 复用同一套 pipeline contract，只替换 provider、store、config 和
+  `data_class`。
+- `admin/public UI` 只消费 API 和 canonical read models，不复制 publish policy、
+  dedupe 或 validator 逻辑。
+
+允许的依赖方向：
+
+```text
+contracts
+<- stores / providers / pipeline nodes
+<- pipeline orchestrator
+<- API / CLI / admin UI / public UI
+```
+
+禁止方向：
+
+- UI 直接实现 publish policy、dedupe 或 event validator。
+- pipeline node 直接调用 Supabase production tables。
+- eval runner 复制一份 production pipeline。
+- corpus builder 把 expected labels 写进 model input。
+- LLM provider adapter 返回不受 schema 校验的业务对象。
+
+Issue 与模块的关系应是“一个 issue 扩展某个 contract 后面的实现”，而不是
+“一个 issue 随意改所有层”。例如：
+
+- LLM call ledger issue 只应触及 `llm gateway`、`ledger store` 和相关 tests。
+- feedback issue 只应触及 `feedback contract`、`feedback store`、admin API/UI。
+- private corpus issue 只读 artifact/ledger/feedback，不重新发明 pipeline。
+- eval comparison issue 必须复用 V5 pipeline runner，不能复制 extractor/editor。
+- public acceptance issue 只改 public read model/UI，不改变 event publish policy。
+
 ## 核心模块
 
 ### 1. Detailed Pipeline Artifacts
@@ -391,6 +437,33 @@ Admin UI 不应要求 operator 分析复杂 trace。它只需要提供：
 
 深层 trace 和 eval report 可以隐藏在 drill-down 页面，主要给 Codex 使用。
 
+### 9. Public Acceptance Surface
+
+Operator 最终希望以普通用户身份判断产品是否可用。因此公开页面也必须成为
+agent-operable loop 的验收面，而不能只展示“未来还没结束的活动”。
+
+公开页面应区分三个视角：
+
+- 首页主视角：面向用户决策，展示 upcoming / ongoing activities。
+- 活动详情页：只要是 `production + published + public renderable`，即使活动已
+  结束也应可访问，不能因为过期直接 404。
+- 最近收录 / 全部活动 / Archive 视角：展示所有已发布活动，包括已结束活动，
+  让 operator 可以回看上周或上一轮 pipeline 的实际公开结果。
+
+重复和周期活动的展示原则：
+
+- 用户列表展示的是可参加的 occurrence，不是简单的数据库 event row。
+- 详情页表达 event series，包括所有已知 occurrences、recurrence rule 或长期
+  展期。
+- 连续两个周末的同一活动，优先展示为一个 series，并在详情页列出场次。
+- 每周固定活动首页只展示下一次 occurrence，详情页展示 recurrence。
+- 长期展览不应每天展开成重复卡片，应展示为 ongoing / date range。
+- Archive 可按 `published_at` 或活动时间回看所有 published events，用于产品
+  验收和反馈。
+
+这部分不改变 publish policy。它只改变 public read model 和 UI，让已经发布的
+结果可以被用户和 agent 回看。
+
 ## 权限和自动化边界
 
 为了实现“尽量交给 Codex”，默认允许 agent 做：
@@ -472,6 +545,7 @@ operator 点击 “漏二维码”
 
 必要测试：
 
+- module contract tests。
 - schema migration test。
 - artifact writer/reader test。
 - LLM call ledger redaction test。
@@ -480,6 +554,16 @@ operator 点击 “漏二维码”
 - baseline/candidate eval comparison test。
 - agent audit CLI fixture test。
 - admin feedback UI API test。
+- public acceptance surface test。
+
+V5 regression gate：
+
+- V5 replay 不回归。
+- V5 eval 不回归。
+- publish policy blocker 行为不回归，除非 goal 明确要求改变。
+- public event rendering contract 不回归；若产品行为改变，必须有新测试覆盖。
+- production、eval、test、smoke 复用同一 pipeline 代码，只替换 provider、store、
+  config 和 `data_class`。
 
 Live smoke：
 
