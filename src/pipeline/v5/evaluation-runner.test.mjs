@@ -116,6 +116,14 @@ describe("V5 evaluation runner", () => {
         latencyMs: 0,
       },
     });
+    expect(result.reviewMetrics).toMatchObject({
+      qrExtractionSuccessRate: 1,
+      registrationSuccessRate: 1,
+      multiEventSplitAccuracy: 1,
+      duplicateUpdateAccuracy: 1,
+      humanFeedbackCount: 0,
+      humanRejectRate: 0,
+    });
     expect(result.summaryPath).toBe("runs/v5-eval-20260610050000/summary.json");
     expect(result.artifactPaths).toEqual(
       expect.arrayContaining([
@@ -131,6 +139,29 @@ describe("V5 evaluation runner", () => {
       finalStateAccuracy: 1,
       falsePositiveCount: 0,
       falseNegativeCount: 0,
+      reviewMetrics: {
+        posterExtractionSuccessRate: 1,
+        qrExtractionSuccessRate: 1,
+        registrationSuccessRate: 1,
+        multiEventSplitAccuracy: 1,
+      },
+    });
+    expect(result.cases.find((item) => item.caseId === "korean-movie-two-screenings")).toMatchObject({
+      expectedSignals: {
+        expectsRegistration: true,
+        expectsRegistrationQr: true,
+        expectsMultipleEvents: true,
+      },
+      predictedSignals: {
+        hasRegistration: true,
+        hasRegistrationQr: true,
+        eventCount: 1,
+      },
+      signalScores: {
+        registrationCorrect: true,
+        registrationQrCorrect: true,
+        multiEventCorrect: true,
+      },
     });
     expect(writer.state.artifacts.get(result.summaryPath)).toEqual(result);
   });
@@ -152,6 +183,11 @@ describe("V5 evaluation runner", () => {
       falseNegativeCount: 10,
       actionAccuracy: 7 / 17,
       finalStateAccuracy: 7 / 17,
+      reviewMetrics: {
+        qrExtractionSuccessRate: 0,
+        registrationSuccessRate: 0,
+        multiEventSplitAccuracy: 0,
+      },
     });
     expect(result.variantSummaries.find((item) => item.variant === "mock-underfilter-v1")).toMatchObject({
       caseCount: 17,
@@ -204,6 +240,8 @@ describe("V5 evaluation runner", () => {
           falsePositiveRate: 0,
           falseNegativeRate: 10 / 17,
           publicEventRecall: 0,
+          qrExtractionSuccessRate: 0,
+          registrationSuccessRate: 0,
           costPerPublishedEventMicroCny: null,
         },
       },

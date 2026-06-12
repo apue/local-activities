@@ -46,6 +46,7 @@ export async function runV5EvaluationCli(
     falseNegativeCount: result.falseNegativeCount,
     actionAccuracy: result.actionAccuracy,
     finalStateAccuracy: result.finalStateAccuracy,
+    reviewMetrics: result.reviewMetrics,
     totalUsage: result.totalUsage,
     artifactDir: result.artifactDir,
     summaryPath: result.summaryPath,

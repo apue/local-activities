@@ -36,6 +36,10 @@ describe("pipeline-v5-eval CLI", () => {
       runCount: 1,
       passCount: 1,
       failCount: 0,
+      reviewMetrics: {
+        registrationSuccessRate: 1,
+        humanFeedbackCount: 0,
+      },
       totalUsage: {
         totalTokens: 0,
         costMicroCny: 0,

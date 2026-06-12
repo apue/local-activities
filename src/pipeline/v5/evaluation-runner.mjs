@@ -145,6 +145,7 @@ export async function runV5Evaluation({
     });
   });
   const aggregate = summarizeResults({ results: caseResults });
+  const reviewMetrics = computeReviewMetrics(caseResults);
   const summaryPath = `${runPrefix}/summary.json`;
   const artifactPaths = [summaryPath, ...caseArtifactPaths];
   const summary = {
@@ -160,6 +161,7 @@ export async function runV5Evaluation({
     falseNegativeCount: aggregate.falseNegativeCount,
     actionAccuracy: aggregate.actionAccuracy,
     finalStateAccuracy: aggregate.finalStateAccuracy,
+    reviewMetrics,
     totalUsage: aggregate.totalUsage,
     artifactDir: (evaluationWriter.store ?? store) === "local" ? artifactDir : undefined,
     summaryPath,
@@ -361,6 +363,7 @@ async function evaluateCaseVariant({
 }) {
   const expectedAction = caseItem.expected.action;
   const expectedFinalState = finalStateFromExpectedAction(expectedAction);
+  const expectedSignals = expectedReviewSignals(caseItem);
   const baseVariant = baseVariantFromEvaluationVariant(variant);
   const prediction = liveVariants.has(baseVariant)
     ? await livePredictionForVariant({
@@ -373,13 +376,21 @@ async function evaluateCaseVariant({
       llmCallLedger,
       evaluationRunId,
     })
-    : predictionForVariant({ variant: baseVariant, expectedAction, replayCase });
+    : predictionForVariant({
+      variant: baseVariant,
+      expectedAction,
+      replayCase,
+      expected: caseItem.expected,
+      expectedSignals,
+    });
   const actionCorrect = prediction.action === expectedAction;
   const finalStateCorrect = prediction.finalState === expectedFinalState;
   const passed = actionCorrect && finalStateCorrect;
   const falsePositive = prediction.action === "extract" && expectedAction !== "extract";
   const falseNegative = prediction.action === "exclude" && expectedAction !== "exclude";
   const totalUsage = normalizeUsage(prediction.usage);
+  const predictedSignals = normalizePredictedSignals(prediction.signals);
+  const signalScores = scoreReviewSignals({ expectedSignals, predictedSignals });
   return {
     caseId: caseItem.case.id,
     variant,
@@ -393,6 +404,9 @@ async function evaluateCaseVariant({
     finalStateCorrect,
     falsePositive,
     falseNegative,
+    expectedSignals,
+    predictedSignals,
+    signalScores,
     replayCaseId: replayCase?.caseId,
     artifactPaths: prediction.artifactPaths ?? [],
     totalUsage,
@@ -519,6 +533,7 @@ export function createLiveConfiguredV5Evaluator({
         extractionDecision: extraction.decision,
         editorDecision: editor.editorDecision,
       },
+      signals: predictedSignalsFromExtraction({ extraction, policy }),
     };
   };
 }
@@ -547,12 +562,26 @@ async function livePredictionForVariant({
   });
 }
 
-function predictionForVariant({ variant, expectedAction, replayCase }) {
+function predictionForVariant({
+  variant,
+  expectedAction,
+  replayCase,
+  expected,
+  expectedSignals,
+}) {
   if (variant === "mock-expected-v1") {
     return {
       action: expectedAction,
       finalState: finalStateFromExpectedAction(expectedAction),
       artifactPaths: artifactPathsFromReplayCase(replayCase),
+      signals: {
+        hasRegistration: expectedSignals.expectsRegistration,
+        hasRegistrationQr: expectedSignals.expectsRegistrationQr,
+        hasPoster: expectedSignals.expectsPoster,
+        hasMultipleEvents: expectedSignals.expectsMultipleEvents,
+        handledDuplicateUpdate: expectedSignals.expectsDuplicateUpdate,
+        eventCount: expected?.eventCount ?? 0,
+      },
     };
   }
   if (variant === "mock-overfilter-v1") {
@@ -560,6 +589,7 @@ function predictionForVariant({ variant, expectedAction, replayCase }) {
       action: "exclude",
       finalState: "excluded",
       artifactPaths: artifactPathsFromReplayCase(replayCase),
+      signals: emptyPredictedSignals(),
     };
   }
   if (variant === "mock-underfilter-v1") {
@@ -567,6 +597,10 @@ function predictionForVariant({ variant, expectedAction, replayCase }) {
       action: "extract",
       finalState: "published",
       artifactPaths: artifactPathsFromReplayCase(replayCase),
+      signals: {
+        ...emptyPredictedSignals(),
+        eventCount: expectedAction === "extract" ? expected?.eventCount ?? 1 : 1,
+      },
     };
   }
   throw new Error(`v5_evaluation_variant_unsupported:${variant}`);
@@ -587,6 +621,7 @@ function summarizeResults({ variant, results }) {
     falseNegativeCount: results.filter((item) => item.falseNegative).length,
     actionAccuracy: runCount === 0 ? 0 : actionCorrectCount / runCount,
     finalStateAccuracy: runCount === 0 ? 0 : finalStateCorrectCount / runCount,
+    reviewMetrics: computeReviewMetrics(results),
     totalUsage: sumUsage(results.map((item) => item.totalUsage)),
   };
 }
@@ -663,6 +698,7 @@ function computeComparisonMetrics(cases = []) {
   ).length;
   const reviewCount = cases.filter((item) => item.predictedAction === "review").length;
   const totalUsage = sumUsage(cases.map((item) => item.totalUsage));
+  const reviewMetrics = computeReviewMetrics(cases);
   const latencies = cases
     .map((item) => normalizeUsage(item.totalUsage).latencyMs)
     .filter((value) => value > 0)
@@ -689,6 +725,7 @@ function computeComparisonMetrics(cases = []) {
     publicEventRecall: ratio(correctExtractCount, expectedExtractCount),
     nonEventPrecision: ratio(correctExcludeCount, expectedExcludeCount),
     autoPublishPrecision: ratio(correctExtractCount, predictedExtractCount),
+    ...reviewMetrics,
     costPerArticleMicroCny: ratio(totalUsage.costMicroCny, caseCount),
     costPerPublishedEventMicroCny: nullableRatio(totalUsage.costMicroCny, predictedExtractCount),
     latencyP50Ms: percentile(latencies, 0.5),
@@ -812,6 +849,196 @@ function artifactPathsFromReplayCase(replayCase) {
       return [step.outputArtifact?.path, step.stepArtifact?.path].filter(Boolean);
     })),
   ];
+}
+
+function expectedReviewSignals(caseItem) {
+  const expected = caseItem?.expected ?? {};
+  const labels = new Set(caseItem?.case?.labels ?? []);
+  const expectedDrafts = Array.isArray(expected.eventDrafts) ? expected.eventDrafts : [];
+  const registrationActions = expectedDrafts
+    .map((draft) => clean(draft.registrationAction))
+    .filter(Boolean);
+  const expectsRegistration = Boolean(
+    expected.requiresReservation ||
+      registrationActions.some((action) => registrationActionRequiresUserAction(action)),
+  );
+  const expectsRegistrationQr = Boolean(
+    labels.has("qr_registration") ||
+      registrationActions.includes("qr_code") ||
+      expected.evidence?.registrationQr,
+  );
+  const expectsPoster = Boolean(
+    labels.has("poster_or_image_dominant") ||
+      expected.evidence?.poster ||
+      expected.evidence?.posterImage,
+  );
+  const expectsMultipleEvents = Boolean(
+    Number(expected.eventCount) > 1 ||
+      labels.has("multi_event_article") ||
+      labels.has("recurring_or_multiple_occurrences"),
+  );
+  const expectsDuplicateUpdate = Boolean(
+    labels.has("duplicate_or_update") ||
+      ["same_event", "update_existing", "cancel_existing", "withdraw_existing"].includes(
+        clean(expected.dedupe?.decision),
+      )
+  );
+  return {
+    expectsRegistration,
+    expectsRegistrationQr,
+    expectsPoster,
+    expectsMultipleEvents,
+    expectsDuplicateUpdate,
+    expectedEventCount: Number.isInteger(expected.eventCount) ? expected.eventCount : 0,
+  };
+}
+
+function predictedSignalsFromExtraction({ extraction, policy } = {}) {
+  const events = Array.isArray(extraction?.events) ? extraction.events : [];
+  return {
+    eventCount: events.length,
+    hasRegistration: events.some((event) => {
+      return registrationActionRequiresUserAction(clean(event.registrationAction));
+    }),
+    hasRegistrationQr: events.some(hasRegistrationQrSignal),
+    hasPoster: events.some(hasPosterSignal),
+    hasMultipleEvents: events.length > 1 ||
+      events.some((event) => Array.isArray(event.occurrenceStartsAt) && event.occurrenceStartsAt.length > 1),
+    handledDuplicateUpdate: [
+      "same_event",
+      "update_existing",
+      "cancel_existing",
+      "withdraw_existing",
+    ].includes(clean(policy?.dedupeDecision ?? policy?.resolutionDecision)),
+  };
+}
+
+function normalizePredictedSignals(signals = {}) {
+  return {
+    eventCount: Number.isInteger(signals.eventCount) ? signals.eventCount : 0,
+    hasRegistration: Boolean(signals.hasRegistration),
+    hasRegistrationQr: Boolean(signals.hasRegistrationQr),
+    hasPoster: Boolean(signals.hasPoster),
+    hasMultipleEvents: Boolean(signals.hasMultipleEvents),
+    handledDuplicateUpdate: Boolean(signals.handledDuplicateUpdate),
+  };
+}
+
+function emptyPredictedSignals() {
+  return {
+    eventCount: 0,
+    hasRegistration: false,
+    hasRegistrationQr: false,
+    hasPoster: false,
+    hasMultipleEvents: false,
+    handledDuplicateUpdate: false,
+  };
+}
+
+function scoreReviewSignals({ expectedSignals, predictedSignals }) {
+  return {
+    registrationCorrect: expectedSignals.expectsRegistration
+      ? predictedSignals.hasRegistration
+      : true,
+    registrationQrCorrect: expectedSignals.expectsRegistrationQr
+      ? predictedSignals.hasRegistrationQr
+      : true,
+    posterCorrect: expectedSignals.expectsPoster
+      ? predictedSignals.hasPoster
+      : true,
+    multiEventCorrect: expectedSignals.expectsMultipleEvents
+      ? predictedSignals.eventCount === expectedSignals.expectedEventCount ||
+        predictedSignals.hasMultipleEvents
+      : true,
+    duplicateUpdateCorrect: expectedSignals.expectsDuplicateUpdate
+      ? predictedSignals.handledDuplicateUpdate
+      : true,
+  };
+}
+
+function computeReviewMetrics(results = []) {
+  const expectedRegistration = results.filter((item) => item.expectedSignals?.expectsRegistration);
+  const expectedQr = results.filter((item) => item.expectedSignals?.expectsRegistrationQr);
+  const expectedPoster = results.filter((item) => item.expectedSignals?.expectsPoster);
+  const expectedMultiEvent = results.filter((item) => item.expectedSignals?.expectsMultipleEvents);
+  const expectedDuplicateUpdate = results.filter((item) => item.expectedSignals?.expectsDuplicateUpdate);
+  const humanFeedbackCount = results.reduce((total, item) => total + feedbackCount(item), 0);
+  const humanRejectCount = results.reduce((total, item) => total + feedbackRejectCount(item), 0);
+  return {
+    qrExtractionSuccessRate: reviewRatio(
+      expectedQr.filter((item) => item.signalScores?.registrationQrCorrect).length,
+      expectedQr.length,
+    ),
+    posterExtractionSuccessRate: reviewRatio(
+      expectedPoster.filter((item) => item.signalScores?.posterCorrect).length,
+      expectedPoster.length,
+    ),
+    registrationSuccessRate: reviewRatio(
+      expectedRegistration.filter((item) => item.signalScores?.registrationCorrect).length,
+      expectedRegistration.length,
+    ),
+    multiEventSplitAccuracy: reviewRatio(
+      expectedMultiEvent.filter((item) => item.signalScores?.multiEventCorrect).length,
+      expectedMultiEvent.length,
+    ),
+    duplicateUpdateAccuracy: reviewRatio(
+      expectedDuplicateUpdate.filter((item) => item.signalScores?.duplicateUpdateCorrect).length,
+      expectedDuplicateUpdate.length,
+    ),
+    humanFeedbackCount,
+    humanRejectRate: ratio(humanRejectCount, humanFeedbackCount),
+  };
+}
+
+function registrationActionRequiresUserAction(action) {
+  return [
+    "required",
+    "registration_required",
+    "qr_code",
+    "mini_program",
+    "external_url",
+  ].includes(action);
+}
+
+function hasRegistrationQrSignal(event = {}) {
+  return clean(event.registrationAction) === "qr_code" && Boolean(
+    clean(event.registrationQr) ||
+      clean(event.registrationQrUrl) ||
+      clean(event.registrationQrImageUrl) ||
+      evidenceContainsRole(event.evidence, ["registration_qr", "qr"]),
+  );
+}
+
+function hasPosterSignal(event = {}) {
+  return Boolean(
+    clean(event.posterUrl) ||
+      clean(event.posterImageUrl) ||
+      evidenceContainsRole(event.evidence, ["poster"]),
+  );
+}
+
+function evidenceContainsRole(evidence, roles) {
+  if (!Array.isArray(evidence)) return false;
+  return evidence.some((item) => {
+    const role = clean(item?.role ?? item?.kind ?? item?.type);
+    return role && roles.includes(role);
+  });
+}
+
+function feedbackCount(caseResult) {
+  return Array.isArray(caseResult.feedback) ? caseResult.feedback.length : 0;
+}
+
+function feedbackRejectCount(caseResult) {
+  if (!Array.isArray(caseResult.feedback)) return 0;
+  return caseResult.feedback.filter((item) => {
+    return ["not_event", "not_public", "duplicate_event"].includes(clean(item?.feedbackType));
+  }).length;
+}
+
+function reviewRatio(numerator, denominator) {
+  if (!Number.isFinite(denominator) || denominator <= 0) return 1;
+  return ratio(numerator, denominator);
 }
 
 function sumUsage(items) {
