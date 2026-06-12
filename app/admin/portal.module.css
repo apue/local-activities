@@ -673,13 +673,15 @@
 .auditRow a,
 .auditRow small,
 .evalRow strong,
+.evalRow a,
 .evalRow span,
 .evalRow small {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.auditRow a {
+.auditRow a,
+.evalRow a {
   color: #315b7c;
   font-weight: 800;
   text-decoration: none;
@@ -691,7 +693,9 @@
 }
 
 .evalRow {
-  grid-template-columns: minmax(170px, 1fr) minmax(100px, 0.45fr) minmax(0, 1.4fr);
+  grid-template-columns:
+    minmax(170px, 1fr) minmax(100px, 0.45fr) minmax(0, 1.4fr)
+    auto;
   align-items: center;
 }
 

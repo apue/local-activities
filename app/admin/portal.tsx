@@ -1426,6 +1426,9 @@ export function AdminPortal() {
                   {run.promptVersion}
                   {run.artifactPath ? ` · ${run.artifactPath}` : ""}
                 </small>
+                <a href={`/admin/eval-runs/${encodeURIComponent(run.runId)}/preview`}>
+                  Preview
+                </a>
               </div>
             ))}
             {evaluationRuns.length === 0 ? (

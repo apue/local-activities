@@ -126,6 +126,7 @@ export async function runAnalysisPipeline({
       schema_version: schemaVersion,
       usage_id: usageId,
       data_class: request.dataClass,
+      eval_run_id: request.evalRunId,
       error_details: errorDetails(error),
       metadata: { storagePrefix: request.storagePrefix },
     }, "ledger_id");
@@ -180,6 +181,7 @@ async function writeAnalysisOutput({
     await writeUnique(db, "excluded_articles", {
       excluded_article_id: excludedId,
       data_class: request.dataClass,
+      eval_run_id: request.evalRunId,
       article_url: request.sourceUrl,
       bundle_id: request.bundleId,
       triage_decision: output.excludedArticle?.triageDecision ?? "not_event",
@@ -271,6 +273,7 @@ async function writeAnalysisOutput({
     await writeUnique(db, "dedupe_decisions", {
       dedupe_id: id(`dedupe-${index + 1}`, request.bundleId),
       data_class: request.dataClass,
+      eval_run_id: request.evalRunId,
       article_bundle_id: request.bundleId,
       draft_id: draftId,
       canonical_event_id: eventCanonicalEventId,
@@ -385,6 +388,7 @@ async function writeArticleBundle(
     link_count: bundle?.links.length ?? 0,
     diagnostics: bundle?.diagnostics ?? [],
     data_class: request.dataClass,
+    eval_run_id: request.evalRunId,
     status,
   };
   if (db.writeArticleBundle) {
@@ -448,6 +452,7 @@ async function writeUsage(
     latency_ms: usage.latencyMs,
     article_bundle_id: request.bundleId,
     data_class: request.dataClass,
+    eval_run_id: request.evalRunId,
     metadata,
   }, "usage_id");
 }
@@ -490,6 +495,7 @@ async function writeEvidenceAssets({
     await writeUnique(db, "evidence_assets", {
       asset_id: assetId,
       data_class: request.dataClass,
+      eval_run_id: request.evalRunId,
       article_url: request.sourceUrl,
       bundle_id: request.bundleId,
       role: selection.role,
@@ -619,6 +625,7 @@ function draftPayload({
   return {
     draft_id: draftId,
     data_class: request.dataClass,
+    eval_run_id: request.evalRunId,
     article_url: request.sourceUrl,
     bundle_id: request.bundleId,
     title: event.title,
@@ -683,6 +690,7 @@ function canonicalPayload({
   return {
     event_id: eventId,
     data_class: request.dataClass,
+    eval_run_id: request.evalRunId,
     title: event.title,
     organizer: event.organizer,
     starts_at: event.startsAt,
@@ -760,6 +768,7 @@ async function writeLedger(
     canonical_event_id: canonicalEventId,
     excluded_article_id: excludedArticleId,
     data_class: request.dataClass,
+    eval_run_id: request.evalRunId,
     metadata: {
       storagePrefix: request.storagePrefix,
       dedupe: output.dedupe,

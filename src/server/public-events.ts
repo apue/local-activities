@@ -19,6 +19,7 @@ type PublicEventsQuery = {
 export type CanonicalEventRow = {
   event_id: string;
   data_class?: "production" | "eval" | "test" | "smoke" | null;
+  eval_run_id?: string | null;
   title: string;
   organizer: string | null;
   starts_at: string;
@@ -118,6 +119,22 @@ type PublicScheduleInput = {
   occurrenceStartsAt?: string[];
 };
 
+export type PublicEventReadDataClass = "production" | "eval";
+
+export type PublicEventReadOptions =
+  | Date
+  | {
+      dataClass?: PublicEventReadDataClass;
+      evalRunId?: string;
+      now?: Date;
+    };
+
+type NormalizedPublicEventReadOptions = {
+  dataClass: PublicEventReadDataClass;
+  evalRunId?: string;
+  now: Date;
+};
+
 const basePublicEventColumns = [
   "event_id",
   "title",
@@ -154,44 +171,50 @@ const publicEventColumns = [
   "registration_qr_image_alt",
 ].join(",");
 
-export async function listPublicUpcomingEvents(now = new Date()) {
+export async function listPublicUpcomingEvents(
+  options: PublicEventReadOptions = new Date(),
+) {
   return listPublicUpcomingEventsFromClient(
     getSupabaseAdminClient() as unknown as PublicEventsClient,
-    now,
+    options,
   );
 }
 
-export async function listPublicArchiveEvents() {
+export async function listPublicArchiveEvents(options?: PublicEventReadOptions) {
   return listPublicArchiveEventsFromClient(
     getSupabaseAdminClient() as unknown as PublicEventsClient,
+    options,
   );
 }
 
 export async function listPublicUpcomingEventsFromClient(
   client: PublicEventsClient,
-  now = new Date(),
+  options: PublicEventReadOptions = new Date(),
 ) {
-  const first = await queryPublicUpcomingEvents(client, publicEventColumns, now);
+  const scope = normalizePublicEventReadOptions(options);
+  const first = await queryPublicUpcomingEvents(client, publicEventColumns, scope);
   const { data, error } =
     first.error && isMissingOptionalPublicAssetColumnError(first.error)
-      ? await queryPublicUpcomingEvents(client, basePublicEventColumns, now)
+      ? await queryPublicUpcomingEvents(client, basePublicEventColumns, scope)
       : first;
 
   if (error) return [];
 
   return filterUpcomingPublishedEvents(
     (data ?? []) as unknown as CanonicalEventRow[],
-    now,
+    scope.now,
   ).map(shapePublicEvent);
 }
 
 export async function listPublicArchiveEventsFromClient(
   client: PublicEventsClient,
+  options?: PublicEventReadOptions,
 ) {
-  const first = await queryPublicArchiveEvents(client, publicEventColumns);
+  const scope = normalizePublicEventReadOptions(options);
+  const first = await queryPublicArchiveEvents(client, publicEventColumns, scope);
   const { data, error } =
     first.error && isMissingOptionalPublicAssetColumnError(first.error)
-      ? await queryPublicArchiveEvents(client, basePublicEventColumns)
+      ? await queryPublicArchiveEvents(client, basePublicEventColumns, scope)
       : first;
 
   if (error) return [];
@@ -201,11 +224,14 @@ export async function listPublicArchiveEventsFromClient(
   ).map(shapePublicEvent);
 }
 
-export async function getPublicEvent(eventId: string, now = new Date()) {
+export async function getPublicEvent(
+  eventId: string,
+  options: PublicEventReadOptions = new Date(),
+) {
   const event = await getPublicEventFromClient(
     getSupabaseAdminClient() as unknown as PublicEventsClient,
     eventId,
-    now,
+    options,
   );
 
   if (!event) notFound();
@@ -215,12 +241,13 @@ export async function getPublicEvent(eventId: string, now = new Date()) {
 export async function getPublicEventFromClient(
   client: PublicEventsClient,
   eventId: string,
-  now = new Date(),
+  options: PublicEventReadOptions = new Date(),
 ) {
-  const first = await queryPublicEvent(client, publicEventColumns, eventId);
+  const scope = normalizePublicEventReadOptions(options);
+  const first = await queryPublicEvent(client, publicEventColumns, eventId, scope);
   const { data, error } =
     first.error && isMissingOptionalPublicAssetColumnError(first.error)
-      ? await queryPublicEvent(client, basePublicEventColumns, eventId)
+      ? await queryPublicEvent(client, basePublicEventColumns, eventId, scope)
       : first;
 
   if (error) throw new Error("public_event_read_failed");
@@ -234,24 +261,32 @@ export async function getPublicEventFromClient(
 function queryPublicUpcomingEvents(
   client: PublicEventsClient,
   columns: string,
-  now: Date,
+  scope: NormalizedPublicEventReadOptions,
 ) {
-  return client
+  return applyPublicEventReadScope(
+    client
     .from("canonical_events")
     .select(columns)
-    .eq("data_class", "production")
-    .eq("status", "published")
-    .or(buildUpcomingEventFilter(now))
+    .eq("status", "published"),
+    scope,
+  )
+    .or(buildUpcomingEventFilter(scope.now))
     .order("starts_at", { ascending: true })
     .limit(100);
 }
 
-function queryPublicArchiveEvents(client: PublicEventsClient, columns: string) {
-  return client
+function queryPublicArchiveEvents(
+  client: PublicEventsClient,
+  columns: string,
+  scope: NormalizedPublicEventReadOptions,
+) {
+  return applyPublicEventReadScope(
+    client
     .from("canonical_events")
     .select(columns)
-    .eq("data_class", "production")
-    .eq("status", "published")
+    .eq("status", "published"),
+    scope,
+  )
     .order("starts_at", { ascending: false })
     .limit(200);
 }
@@ -260,19 +295,59 @@ function queryPublicEvent(
   client: PublicEventsClient,
   columns: string,
   eventId: string,
+  scope: NormalizedPublicEventReadOptions,
 ) {
-  const query = client
+  const query = applyPublicEventReadScope(
+    client
     .from("canonical_events")
     .select(columns)
-    .eq("data_class", "production")
     .eq("event_id", eventId)
-    .eq("status", "published");
+    .eq("status", "published"),
+    scope,
+  );
 
   if (!query.maybeSingle) {
     throw new Error("public_event_client_missing_maybe_single");
   }
 
   return query.maybeSingle<CanonicalEventRow>();
+}
+
+export function normalizePublicEventReadOptions(
+  options?: PublicEventReadOptions,
+): NormalizedPublicEventReadOptions {
+  if (options instanceof Date) {
+    return {
+      dataClass: "production",
+      now: options,
+    };
+  }
+
+  const dataClass = options?.dataClass ?? "production";
+  const evalRunId = options?.evalRunId?.trim();
+  if (dataClass === "eval" && !evalRunId) {
+    throw new Error("public_event_eval_run_id_required");
+  }
+  if (dataClass !== "eval" && evalRunId) {
+    throw new Error("public_event_eval_run_id_scope_invalid");
+  }
+
+  return {
+    dataClass,
+    evalRunId,
+    now: options?.now ?? new Date(),
+  };
+}
+
+function applyPublicEventReadScope(
+  query: PublicEventsQuery,
+  scope: NormalizedPublicEventReadOptions,
+) {
+  const scoped = query.eq("data_class", scope.dataClass);
+  if (scope.dataClass === "eval") {
+    return scoped.eq("eval_run_id", scope.evalRunId ?? "");
+  }
+  return scoped;
 }
 
 function isMissingOptionalPublicAssetColumnError(error: unknown) {

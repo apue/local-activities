@@ -65,6 +65,47 @@ Deno.test("parseAnalyzeRequest defaults data class to production and keeps optio
   assertEquals(parsed.storagePrefix, "article-bundles/production/bundle-1");
 });
 
+Deno.test("parseAnalyzeRequest keeps optional eval run id", async () => {
+  const request = new Request("https://example.test", {
+    method: "POST",
+    body: JSON.stringify({
+      sourceUrl: "https://mp.weixin.qq.com/s/example",
+      bundleId: "bundle-1",
+      storagePrefix: "article-bundles/eval/bundle-1",
+      contentHash: "sha256:abc",
+      sourceProvider: "wechat2rss",
+      dataClass: "eval",
+      evalRunId: "eval-run-1",
+    }),
+  });
+
+  const parsed = await parseAnalyzeRequest(request);
+
+  assertEquals(parsed.dataClass, "eval");
+  assertEquals(parsed.evalRunId, "eval-run-1");
+});
+
+Deno.test("parseAnalyzeRequest rejects eval run id outside eval data class", async () => {
+  await assertRejects(
+    () =>
+      parseAnalyzeRequest(
+        new Request("https://example.test", {
+          method: "POST",
+          body: JSON.stringify({
+            sourceUrl: "https://mp.weixin.qq.com/s/example",
+            bundleId: "bundle-1",
+            storagePrefix: "article-bundles/production/bundle-1",
+            contentHash: "sha256:abc",
+            sourceProvider: "wechat2rss",
+            dataClass: "production",
+            evalRunId: "eval-run-1",
+          }),
+        }),
+      ),
+    "invalid_evalRunId_scope",
+  );
+});
+
 Deno.test("parseAnalyzeRequest rejects invalid data class and missing required fields", async () => {
   await assertRejects(
     () =>

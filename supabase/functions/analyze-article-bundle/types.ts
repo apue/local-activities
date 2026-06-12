@@ -11,6 +11,7 @@ export type AnalyzeRequest = {
   sourceId?: string;
   sourceName?: string;
   dataClass: AnalyzeDataClass;
+  evalRunId?: string;
 };
 
 export type ArticleBundleWriteResult =

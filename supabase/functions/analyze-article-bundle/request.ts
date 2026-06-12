@@ -35,9 +35,12 @@ export async function parseAnalyzeRequest(
   const publishedAt = optionalString(body, "publishedAt");
   const sourceId = optionalString(body, "sourceId");
   const sourceName = optionalString(body, "sourceName");
+  const evalRunId = optionalString(body, "evalRunId");
+  if (evalRunId && dataClass !== "eval") throw new Error("invalid_evalRunId_scope");
   if (publishedAt) parsed.publishedAt = publishedAt;
   if (sourceId) parsed.sourceId = sourceId;
   if (sourceName) parsed.sourceName = sourceName;
+  if (evalRunId) parsed.evalRunId = evalRunId;
   return parsed;
 }
 
