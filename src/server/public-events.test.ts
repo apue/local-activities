@@ -185,6 +185,40 @@ describe("public event helpers", () => {
     ]);
   });
 
+  it("keeps public archive reads scoped to production by default", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const client = archiveListClient(calls);
+
+    await listPublicArchiveEventsFromClient(client);
+
+    expect(calls).toContainEqual(["eq", ["data_class", "production"]]);
+    expect(calls).not.toContainEqual(["eq", ["data_class", "eval"]]);
+  });
+
+  it("scopes eval archive reads to a single eval run id", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const client = archiveListClient(calls);
+
+    await listPublicArchiveEventsFromClient(client, {
+      dataClass: "eval",
+      evalRunId: "eval-run-1",
+    });
+
+    expect(calls).toContainEqual(["eq", ["data_class", "eval"]]);
+    expect(calls).toContainEqual(["eq", ["eval_run_id", "eval-run-1"]]);
+  });
+
+  it("rejects eval archive reads without an eval run id", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const client = archiveListClient(calls);
+
+    await expect(
+      listPublicArchiveEventsFromClient(client, {
+        dataClass: "eval",
+      }),
+    ).rejects.toThrow("public_event_eval_run_id_required");
+  });
+
   it("deduplicates public cards with the same real-world event key", () => {
     const now = new Date("2026-06-01T00:00:00.000Z");
 
@@ -603,6 +637,25 @@ describe("public event helpers", () => {
       status: "published",
     });
   });
+
+  it("scopes eval detail reads to a single eval run id", async () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const client = recordedSingleClient(calls, {
+      ...baseEvent,
+      data_class: "eval",
+    });
+
+    await expect(
+      getPublicEventFromClient(client, "event-1", {
+        dataClass: "eval",
+        evalRunId: "eval-run-1",
+      }),
+    ).resolves.toMatchObject({ eventId: "event-1" });
+
+    expect(calls).toContainEqual(["eq", ["data_class", "eval"]]);
+    expect(calls).toContainEqual(["eq", ["eval_run_id", "eval-run-1"]]);
+    expect(calls).toContainEqual(["eq", ["event_id", "event-1"]]);
+  });
 });
 
 function fallbackListClient(calls: Array<[string, unknown[]]>) {
@@ -748,6 +801,36 @@ function singleEventClient(event: CanonicalEventRow) {
 
   return {
     from() {
+      return query;
+    },
+  } as unknown as PublicEventsClient;
+}
+
+function recordedSingleClient(
+  calls: Array<[string, unknown[]]>,
+  event: CanonicalEventRow,
+) {
+  const query = {
+    select(...args: unknown[]) {
+      calls.push(["select", args]);
+      return query;
+    },
+    eq(...args: unknown[]) {
+      calls.push(["eq", args]);
+      return query;
+    },
+    async maybeSingle(...args: unknown[]) {
+      calls.push(["maybeSingle", args]);
+      return {
+        data: event,
+        error: null,
+      };
+    },
+  };
+
+  return {
+    from(...args: unknown[]) {
+      calls.push(["from", args]);
       return query;
     },
   } as unknown as PublicEventsClient;

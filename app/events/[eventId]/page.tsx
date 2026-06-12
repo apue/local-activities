@@ -1,12 +1,6 @@
-import Link from "next/link";
-
+import { PublicEventDetailView } from "../../public-event-components";
 import styles from "../../public-event-ui.module.css";
-import {
-  formatReservationStatus,
-  formatPublicEventOccurrences,
-  formatPublicEventSchedule,
-  getPublicEvent,
-} from "../../../src/server/public-events";
+import { getPublicEvent } from "../../../src/server/public-events";
 
 export const dynamic = "force-dynamic";
 
@@ -17,88 +11,17 @@ export default async function EventDetailPage({
 }) {
   const { eventId } = await params;
   const event = await getPublicEvent(eventId);
-  const occurrences = formatPublicEventOccurrences(event);
 
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
-        <Link className={styles.backLink} href="/">
-          Back to upcoming
-        </Link>
-        <Link className={styles.backLink} href="/archive">
-          View all activities
-        </Link>
-
-        <section className={styles.detailHero}>
-          <p className={styles.eyebrow}>{event.organizer ?? "Organizer TBA"}</p>
-          <h1>{event.title}</h1>
-        </section>
-
-        {event.posterImageUrl ? (
-          <figure className={styles.posterFigure}>
-            <img
-              src={event.posterImageUrl}
-              alt={event.posterImageAlt ?? `${event.title} poster`}
-            />
-          </figure>
-        ) : null}
-
-        <section className={styles.detailGrid}>
-          <article className={styles.panel}>
-            <h2>Activity details</h2>
-            <p className={styles.summary}>
-              {event.summary ?? "The official source did not provide a summary."}
-            </p>
-            {event.entryNotes ? (
-              <p className={styles.summary}>{event.entryNotes}</p>
-            ) : null}
-            {event.registrationUrl ? (
-              <a className={styles.actionButton} href={event.registrationUrl}>
-                {event.registrationAction ?? "查看报名方式"}
-              </a>
-            ) : null}
-            {event.registrationQrImageUrl ? (
-              <section className={styles.qrSection}>
-                <h3>{event.registrationAction ?? "扫码报名"}</h3>
-                <img
-                  src={event.registrationQrImageUrl}
-                  alt={event.registrationQrImageAlt ?? `${event.title} registration QR`}
-                />
-              </section>
-            ) : null}
-          </article>
-
-          <aside className={styles.panel}>
-            <h2>Plan</h2>
-            <div className={styles.field}>
-              <span>Time</span>
-              <strong>{formatPublicEventSchedule(event)}</strong>
-            </div>
-            {occurrences.length ? (
-              <div className={styles.field}>
-                <span>Occurrences</span>
-                <ul className={styles.occurrenceList}>
-                  {occurrences.map((occurrence) => (
-                    <li key={occurrence}>{occurrence}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            <div className={styles.field}>
-              <span>Venue</span>
-              <strong>{event.venueName ?? event.venueAddress ?? "Venue TBA"}</strong>
-              {event.venueAddress ? <small>{event.venueAddress}</small> : null}
-            </div>
-            <div className={styles.field}>
-              <span>Reservation</span>
-              <strong>{formatReservationStatus(event.reservationStatus)}</strong>
-            </div>
-            <div className={styles.field}>
-              <span>Official source</span>
-              <a href={event.sourceUrl}>{event.sourceUrl}</a>
-            </div>
-          </aside>
-        </section>
+        <PublicEventDetailView
+          event={event}
+          backLinks={[
+            { href: "/", label: "Back to upcoming" },
+            { href: "/archive", label: "View all activities" },
+          ]}
+        />
       </div>
     </main>
   );

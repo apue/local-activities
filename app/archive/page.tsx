@@ -1,13 +1,8 @@
 import Link from "next/link";
 
+import { PublicEventCard, publicEventStatusLabel } from "../public-event-components";
 import styles from "../public-event-ui.module.css";
-import {
-  formatPublicEventSchedule,
-  formatReservationStatus,
-  isPublicEventEnded,
-  listPublicArchiveEvents,
-  type PublicEvent,
-} from "../../src/server/public-events";
+import { listPublicArchiveEvents } from "../../src/server/public-events";
 
 export const dynamic = "force-dynamic";
 
@@ -34,36 +29,13 @@ export default async function ArchivePage() {
 
         <section className={styles.eventList} aria-label="All activities">
           {events.map((event) => (
-            <Link
+            <PublicEventCard
               key={event.eventId}
-              className={`${styles.eventCard} ${
-                event.posterImageUrl ? styles.eventCardWithPoster : ""
-              }`}
+              event={event}
               href={`/events/${event.eventId}`}
-            >
-              {event.posterImageUrl ? (
-                <div className={styles.posterThumb}>
-                  <img
-                    src={event.posterImageUrl}
-                    alt={event.posterImageAlt ?? `${event.title} poster`}
-                  />
-                </div>
-              ) : null}
-              <div className={styles.dateBlock}>
-                {formatPublicEventSchedule(event, now)}
-              </div>
-              <div>
-                <h2>{event.title}</h2>
-                <p>{event.summary ?? event.organizer ?? event.sourceUrl}</p>
-                <div className={styles.meta}>
-                  <span>{event.organizer ?? "Organizer TBA"}</span>
-                  <span>{event.venueName ?? event.venueAddress ?? "Venue TBA"}</span>
-                </div>
-              </div>
-              <span className={styles.statusPill}>
-                {archiveStatusLabel(event, now)}
-              </span>
-            </Link>
+              now={now}
+              statusLabel={publicEventStatusLabel(event, now)}
+            />
           ))}
           {events.length === 0 ? (
             <div className={styles.empty}>No published activities yet.</div>
@@ -72,9 +44,4 @@ export default async function ArchivePage() {
       </div>
     </main>
   );
-}
-
-function archiveStatusLabel(event: PublicEvent, now: Date) {
-  if (isPublicEventEnded(event, now)) return "已结束";
-  return formatReservationStatus(event.reservationStatus);
 }

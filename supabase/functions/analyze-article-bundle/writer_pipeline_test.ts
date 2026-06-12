@@ -221,6 +221,7 @@ Deno.test("runAnalysisPipeline in eval data class writes product-shaped rows sco
     request: {
       ...validRequest(),
       dataClass: "eval",
+      evalRunId: "eval-run-1",
       storagePrefix: "article-bundles/eval/bundle-1",
     },
     storage: bundleStorage({ dataClass: "eval" }),
@@ -231,15 +232,21 @@ Deno.test("runAnalysisPipeline in eval data class writes product-shaped rows sco
 
   assertEquals(db.table("event_drafts").length, 1);
   assertEquals(db.table("event_drafts")[0].data_class, "eval");
+  assertEquals(db.table("event_drafts")[0].eval_run_id, "eval-run-1");
   assertEquals(db.table("canonical_events").length, 1);
   assertEquals(db.table("canonical_events")[0].data_class, "eval");
+  assertEquals(db.table("canonical_events")[0].eval_run_id, "eval-run-1");
   assertEquals(db.table("dedupe_decisions").length, 1);
   assertEquals(db.table("dedupe_decisions")[0].data_class, "eval");
+  assertEquals(db.table("dedupe_decisions")[0].eval_run_id, "eval-run-1");
   assertEquals(db.table("llm_usage_ledger").length, 1);
   assertEquals(db.table("llm_usage_ledger")[0].data_class, "eval");
+  assertEquals(db.table("llm_usage_ledger")[0].eval_run_id, "eval-run-1");
   assertEquals(db.table("processing_ledger").length, 1);
   assertEquals(db.table("processing_ledger")[0].data_class, "eval");
+  assertEquals(db.table("processing_ledger")[0].eval_run_id, "eval-run-1");
   assertEquals(db.table("processing_ledger")[0].state, "published");
+  assertEquals(db.table("evidence_assets")[0].eval_run_id, "eval-run-1");
 });
 
 Deno.test("runAnalysisPipeline writes failed ledger and failed usage when provider fails", async () => {
