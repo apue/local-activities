@@ -669,6 +669,8 @@ describe("supabase admin store", () => {
             feedback_id: "feedback-1",
             data_class: "production",
             feedback_type: "missing_qr",
+            eval_run_id: null,
+            case_id: null,
             pipeline_run_id: "pipe-1",
             article_bundle_id: "bundle-1",
             draft_id: "draft-1",
@@ -700,6 +702,8 @@ describe("supabase admin store", () => {
         id: "feedback-1",
         dataClass: "production",
         feedbackType: "missing_qr",
+        evalRunId: undefined,
+        caseId: undefined,
         pipelineRunId: "pipe-1",
         articleBundleId: "bundle-1",
         draftId: "draft-1",
@@ -732,9 +736,11 @@ describe("supabase admin store", () => {
     const store = getSupabaseAdminStore(
       supabaseClientForAdminFeedback([], calls, {
         feedback_id: "feedback-created",
-        data_class: "production",
-        feedback_type: "wrong_time",
-        pipeline_run_id: "pipe-1",
+            data_class: "production",
+            feedback_type: "wrong_time",
+            eval_run_id: null,
+            case_id: null,
+            pipeline_run_id: "pipe-1",
         article_bundle_id: "bundle-1",
         draft_id: "draft-1",
         event_id: "event-1",
@@ -792,6 +798,108 @@ describe("supabase admin store", () => {
       "from",
       expect.stringMatching(/event_drafts|canonical_events/),
     ]);
+  });
+
+  it("lists and creates eval feedback with eval run and case identifiers", async () => {
+    const calls: unknown[] = [];
+    const store = getSupabaseAdminStore(
+      supabaseClientForAdminFeedback(
+        [
+          {
+            feedback_id: "feedback-eval-1",
+            data_class: "eval",
+            feedback_type: "not_event",
+            eval_run_id: "eval-run-1",
+            case_id: "case-news-1",
+            pipeline_run_id: null,
+            article_bundle_id: "bundle-eval-1",
+            draft_id: null,
+            event_id: "event-eval-1",
+            field_name: null,
+            old_value: null,
+            corrected_value: null,
+            reason: "Preview shows a news item.",
+            created_by: "operator@example.com",
+            status: "open",
+            metadata: {},
+            created_at: "2026-06-11T10:00:00.000Z",
+            updated_at: "2026-06-11T10:00:00.000Z",
+          },
+        ],
+        calls,
+        {
+          feedback_id: "feedback-eval-created",
+          data_class: "eval",
+          feedback_type: "missing_qr",
+          eval_run_id: "eval-run-1",
+          case_id: "case-event-1",
+          pipeline_run_id: null,
+          article_bundle_id: "bundle-eval-2",
+          draft_id: null,
+          event_id: "event-eval-2",
+          field_name: "registrationQrImageUrl",
+          old_value: null,
+          corrected_value: "asset-qr-1",
+          reason: "QR is present in the preview source.",
+          created_by: "operator@example.com",
+          status: "open",
+          metadata: {},
+          created_at: "2026-06-11T10:05:00.000Z",
+          updated_at: "2026-06-11T10:05:00.000Z",
+        },
+      ),
+    );
+
+    await expect(
+      store.listFeedback({
+        dataClass: "eval",
+        evalRunId: "eval-run-1",
+        caseId: "case-news-1",
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: "feedback-eval-1",
+        dataClass: "eval",
+        evalRunId: "eval-run-1",
+        caseId: "case-news-1",
+      }),
+    ]);
+
+    await expect(
+      store.createFeedback({
+        dataClass: "eval",
+        feedbackType: "missing_qr",
+        evalRunId: "eval-run-1",
+        caseId: "case-event-1",
+        articleBundleId: "bundle-eval-2",
+        eventId: "event-eval-2",
+        fieldName: "registrationQrImageUrl",
+        correctedValue: "asset-qr-1",
+        reason: "QR is present in the preview source.",
+        createdBy: "operator@example.com",
+      }),
+    ).resolves.toMatchObject({
+      id: "feedback-eval-created",
+      dataClass: "eval",
+      evalRunId: "eval-run-1",
+      caseId: "case-event-1",
+    });
+
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        ["eq", "eval_run_id", "eval-run-1"],
+        ["eq", "case_id", "case-news-1"],
+        [
+          "insert",
+          expect.objectContaining({
+            data_class: "eval",
+            feedback_type: "missing_qr",
+            eval_run_id: "eval-run-1",
+            case_id: "case-event-1",
+          }),
+        ],
+      ]),
+    );
   });
 
   it("maps prompt/model configs and filters active lookup by scoped operation", async () => {

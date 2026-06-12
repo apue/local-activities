@@ -257,6 +257,8 @@ export type AdminFeedbackRecord = {
   id: string;
   dataClass: AdminDataClass;
   feedbackType: AdminFeedbackType;
+  evalRunId?: string;
+  caseId?: string;
   pipelineRunId?: string;
   articleBundleId?: string;
   draftId?: string;
@@ -275,6 +277,8 @@ export type AdminFeedbackRecord = {
 export type AdminFeedbackInput = {
   dataClass: AdminDataClass;
   feedbackType: AdminFeedbackType;
+  evalRunId?: string;
+  caseId?: string;
   pipelineRunId?: string;
   articleBundleId?: string;
   draftId?: string;
@@ -289,6 +293,8 @@ export type AdminFeedbackInput = {
 
 export type AdminFeedbackFilters = {
   dataClass?: AdminDataClass;
+  evalRunId?: string;
+  caseId?: string;
   pipelineRunId?: string;
   articleBundleId?: string;
   draftId?: string;
@@ -705,6 +711,8 @@ export function listAdminFeedback(
 ) {
   return store.listFeedback({
     dataClass: input.dataClass ?? "production",
+    evalRunId: input.evalRunId,
+    caseId: input.caseId,
     pipelineRunId: input.pipelineRunId,
     articleBundleId: input.articleBundleId,
     draftId: input.draftId,

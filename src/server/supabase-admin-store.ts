@@ -298,6 +298,8 @@ type AdminFeedbackRow = {
   feedback_id: string;
   data_class: AdminFeedbackRecord["dataClass"];
   feedback_type: AdminFeedbackRecord["feedbackType"];
+  eval_run_id: string | null;
+  case_id: string | null;
   pipeline_run_id: string | null;
   article_bundle_id: string | null;
   draft_id: string | null;
@@ -798,6 +800,12 @@ class SupabaseAdminStore implements AdminStore {
     if (input.pipelineRunId) {
       query = query.eq("pipeline_run_id", input.pipelineRunId);
     }
+    if (input.evalRunId) {
+      query = query.eq("eval_run_id", input.evalRunId);
+    }
+    if (input.caseId) {
+      query = query.eq("case_id", input.caseId);
+    }
     if (input.articleBundleId) {
       query = query.eq("article_bundle_id", input.articleBundleId);
     }
@@ -827,6 +835,8 @@ class SupabaseAdminStore implements AdminStore {
         feedback_id: `feedback-${randomUUID()}`,
         data_class: input.dataClass,
         feedback_type: input.feedbackType,
+        eval_run_id: input.evalRunId ?? null,
+        case_id: input.caseId ?? null,
         pipeline_run_id: input.pipelineRunId ?? null,
         article_bundle_id: input.articleBundleId ?? null,
         draft_id: input.draftId ?? null,
@@ -1175,6 +1185,8 @@ function toFeedbackRecord(row: AdminFeedbackRow): AdminFeedbackRecord {
     id: row.feedback_id,
     dataClass: row.data_class,
     feedbackType: row.feedback_type,
+    evalRunId: row.eval_run_id ?? undefined,
+    caseId: row.case_id ?? undefined,
     pipelineRunId: row.pipeline_run_id ?? undefined,
     articleBundleId: row.article_bundle_id ?? undefined,
     draftId: row.draft_id ?? undefined,

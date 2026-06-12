@@ -587,6 +587,8 @@ describe("admin service", () => {
         id: "feedback-2",
         dataClass: "eval",
         feedbackType: "not_event",
+        evalRunId: "eval-run-1",
+        caseId: "case-news-1",
         articleBundleId: "bundle-2",
         createdBy: "operator@example.com",
         status: "resolved",
@@ -610,13 +612,29 @@ describe("admin service", () => {
     });
 
     await expect(
-      listAdminFeedback({ dataClass: "eval", status: "resolved" }, store),
+      listAdminFeedback(
+        {
+          dataClass: "eval",
+          evalRunId: "eval-run-1",
+          caseId: "case-news-1",
+          status: "resolved",
+        },
+        store,
+      ),
     ).resolves.toEqual([
       expect.objectContaining({
         id: "feedback-2",
         dataClass: "eval",
+        evalRunId: "eval-run-1",
+        caseId: "case-news-1",
       }),
     ]);
+    expect(store.feedbackInput).toMatchObject({
+      dataClass: "eval",
+      evalRunId: "eval-run-1",
+      caseId: "case-news-1",
+      status: "resolved",
+    });
   });
 
   it("returns pipeline runs scoped to production by default", async () => {

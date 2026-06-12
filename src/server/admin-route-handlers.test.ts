@@ -162,6 +162,21 @@ class RouteAdminStore implements AdminStore {
       createdAt: "2026-06-11T10:00:00.000Z",
       updatedAt: "2026-06-11T10:00:00.000Z",
     },
+    {
+      id: "feedback-eval-1",
+      dataClass: "eval",
+      feedbackType: "not_event",
+      evalRunId: "eval-run-1",
+      caseId: "case-news-1",
+      articleBundleId: "bundle-eval-1",
+      eventId: "event-eval-1",
+      reason: "Preview shows a news item, not a public event.",
+      createdBy: "operator@example.com",
+      status: "open",
+      metadata: {},
+      createdAt: "2026-06-11T10:05:00.000Z",
+      updatedAt: "2026-06-11T10:05:00.000Z",
+    },
   ];
   feedbackInput?: Parameters<AdminStore["listFeedback"]>[0];
   createdFeedbackInput?: AdminFeedbackInput;
@@ -444,6 +459,8 @@ class RouteAdminStore implements AdminStore {
         (!input.dataClass || row.dataClass === input.dataClass) &&
         (!input.draftId || row.draftId === input.draftId) &&
         (!input.eventId || row.eventId === input.eventId) &&
+        (!input.evalRunId || row.evalRunId === input.evalRunId) &&
+        (!input.caseId || row.caseId === input.caseId) &&
         (!input.articleBundleId ||
           row.articleBundleId === input.articleBundleId) &&
         (!input.pipelineRunId || row.pipelineRunId === input.pipelineRunId) &&
@@ -459,6 +476,8 @@ class RouteAdminStore implements AdminStore {
       id: "feedback-2",
       dataClass: input.dataClass,
       feedbackType: input.feedbackType,
+      evalRunId: input.evalRunId,
+      caseId: input.caseId,
       pipelineRunId: input.pipelineRunId,
       articleBundleId: input.articleBundleId,
       draftId: input.draftId,
@@ -1098,6 +1117,38 @@ describe("admin route handlers", () => {
     });
   });
 
+  it("lists eval feedback by eval run and case identifiers", async () => {
+    const store = new RouteAdminStore();
+    const response = await handleAdminListFeedback(
+      new Request(
+        "https://example.com/api/admin/feedback?data_class=eval&eval_run_id=eval-run-1&case_id=case-news-1",
+        {
+          headers: { authorization: "Bearer admin-secret" },
+        },
+      ),
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      feedback: [
+        expect.objectContaining({
+          id: "feedback-eval-1",
+          dataClass: "eval",
+          evalRunId: "eval-run-1",
+          caseId: "case-news-1",
+        }),
+      ],
+    });
+    expect(store.feedbackInput).toMatchObject({
+      dataClass: "eval",
+      evalRunId: "eval-run-1",
+      caseId: "case-news-1",
+    });
+  });
+
   it("creates structured feedback without invoking draft actions", async () => {
     const store = new RouteAdminStore();
     const response = await handleAdminCreateFeedback(
@@ -1140,6 +1191,49 @@ describe("admin route handlers", () => {
       draftId: "draft-1",
       eventId: "event-1",
       fieldName: "venueName",
+      createdBy: "admin",
+    });
+    expect(store.draft.reviewState).toBe("ready_for_review");
+  });
+
+  it("creates eval preview feedback without invoking production draft actions", async () => {
+    const store = new RouteAdminStore();
+    const response = await handleAdminCreateFeedback(
+      new Request("https://example.com/api/admin/feedback", {
+        method: "POST",
+        headers: { authorization: "Bearer admin-secret" },
+        body: JSON.stringify({
+          dataClass: "eval",
+          feedbackType: "not_event",
+          evalRunId: "eval-run-1",
+          caseId: "case-news-1",
+          eventId: "event-eval-1",
+          articleBundleId: "bundle-eval-1",
+          reason: "Preview shows a news item, not a public event.",
+        }),
+      }),
+      store,
+      { ADMIN_ACCESS_TOKEN: "admin-secret" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      feedback: {
+        id: "feedback-2",
+        dataClass: "eval",
+        feedbackType: "not_event",
+        evalRunId: "eval-run-1",
+        caseId: "case-news-1",
+      },
+    });
+    expect(store.createdFeedbackInput).toMatchObject({
+      dataClass: "eval",
+      feedbackType: "not_event",
+      evalRunId: "eval-run-1",
+      caseId: "case-news-1",
+      eventId: "event-eval-1",
+      articleBundleId: "bundle-eval-1",
       createdBy: "admin",
     });
     expect(store.draft.reviewState).toBe("ready_for_review");

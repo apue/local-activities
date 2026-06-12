@@ -18,6 +18,11 @@ describe("local activities weekly audit skill", () => {
     expect(text).toContain("pnpm agent:inspect-event");
     expect(text).toContain("pnpm agent:inspect-source");
     expect(text).toContain("pnpm agent:export-case");
+    expect(text).toContain("Live Eval Review Loop");
+    expect(text).toContain("pnpm agent:eval");
+    expect(text).toContain("/admin/eval-runs/<eval-run-id>/preview");
+    expect(text).toContain("eval_run_id");
+    expect(text).toContain("case_id");
     expect(text).toContain("Requires explicit current approval");
     expect(text).toContain("destructive cleanup");
     expect(text).toContain("switching production active prompt/model config");
@@ -28,7 +33,7 @@ describe("local activities weekly audit skill", () => {
   it("stays concise and delegates implementation details to repo contracts", async () => {
     const text = await readFile(skillPath, "utf8");
 
-    expect(text.split(/\r?\n/).length).toBeLessThan(120);
+    expect(text.split(/\r?\n/).length).toBeLessThan(160);
     expect(text).not.toMatch(/create table\s+/i);
     expect(text).not.toMatch(/select\s+\*\s+from/i);
     expect(text).not.toContain("prompt text:");

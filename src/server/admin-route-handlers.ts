@@ -191,6 +191,8 @@ const feedbackCreateSchema = z
       .enum(["production", "eval", "test", "smoke"])
       .default("production"),
     feedbackType: feedbackTypeSchema,
+    evalRunId: z.string().trim().min(1).max(300).optional(),
+    caseId: z.string().trim().min(1).max(300).optional(),
     pipelineRunId: z.string().trim().min(1).max(200).optional(),
     articleBundleId: z.string().trim().min(1).max(200).optional(),
     draftId: z.string().trim().min(1).max(200).optional(),
@@ -207,13 +209,15 @@ const feedbackCreateSchema = z
     (value) =>
       Boolean(
         value.pipelineRunId ||
+          value.evalRunId ||
+          value.caseId ||
           value.articleBundleId ||
           value.draftId ||
           value.eventId,
       ),
     {
       message:
-        "Feedback must be linked to a pipeline run, article bundle, draft, or event.",
+        "Feedback must be linked to an eval run, case, pipeline run, article bundle, draft, or event.",
     },
   );
 
@@ -673,6 +677,12 @@ export async function handleAdminListFeedback(
     const feedback = await listAdminFeedback(
       {
         dataClass: parsedDataClass.data,
+        evalRunId:
+          optionalSearchParam(url, "eval_run_id") ??
+          optionalSearchParam(url, "evalRunId"),
+        caseId:
+          optionalSearchParam(url, "case_id") ??
+          optionalSearchParam(url, "caseId"),
         pipelineRunId: optionalSearchParam(url, "pipeline_run_id"),
         articleBundleId: optionalSearchParam(url, "article_bundle_id"),
         draftId: optionalSearchParam(url, "draft_id"),

@@ -100,6 +100,8 @@ export async function patchAdminDraft({
 
 export async function listAdminFeedback({
   dataClass = "production",
+  evalRunId,
+  caseId,
   pipelineRunId,
   articleBundleId,
   draftId,
@@ -108,6 +110,8 @@ export async function listAdminFeedback({
   fetchImpl = fetch,
 }: AdminPortalApiOptions & {
   dataClass?: string;
+  evalRunId?: string;
+  caseId?: string;
   pipelineRunId?: string;
   articleBundleId?: string;
   draftId?: string;
@@ -116,6 +120,8 @@ export async function listAdminFeedback({
 }) {
   const params = new URLSearchParams();
   params.set("data_class", dataClass);
+  if (evalRunId) params.set("eval_run_id", evalRunId);
+  if (caseId) params.set("case_id", caseId);
   if (pipelineRunId) params.set("pipeline_run_id", pipelineRunId);
   if (articleBundleId) params.set("article_bundle_id", articleBundleId);
   if (draftId) params.set("draft_id", draftId);

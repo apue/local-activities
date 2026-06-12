@@ -207,6 +207,8 @@ type AdminFeedbackRecord = {
   id: string;
   dataClass: "production" | "eval" | "test" | "smoke";
   feedbackType: AdminFeedbackType;
+  evalRunId?: string;
+  caseId?: string;
   pipelineRunId?: string;
   articleBundleId?: string;
   draftId?: string;
