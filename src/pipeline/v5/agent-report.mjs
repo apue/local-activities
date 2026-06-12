@@ -84,6 +84,7 @@ export function buildAgentAuditReport({
     (candidate) => candidate.severityHint === "high",
   ).length;
   const feedback = auditPacket?.auditFacts?.feedback ?? {};
+  const feedbackSummary = summarizeFeedback(feedback);
   const evidenceLinks = buildEvidenceLinks({
     inputPaths,
     auditPacket,
@@ -124,6 +125,7 @@ export function buildAgentAuditReport({
     summary,
     audit: summarizeAudit(auditPacket),
     evaluation: summarizeEvaluation(evalSummary, comparison),
+    feedback: feedbackSummary,
     suspectedAreas,
     nextActions,
     evidenceLinks,
@@ -238,6 +240,10 @@ function buildEvidenceLinks({
   }
   if (inputPaths.evalSummaryPath) {
     links.push(link("eval summary", inputPaths.evalSummaryPath));
+  }
+  const previewUrl = evalPreviewUrl(evalSummary?.runId ?? comparison?.runId);
+  if (previewUrl) {
+    links.push(link("eval preview", previewUrl));
   }
   if (inputPaths.comparisonPath) {
     links.push(link("eval comparison", inputPaths.comparisonPath));
@@ -409,9 +415,34 @@ function summarizeEvaluation(evalSummary, comparison) {
     falseNegativeCount: numberValue(evalSummary?.falseNegativeCount),
     actionAccuracy: evalSummary?.actionAccuracy,
     finalStateAccuracy: evalSummary?.finalStateAccuracy,
+    reviewMetrics: evalSummary?.reviewMetrics,
+    previewUrl: evalPreviewUrl(evalSummary?.runId ?? comparison?.runId),
     gates: comparison?.gates,
     regressions: comparison?.regressions,
   };
+}
+
+function summarizeFeedback(feedback) {
+  return {
+    totalCount: numberValue(feedback?.totalCount),
+    openCount: numberValue(feedback?.openCount),
+    byType: feedback?.byType ?? {},
+    recent: (feedback?.records ?? []).slice(0, 10).map((record) => ({
+      feedbackId: clean(record.feedbackId ?? record.id),
+      feedbackType: clean(record.feedbackType),
+      evalRunId: clean(record.evalRunId ?? record.eval_run_id),
+      caseId: clean(record.caseId ?? record.case_id),
+      eventId: clean(record.eventId ?? record.event_id),
+      articleBundleId: clean(record.articleBundleId ?? record.article_bundle_id),
+      status: clean(record.status),
+    })),
+  };
+}
+
+function evalPreviewUrl(runId) {
+  const value = clean(runId);
+  if (!value) return undefined;
+  return `/admin/eval-runs/${encodeURIComponent(value)}/preview`;
 }
 
 function renderAgentAuditReportMarkdown(report) {
@@ -432,6 +463,17 @@ function renderAgentAuditReportMarkdown(report) {
     `- Feedback: ${report.summary?.openFeedbackCount ?? 0}/${
       report.summary?.feedbackCount ?? 0
     } open/total`,
+    report.evaluation?.previewUrl
+      ? `- Eval preview: ${report.evaluation.previewUrl}`
+      : "- Eval preview: not available",
+    "",
+    "## Evaluation Review Metrics",
+    "",
+    ...markdownReviewMetrics(report.evaluation?.reviewMetrics),
+    "",
+    "## Feedback",
+    "",
+    ...markdownFeedback(report.feedback),
     "",
     "## Suspected Areas",
     "",
@@ -461,6 +503,49 @@ function markdownSuspectedAreas(areas) {
   });
 }
 
+function markdownReviewMetrics(metrics) {
+  if (!metrics || Object.keys(metrics).length === 0) {
+    return ["- No review metrics provided."];
+  }
+  const labels = {
+    qrExtractionSuccessRate: "QR extraction success rate",
+    posterExtractionSuccessRate: "Poster extraction success rate",
+    registrationSuccessRate: "Registration success rate",
+    multiEventSplitAccuracy: "Multi-event split accuracy",
+    duplicateUpdateAccuracy: "Duplicate/update accuracy",
+    falsePositiveRate: "False positive rate",
+    falseNegativeRate: "False negative rate",
+    humanRejectRate: "Human reject rate",
+  };
+  return Object.entries(metrics)
+    .filter(([, value]) => typeof value === "number")
+    .map(([key, value]) => {
+      const label = labels[key] ?? key;
+      return `- ${label}: ${formatMetricValue(value)}`;
+    });
+}
+
+function markdownFeedback(feedback) {
+  if (!feedback || feedback.totalCount === 0) {
+    return ["- No feedback records in provided artifacts."];
+  }
+  const lines = [
+    `- Open/total: ${feedback.openCount ?? 0}/${feedback.totalCount ?? 0}`,
+  ];
+  for (const [type, count] of Object.entries(feedback.byType ?? {})) {
+    lines.push(`- ${type}: ${count}`);
+  }
+  for (const record of feedback.recent ?? []) {
+    const scope = [record.evalRunId, record.caseId].filter(Boolean).join(" / ");
+    lines.push(
+      `- ${record.feedbackId}: ${record.feedbackType ?? "unknown"}${
+        scope ? ` (${scope})` : ""
+      }`,
+    );
+  }
+  return lines;
+}
+
 function markdownNextActions(actions) {
   if (actions.length === 0) {
     return ["- No immediate action suggested by provided artifacts."];
@@ -471,6 +556,11 @@ function markdownNextActions(actions) {
       : "";
     return `- [${action.priority}] ${action.title} -> ${action.suspectedModule}.${evidence}`;
   });
+}
+
+function formatMetricValue(value) {
+  if (value >= 0 && value <= 1) return `${Math.round(value * 100)}%`;
+  return String(value);
 }
 
 function markdownEvidenceLinks(links) {

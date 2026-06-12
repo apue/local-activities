@@ -61,6 +61,40 @@ pnpm agent:inspect-source -- --source-id <id> --audit-dir .agent-runs/<run-id> -
    implement, test, open PR, wait for checks, merge only when allowed, and write
    issue handoff.
 
+## Live Eval Review Loop
+
+Use this checklist when the user wants Codex to evaluate recent model/prompt
+behavior and they prefer to inspect product-like preview pages instead of raw
+JSON artifacts.
+
+1. Start from a clean branch and confirm whether live LLM spend is approved.
+2. Run non-production eval with an explicit corpus, target, and budget:
+
+```bash
+pnpm agent:eval -- --env-file .env.local --corpus-dir tests/regression-corpus --all --allow-live --target eval --max-cost-cny <budget>
+```
+
+3. If eval rows were written to the hosted eval scope, open the product preview:
+
+```text
+/admin/eval-runs/<eval-run-id>/preview
+```
+
+4. Record human review feedback through the existing admin feedback API or UI.
+   Link feedback with `data_class=eval`, `eval_run_id`, and `case_id` when the
+   case is known. Also include `event_id` or `article_bundle_id` when available.
+5. Generate an agent report from the audit/eval artifacts:
+
+```bash
+pnpm agent:report -- --audit-dir .agent-runs/<audit-run-id> --eval-run-id <eval-run-id> --output-dir .agent-runs/<report-run-id>
+```
+
+6. Read the report before proposing fixes. Use preview URL, review metrics,
+   feedback counts, evidence packs, and failing cases to decide whether the next
+   action is prompt/model tuning, corpus repair, code changes, or data cleanup.
+7. Export repeatable bad cases with `pnpm agent:export-case` so future loops
+   can run without live WeChat or live LLM calls.
+
 ## Permission Boundaries
 
 Allowed by default:

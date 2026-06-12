@@ -46,6 +46,21 @@ describe("agent audit report", () => {
           evalFailCount: 1,
           openFeedbackCount: 1,
         },
+        evaluation: {
+          reviewMetrics: {
+            qrExtractionSuccessRate: 0.5,
+            falsePositiveRate: 0.33,
+          },
+          previewUrl: "/admin/eval-runs/v5-eval-1/preview",
+        },
+        feedback: {
+          totalCount: 2,
+          openCount: 1,
+          byType: {
+            missing_qr: 1,
+            not_event: 1,
+          },
+        },
         suspectedAreas: expect.arrayContaining([
           expect.objectContaining({
             module: "model-provider/live-harness",
@@ -78,6 +93,10 @@ describe("agent audit report", () => {
         expect.arrayContaining([
           expect.objectContaining({ label: "audit facts" }),
           expect.objectContaining({ label: "eval summary", path: evalSummaryPath }),
+          expect.objectContaining({
+            label: "eval preview",
+            path: "/admin/eval-runs/v5-eval-1/preview",
+          }),
           expect.objectContaining({ label: "eval comparison", path: comparisonPath }),
           expect.objectContaining({ label: "finding evidence", path: findingPath }),
         ]),
@@ -93,6 +112,9 @@ describe("agent audit report", () => {
       expect(markdown).toContain("finding-001");
       expect(markdown).toContain("model-provider/live-harness");
       expect(markdown).toContain("pnpm agent:inspect-finding");
+      expect(markdown).toContain("/admin/eval-runs/v5-eval-1/preview");
+      expect(markdown).toContain("QR extraction success rate: 50%");
+      expect(markdown).toContain("missing_qr: 1");
       expect(markdown).not.toContain("do not inline raw response");
     } finally {
       await rm(rootDir, { recursive: true, force: true });
@@ -159,6 +181,15 @@ function fakeAuditFacts() {
         missing_qr: 1,
         not_event: 1,
       },
+      records: [
+        {
+          feedbackId: "feedback-1",
+          feedbackType: "missing_qr",
+          evalRunId: "v5-eval-1",
+          caseId: "case-event-1",
+          status: "open",
+        },
+      ],
     },
   };
 }
@@ -243,6 +274,11 @@ function fakeEvalSummary() {
     falseNegativeCount: 0,
     actionAccuracy: 0.66,
     finalStateAccuracy: 0.66,
+    reviewMetrics: {
+      qrExtractionSuccessRate: 0.5,
+      posterExtractionSuccessRate: 1,
+      falsePositiveRate: 0.33,
+    },
     artifactPaths: ["runs/v5-eval-1/summary.json", "runs/v5-eval-1/cases/bad.json"],
   };
 }

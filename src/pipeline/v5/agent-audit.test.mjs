@@ -74,6 +74,16 @@ describe("agent audit packet", () => {
         costMicroCny: 2_000_000,
       },
     });
+    expect(packet.auditFacts.feedback.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          feedbackId: "feedback-eval-1",
+          dataClass: "eval",
+          evalRunId: "eval-run-1",
+          caseId: "case-news-1",
+        }),
+      ]),
+    );
     const candidateTypes = packet.candidateIndex.candidates.map((candidate) => candidate.candidateType);
     expect(candidateTypes).toEqual(expect.arrayContaining([
       "funnel_drop",
@@ -196,7 +206,7 @@ function createAuditStore() {
       return data.publicEvents.filter((row) => row.dataClass === dataClass);
     },
     async listFeedback({ dataClass }) {
-      return data.feedback.filter((row) => row.dataClass === dataClass);
+      return data.feedback.filter((row) => (row.dataClass ?? row.data_class) === dataClass);
     },
     async listLlmUsage({ dataClass }) {
       return data.llmUsage.filter((row) => row.dataClass === dataClass);
@@ -389,6 +399,17 @@ function auditData() {
         status: "open",
         createdBy: "operator",
         createdAt: "2026-06-10T14:00:00.000Z",
+      },
+      {
+        feedback_id: "feedback-eval-1",
+        data_class: "eval",
+        feedback_type: "not_event",
+        eval_run_id: "eval-run-1",
+        case_id: "case-news-1",
+        event_id: "event-eval-1",
+        status: "open",
+        created_by: "operator",
+        created_at: "2026-06-10T14:05:00.000Z",
       },
     ],
     llmUsage: [

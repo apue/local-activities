@@ -1172,6 +1172,8 @@ function normalizeFeedbackRow(row) {
     feedbackId: clean(row.feedbackId ?? row.feedback_id ?? row.id),
     dataClass: clean(row.dataClass ?? row.data_class) ?? "production",
     feedbackType: clean(row.feedbackType ?? row.feedback_type),
+    evalRunId: clean(row.evalRunId ?? row.eval_run_id),
+    caseId: clean(row.caseId ?? row.case_id),
     pipelineRunId: clean(row.pipelineRunId ?? row.pipeline_run_id),
     articleBundleId: clean(row.articleBundleId ?? row.article_bundle_id),
     draftId: clean(row.draftId ?? row.draft_id),

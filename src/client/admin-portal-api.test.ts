@@ -245,6 +245,33 @@ describe("admin portal API client", () => {
     expect(JSON.stringify(calls[0].init)).not.toContain("authorization");
   });
 
+  it("lists eval preview feedback by eval run and case", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl: typeof fetch = async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      return jsonResponse(200, {
+        ok: true,
+        feedback: [{ id: "feedback-eval-1", evalRunId: "eval-run-1" }],
+      });
+    };
+
+    await listAdminFeedback({
+      dataClass: "eval",
+      evalRunId: "eval-run-1",
+      caseId: "case-news-1",
+      eventId: "event-eval-1",
+      fetchImpl,
+    });
+
+    const [, query = ""] = calls[0].url.split("?");
+    expect(Object.fromEntries(new URLSearchParams(query))).toEqual({
+      data_class: "eval",
+      eval_run_id: "eval-run-1",
+      case_id: "case-news-1",
+      event_id: "event-eval-1",
+    });
+  });
+
   it("creates structured feedback through the cookie session", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl: typeof fetch = async (url, init = {}) => {
