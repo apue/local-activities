@@ -22,7 +22,7 @@ describe("V5 candidate packet builder", () => {
     );
     expect(packet.sourceSignalIds.length).toBeGreaterThan(0);
     expect(packet.packetText).toContain("北平机器友谊万岁精酿啤酒节");
-    expect(packet.packetText).toContain("Registration action: mini_program");
+    expect(packet.packetText).toContain("小程序");
     expect(packet.packetText).toContain("wx4d1258677af59f5c");
     expect(packet.estimatedTokens).toBeGreaterThan(0);
   });

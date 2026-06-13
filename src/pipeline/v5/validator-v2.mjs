@@ -95,7 +95,7 @@ export function validateV5Extraction({ extraction, normalized, now = new Date() 
     addCityIssue({ event, eventIndex, pushHard, pushSoft });
     addScheduleIssues({ event, eventIndex, now: checkedAt, extraction, pushHard, pushSoft });
     addAttendancePathIssue({ event, eventIndex, pushSoft });
-    addRegistrationIssue({ event, eventIndex, pushSoft });
+    addRegistrationIssue({ event, eventIndex, normalized, pushSoft });
 
     eventResults.push({
       eventIndex,
@@ -311,11 +311,21 @@ function addAttendancePathIssue({ event, eventIndex, pushSoft }) {
   }
 }
 
-function addRegistrationIssue({ event, eventIndex, pushSoft }) {
+function addRegistrationIssue({ event, eventIndex, normalized, pushSoft }) {
   const action = normalizedToken(event?.registrationAction ?? event?.registrationStatus);
   const required = actionRequiresEvidence(action) || event?.registrationRequired === true;
   if (!required) return;
-  const hasRegistrationEvidence = hasEvidenceForRegistrationAction({ event, action });
+  const sourceUrl = clean(normalized?.sourceUrl);
+  if (sourceUrl && registrationPathMatchesSourceArticle({ event, sourceUrl })) {
+    pushSoft({
+      code: "registration_url_is_source_article",
+      severity: "soft",
+      repairable: true,
+      eventIndex,
+      message: "Registration URL points back to the source article instead of an actionable registration path.",
+    });
+  }
+  const hasRegistrationEvidence = hasEvidenceForRegistrationAction({ event, action, sourceUrl });
   if (!hasRegistrationEvidence) {
     pushSoft({
       code: "registration_evidence_missing",
@@ -337,42 +347,97 @@ function actionRequiresEvidence(action) {
   ].includes(action);
 }
 
-function hasEvidenceForRegistrationAction({ event, action }) {
-  if (action === "external_url") return Boolean(clean(event?.registrationUrl) || evidenceHasRegistrationPath(event?.evidence));
+function hasEvidenceForRegistrationAction({ event, action, sourceUrl }) {
+  if (action === "external_url") return hasExternalRegistrationPath(event, { sourceUrl });
   if (action === "qr_code") {
-    return Boolean(
-      clean(event?.registrationQr)
-        || clean(event?.registrationQrUrl)
-        || clean(event?.registrationEvidence)
-        || evidenceHasRegistrationPath(event?.evidence),
-    );
+    return hasQrRegistrationPath(event, { sourceUrl });
   }
   if (action === "mini_program") {
-    return Boolean(
-      clean(event?.miniProgramPath)
-        || clean(event?.miniProgramAppId)
-        || clean(event?.registrationMiniProgram)
-        || clean(event?.registrationEvidence)
-        || evidenceHasRegistrationPath(event?.evidence),
-    );
+    return hasMiniProgramRegistrationPath(event, { sourceUrl });
   }
   return Boolean(
-    clean(event?.registrationUrl)
-      || clean(event?.registrationQr)
-      || clean(event?.registrationQrUrl)
-      || clean(event?.registrationEvidence)
-      || clean(event?.miniProgramPath)
-      || clean(event?.registrationMiniProgram)
-      || evidenceHasRegistrationPath(event?.evidence),
+    hasExternalRegistrationPath(event, { sourceUrl })
+      || hasQrRegistrationPath(event, { sourceUrl })
+      || hasMiniProgramRegistrationPath(event, { sourceUrl }),
   );
 }
 
-function evidenceHasRegistrationPath(evidence) {
+function hasExternalRegistrationPath(event, { sourceUrl } = {}) {
+  return Boolean(
+    actionableUrl(event?.registrationUrl, { sourceUrl })
+      || evidenceHasRegistrationPath(event?.evidence, { allowImageEvidence: false, sourceUrl }),
+  );
+}
+
+function hasQrRegistrationPath(event, { sourceUrl } = {}) {
+  return Boolean(
+    clean(event?.registrationQr)
+      || actionableUrl(event?.registrationQrUrl, { sourceUrl })
+      || evidenceHasRegistrationPath(event?.evidence, { expectedRoles: ["qr", "registration_qr", "registration"], sourceUrl }),
+  );
+}
+
+function hasMiniProgramRegistrationPath(event, { sourceUrl } = {}) {
+  return Boolean(
+    clean(event?.miniProgramPath)
+      || clean(event?.miniProgramAppId)
+      || clean(event?.registrationMiniProgram)
+      || evidenceHasRegistrationPath(event?.evidence, { expectedRoles: ["mini_program", "registration"], sourceUrl }),
+  );
+}
+
+function evidenceHasRegistrationPath(evidence, {
+  allowImageEvidence = true,
+  expectedRoles = ["registration"],
+  sourceUrl,
+} = {}) {
   if (!Array.isArray(evidence)) return false;
   return evidence.some((item) => {
     if (!item || typeof item !== "object") return false;
-    return Boolean(clean(item.url) || clean(item.href) || clean(item.qrUrl) || clean(item.imageUrl));
+    if (
+      actionableUrl(item.url, { sourceUrl })
+        || actionableUrl(item.href, { sourceUrl })
+        || actionableUrl(item.qrUrl, { sourceUrl })
+        || actionableUrl(item.imageUrl, { sourceUrl })
+    ) return true;
+    if (!allowImageEvidence) return false;
+    const role = normalizedToken(item.role);
+    if (role && !expectedRoles.includes(role)) return false;
+    return Boolean(clean(item.imageId) || clean(item.assetId) || clean(item.storagePath));
   });
+}
+
+function registrationPathMatchesSourceArticle({ event, sourceUrl }) {
+  return [
+    event?.registrationUrl,
+    event?.registrationQrUrl,
+  ].some((value) => urlsMatch(value, sourceUrl));
+}
+
+function actionableUrl(value, { sourceUrl } = {}) {
+  const url = clean(value);
+  if (!url) return undefined;
+  if (sourceUrl && urlsMatch(url, sourceUrl)) return undefined;
+  return url;
+}
+
+function urlsMatch(left, right) {
+  const leftUrl = canonicalUrl(left);
+  const rightUrl = canonicalUrl(right);
+  return Boolean(leftUrl && rightUrl && leftUrl === rightUrl);
+}
+
+function canonicalUrl(value) {
+  const text = clean(value);
+  if (!text) return undefined;
+  try {
+    const url = new URL(text);
+    url.hash = "";
+    url.searchParams.sort();
+    return url.toString();
+  } catch {
+    return text;
+  }
 }
 
 function isRecapLike(extraction, event) {

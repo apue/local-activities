@@ -109,6 +109,8 @@ function normalizeImages(images) {
         id,
         path: clean(image?.path),
         sourceUrl: clean(image?.sourceUrl),
+        publicUrl: clean(image?.publicUrl),
+        dataUrl: clean(image?.dataUrl),
         storagePath: clean(image?.storagePath),
         role: clean(image?.role),
         width: positiveInteger(image?.width),

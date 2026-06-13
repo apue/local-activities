@@ -22,13 +22,20 @@ export function mockFullExtract({
   ].join("\n"));
   const action = expected?.action ?? "review";
   const events = (expected?.eventDrafts ?? []).map(normalizeExpectedEvent);
+  const expectedPublishState = clean(expected?.publish?.state);
   const decision = action === "exclude"
     ? "non_event"
+    : action === "review" && expectedPublishState === "needs_info" && events.length > 0
+    ? "event"
+    : action === "review"
+    ? "needs_review"
     : events.length > 0
     ? "event"
     : "needs_review";
   const reason = action === "exclude"
     ? "mock expected output marks article as non-event"
+    : action === "review"
+    ? "mock expected output requires review"
     : events.length > 0
     ? "mock expected event drafts available"
     : "mock expected output requires review";
@@ -90,6 +97,14 @@ export function validateMockExtraction({ extraction, normalized, now = new Date(
         severity: "soft",
         eventIndex: index,
         message: "Event venue or online attendance path is missing.",
+      });
+    }
+    if (registrationActionRequiresEvidence(event.registrationAction) && !hasRegistrationEvidence(event)) {
+      issues.push({
+        code: "registration_evidence_missing",
+        severity: "soft",
+        eventIndex: index,
+        message: "Registration is required but no URL, QR, mini-program path, or registration image evidence is present.",
       });
     }
   }
@@ -199,6 +214,11 @@ function normalizeExpectedEvent(draft = {}) {
     organizer: clean(draft.organizer),
     registrationAction: clean(draft.registrationAction),
     registrationUrl: clean(draft.registrationUrl),
+    registrationQr: clean(draft.registrationQr),
+    registrationQrUrl: clean(draft.registrationQrUrl),
+    registrationMiniProgram: clean(draft.registrationMiniProgram),
+    miniProgramPath: clean(draft.miniProgramPath),
+    miniProgramAppId: clean(draft.miniProgramAppId),
     scheduleText: clean(draft.scheduleText),
     summary: clean(draft.summary),
     evidence: Array.isArray(draft.evidence) ? draft.evidence : [],
@@ -206,6 +226,44 @@ function normalizeExpectedEvent(draft = {}) {
       source: "regression_expected",
     },
   };
+}
+
+function registrationActionRequiresEvidence(action) {
+  return [
+    "required",
+    "registration_required",
+    "qr_code",
+    "mini_program",
+    "external_url",
+  ].includes(clean(action));
+}
+
+function hasRegistrationEvidence(event) {
+  return Boolean(
+    clean(event?.registrationUrl)
+      || clean(event?.registrationQr)
+      || clean(event?.registrationQrUrl)
+      || clean(event?.registrationMiniProgram)
+      || clean(event?.miniProgramPath)
+      || clean(event?.miniProgramAppId)
+      || evidenceHasRegistrationPath(event?.evidence),
+  );
+}
+
+function evidenceHasRegistrationPath(evidence) {
+  if (!Array.isArray(evidence)) return false;
+  return evidence.some((item) => {
+    if (!item || typeof item !== "object") return false;
+    return Boolean(
+      clean(item.url)
+        || clean(item.href)
+        || clean(item.qrUrl)
+        || clean(item.imageUrl)
+        || clean(item.imageId)
+        || clean(item.assetId)
+        || clean(item.storagePath),
+    );
+  });
 }
 
 function tagsForEvent(event) {

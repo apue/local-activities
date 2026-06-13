@@ -3,7 +3,7 @@
   "captureId": "capture-778669a06b7adc58ef39b185",
   "sourceId": "2397214962",
   "sourceName": "驻华韩国文化院",
-  "provider": "wechat2rss_public_safe_excerpt",
+  "provider": "local_fixture",
   "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429110&idx=1&sn=c4657ac2886d398acd9b7f959ba6513d",
   "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429110&idx=1&sn=c4657ac2886d398acd9b7f959ba6513d",
   "finalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429110&idx=1&sn=c4657ac2886d398acd9b7f959ba6513d",
@@ -16,18 +16,17 @@
     "en"
   ],
   "captureMode": "text_complete",
-  "text": "Title: 【观影预约】本周五放映《听说》| 场次16:00/19:00（文末有奖）\nSource: 驻华韩国文化院\nPublished at: 2026-06-03T08:30:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&mid=2649429110&idx=1&sn=c4657ac2886d398acd9b7f959ba6513d\nExpected action: extract\nRationale: Movie screening with two same-day occurrences and reservation instructions.\nReview/exclusion reasons: recurring_schedule\nEvent: 韩国电影放映《听说》\nOrganizer: 驻华韩国文化院\nStarts: 2026-06-05T16:00:00+08:00\nOccurrences: 2026-06-05T16:00:00+08:00, 2026-06-05T19:00:00+08:00\nSchedule: 6月5日 16:00/19:00 两场\nVenue: 驻华韩国文化院忠武路馆\nRegistration action: qr_code\nSummary: Free Korean movie screening with two reservable sessions.\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
-  "html": "<article><p>Title: 【观影预约】本周五放映《听说》| 场次16:00/19:00（文末有奖）</p><p>Source: 驻华韩国文化院</p><p>Published at: 2026-06-03T08:30:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MjM5NzIxNDk2Mg==&amp;mid=2649429110&amp;idx=1&amp;sn=c4657ac2886d398acd9b7f959ba6513d</p><p>Expected action: extract</p><p>Rationale: Movie screening with two same-day occurrences and reservation instructions.</p><p>Review/exclusion reasons: recurring_schedule</p><p>Event: 韩国电影放映《听说》</p><p>Organizer: 驻华韩国文化院</p><p>Starts: 2026-06-05T16:00:00+08:00</p><p>Occurrences: 2026-06-05T16:00:00+08:00, 2026-06-05T19:00:00+08:00</p><p>Schedule: 6月5日 16:00/19:00 两场</p><p>Venue: 驻华韩国文化院忠武路馆</p><p>Registration action: qr_code</p><p>Summary: Free Korean movie screening with two reservable sessions.</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "text": "韩国电影放映《听说》。\n时间：6月5日 16:00/19:00 两场。\n地点：驻华韩国文化院忠武路馆。\n本周五开放观影预约，文末有互动活动。\n免费放映，观众需提前预约。",
+  "html": "<article><p>韩国电影放映《听说》。</p><p>时间：6月5日 16:00/19:00 两场。</p><p>地点：驻华韩国文化院忠武路馆。</p><p>本周五开放观影预约，文末有互动活动。</p><p>免费放映，观众需提前预约。</p></article>",
   "images": [],
   "links": [],
   "miniPrograms": [],
-  "contentHash": "c87054cfcbd5bf4de432a8f4bfe6746257e1ac3948c4e550e4bba7189ae6fba9",
-  "diagnostics": [],
-  "captureWarnings": [
+  "contentHash": "b3d373d3be9e577615d026818a5ff192ea5b8f6547938dc76eab1cc21e4811e8",
+  "diagnostics": [
     {
-      "code": "public_safe_curated_excerpt",
-      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
-      "severity": "info"
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
     }
-  ]
+  ],
+  "captureWarnings": []
 }

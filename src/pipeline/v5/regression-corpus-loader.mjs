@@ -28,6 +28,14 @@ export const requiredV5CoverageLabels = [
 const manifestFileName = "manifest.json";
 const successCaseFiles = ["case.json", "captured-bundle.json"];
 const failureCaseFiles = ["case.json", "capture-result.json"];
+const modelInputLeakagePatterns = [
+  "Expected action",
+  "Expected Action",
+  "Rationale:",
+  "Review/exclusion reasons",
+  "This case is retained",
+  "original article content is not mirrored",
+];
 
 export async function loadV5RegressionCorpus({ corpusDir } = {}) {
   if (!corpusDir) throw new Error("v5_regression_corpus_dir_required");
@@ -93,6 +101,7 @@ async function loadRegressionCase({ caseId, corpusDir, manifestEntry }) {
     caseId,
   });
   validateCapturedArticleBundle(bundle);
+  validateNoModelInputLeakage({ bundle, caseId });
   return { case: caseMeta, expected, bundle };
 }
 
@@ -243,6 +252,28 @@ function validateExpected({ expected, caseId }) {
   }
   if (expected.action !== "capture_failure" && !expected.evidence) {
     throw new Error(`v5_regression_corpus_expected_evidence_required:${caseId}`);
+  }
+}
+
+function validateNoModelInputLeakage({ bundle, caseId }) {
+  const text = [
+    bundle.title,
+    bundle.text,
+    bundle.html,
+    ...(Array.isArray(bundle.images)
+      ? bundle.images.flatMap((image) => [image.alt, image.textContent])
+      : []),
+    ...(Array.isArray(bundle.links)
+      ? bundle.links.flatMap((link) => [link.text, link.url])
+      : []),
+    ...(Array.isArray(bundle.miniPrograms)
+      ? bundle.miniPrograms.flatMap((item) => [item.text, item.path, item.url])
+      : []),
+  ].filter(Boolean).join("\n");
+  for (const pattern of modelInputLeakagePatterns) {
+    if (text.includes(pattern)) {
+      throw new Error(`v5_regression_corpus_model_input_leakage:${caseId}:${pattern}`);
+    }
   }
 }
 

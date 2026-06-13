@@ -3,7 +3,7 @@
   "captureId": "capture-26758212c5622e856c74a343",
   "sourceId": "2390064940",
   "sourceName": "美国驻华大使馆",
-  "provider": "wechat2rss_public_safe_excerpt",
+  "provider": "local_fixture",
   "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=4&sn=d8577c1185d991ddf0ce2273285673da",
   "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=4&sn=d8577c1185d991ddf0ce2273285673da",
   "finalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=4&sn=d8577c1185d991ddf0ce2273285673da",
@@ -16,18 +16,17 @@
     "en"
   ],
   "captureMode": "text_complete",
-  "text": "Title: #美国建国两个半世纪#《独立宣言》的签署者之托马斯·麦基恩（1734年-1817年）\nSource: 美国驻华大使馆\nPublished at: 2026-06-09T10:30:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=4&sn=d8577c1185d991ddf0ce2273285673da\nExpected action: exclude\nRationale: Historical informational article, not an attendable activity.\nReview/exclusion reasons: generic_not_event\nThis case is retained as a negative product judgment. The original article content is not mirrored in the public repository.",
-  "html": "<article><p>Title: #美国建国两个半世纪#《独立宣言》的签署者之托马斯·麦基恩（1734年-1817年）</p><p>Source: 美国驻华大使馆</p><p>Published at: 2026-06-09T10:30:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&amp;mid=2651346286&amp;idx=4&amp;sn=d8577c1185d991ddf0ce2273285673da</p><p>Expected action: exclude</p><p>Rationale: Historical informational article, not an attendable activity.</p><p>Review/exclusion reasons: generic_not_event</p><p>This case is retained as a negative product judgment. The original article content is not mirrored in the public repository.</p></article>",
+  "text": "美国建国历史资料介绍。\n本文介绍历史人物和背景信息，未提供北京公众活动时间、地点或报名方式。\n内容属于历史信息文章，不是可参加的活动预告。",
+  "html": "<article><p>美国建国历史资料介绍。</p><p>本文介绍历史人物和背景信息，未提供北京公众活动时间、地点或报名方式。</p><p>内容属于历史信息文章，不是可参加的活动预告。</p></article>",
   "images": [],
   "links": [],
   "miniPrograms": [],
-  "contentHash": "6b92f0e785c3c8ede3ae43da112711fd83ceee27dd0f97b65264b746a0c66883",
-  "diagnostics": [],
-  "captureWarnings": [
+  "contentHash": "8dc0e66ebe4e8775038f2c94a0c9998009f1e85bf059074da8bb7aae1e030735",
+  "diagnostics": [
     {
-      "code": "public_safe_curated_excerpt",
-      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
-      "severity": "info"
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
     }
-  ]
+  ],
+  "captureWarnings": []
 }

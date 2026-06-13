@@ -3,7 +3,7 @@
   "captureId": "capture-dc481a2b4d1c4ea58bbe1289",
   "sourceId": "2399449400",
   "sourceName": "IICPechino",
-  "provider": "wechat2rss_public_safe_excerpt",
+  "provider": "local_fixture",
   "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917391&idx=1&sn=e849b29323003bf27965bc1c4bbf8625",
   "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917391&idx=1&sn=e849b29323003bf27965bc1c4bbf8625",
   "finalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917391&idx=1&sn=e849b29323003bf27965bc1c4bbf8625",
@@ -18,18 +18,17 @@
     "en"
   ],
   "captureMode": "text_complete",
-  "text": "Title: Giulia Poeta legge ed interpreta Giacomo Leopardi 莱奥帕尔迪——走向无限 声音、诗歌与音乐，贾科莫·莱奥帕尔迪的人生与思想\nSource: IICPechino\nPublished at: 2026-06-09T04:34:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917391&idx=1&sn=e849b29323003bf27965bc1c4bbf8625\nExpected action: extract\nRationale: Italian Cultural Institute event with bilingual title and event details.\nReview/exclusion reasons: registration_or_capacity_details_need_review\nEvent: 莱奥帕尔迪——走向无限\nOrganizer: Istituto Italiano di Cultura di Pechino\nStarts: 2026-06-16T19:00:00+08:00\nSchedule: 2026年6月16日 19:00\nVenue: 意大利驻华使馆文化中心\nRegistration action: unknown\nSummary: Reading and music performance about Giacomo Leopardi.\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
-  "html": "<article><p>Title: Giulia Poeta legge ed interpreta Giacomo Leopardi 莱奥帕尔迪——走向无限 声音、诗歌与音乐，贾科莫·莱奥帕尔迪的人生与思想</p><p>Source: IICPechino</p><p>Published at: 2026-06-09T04:34:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&amp;mid=2649917391&amp;idx=1&amp;sn=e849b29323003bf27965bc1c4bbf8625</p><p>Expected action: extract</p><p>Rationale: Italian Cultural Institute event with bilingual title and event details.</p><p>Review/exclusion reasons: registration_or_capacity_details_need_review</p><p>Event: 莱奥帕尔迪——走向无限</p><p>Organizer: Istituto Italiano di Cultura di Pechino</p><p>Starts: 2026-06-16T19:00:00+08:00</p><p>Schedule: 2026年6月16日 19:00</p><p>Venue: 意大利驻华使馆文化中心</p><p>Registration action: unknown</p><p>Summary: Reading and music performance about Giacomo Leopardi.</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "text": "莱奥帕尔迪——走向无限：声音、诗歌与音乐。\n时间：2026年6月16日 19:00。\n地点：意大利驻华使馆文化中心。\nGiulia Poeta 将朗读并演绎贾科莫·莱奥帕尔迪诗作。\n座位和报名方式请以主办方页面为准。",
+  "html": "<article><p>莱奥帕尔迪——走向无限：声音、诗歌与音乐。</p><p>时间：2026年6月16日 19:00。</p><p>地点：意大利驻华使馆文化中心。</p><p>Giulia Poeta 将朗读并演绎贾科莫·莱奥帕尔迪诗作。</p><p>座位和报名方式请以主办方页面为准。</p></article>",
   "images": [],
   "links": [],
   "miniPrograms": [],
-  "contentHash": "95713c9c45151e1d5302b9cec24ba7897045976b3e85e7ad0beeec19ba4fbb61",
-  "diagnostics": [],
-  "captureWarnings": [
+  "contentHash": "756d5c1481d1958eba977891265725a7287aca3884a9018161be9d6eb4ca0e66",
+  "diagnostics": [
     {
-      "code": "public_safe_curated_excerpt",
-      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
-      "severity": "info"
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
     }
-  ]
+  ],
+  "captureWarnings": []
 }

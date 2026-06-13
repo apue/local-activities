@@ -7,7 +7,7 @@
     "decision": "insufficient_info"
   },
   "publish": {
-    "state": "rejected",
+    "state": "excluded",
     "reasons": [
       "generic_not_event"
     ]

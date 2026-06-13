@@ -3,7 +3,7 @@
   "captureId": "capture-a4ce3d54444b35be56cd382a",
   "sourceId": "2390064940",
   "sourceName": "美国驻华大使馆",
-  "provider": "wechat2rss_public_safe_excerpt",
+  "provider": "local_fixture",
   "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346254&idx=4&sn=de423947b41a83c6da14191222b12f04",
   "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346254&idx=4&sn=de423947b41a83c6da14191222b12f04",
   "finalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346254&idx=4&sn=de423947b41a83c6da14191222b12f04",
@@ -16,18 +16,17 @@
     "en"
   ],
   "captureMode": "text_complete",
-  "text": "Title: 2026年6月13日星期六RELO北京英语教学研讨会\nSource: 美国驻华大使馆\nPublished at: 2026-06-08T10:30:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346254&idx=4&sn=de423947b41a83c6da14191222b12f04\nExpected action: exclude\nRationale: Beijing event limited to working English teachers, researchers, and English-major students.\nReview/exclusion reasons: not_general_public\nThis case is retained as a negative product judgment. The original article content is not mirrored in the public repository.",
-  "html": "<article><p>Title: 2026年6月13日星期六RELO北京英语教学研讨会</p><p>Source: 美国驻华大使馆</p><p>Published at: 2026-06-08T10:30:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&amp;mid=2651346254&amp;idx=4&amp;sn=de423947b41a83c6da14191222b12f04</p><p>Expected action: exclude</p><p>Rationale: Beijing event limited to working English teachers, researchers, and English-major students.</p><p>Review/exclusion reasons: not_general_public</p><p>This case is retained as a negative product judgment. The original article content is not mirrored in the public repository.</p></article>",
+  "text": "2026年6月13日星期六 RELO 北京英语教学研讨会。\n本研讨会面向在职英语教师、研究者和英语专业学生等特定群体。\n时间：6月13日 周六。地点：北京。\n需要报名，但不是面向普通公众的文化活动。",
+  "html": "<article><p>2026年6月13日星期六 RELO 北京英语教学研讨会。</p><p>本研讨会面向在职英语教师、研究者和英语专业学生等特定群体。</p><p>时间：6月13日 周六。地点：北京。</p><p>需要报名，但不是面向普通公众的文化活动。</p></article>",
   "images": [],
   "links": [],
   "miniPrograms": [],
-  "contentHash": "bdeda5f60d01a2c0081dccd84613a8f03f6c4f8d157a47f759c60e556d9768e1",
-  "diagnostics": [],
-  "captureWarnings": [
+  "contentHash": "c1ede576a0109f37faa9aaae16229c4fe5af43f760276dc8781a6b0f3f31955b",
+  "diagnostics": [
     {
-      "code": "public_safe_curated_excerpt",
-      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
-      "severity": "info"
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
     }
-  ]
+  ],
+  "captureWarnings": []
 }

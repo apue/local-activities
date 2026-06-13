@@ -3,7 +3,7 @@
   "captureId": "capture-24b3ff36b955ab843376d28d",
   "sourceId": "2390064940",
   "sourceName": "美国驻华大使馆",
-  "provider": "wechat2rss_public_safe_excerpt",
+  "provider": "local_fixture",
   "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=8&sn=26be446b238cd64db05f3658ca82963b",
   "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=8&sn=26be446b238cd64db05f3658ca82963b",
   "finalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=8&sn=26be446b238cd64db05f3658ca82963b",
@@ -16,8 +16,8 @@
     "en"
   ],
   "captureMode": "text_complete",
-  "text": "Title: 解码大学申请：全面了解美国本科申请流程（EducationUSA线上讲座），6月11日, 周四, 晚上6:30-8:00\nSource: 美国驻华大使馆\nPublished at: 2026-06-09T10:30:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=8&sn=26be446b238cd64db05f3658ca82963b\nExpected action: extract\nRationale: Public online EducationUSA lecture with a registration link.\nEvent: 解码大学申请：全面了解美国本科申请流程\nOrganizer: EducationUSA\nStarts: 2026-06-11T18:30:00+08:00\nEnds: 2026-06-11T20:00:00+08:00\nSchedule: 6月11日 周四 18:30-20:00\nVenue: Online / Zoom\nRegistration action: external_url\nRegistration URL: https://forms.office.com/g/JafNgzaw1R?origin=lprLink\nSummary: EducationUSA online lecture about the U.S. undergraduate application process.\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
-  "html": "<article><p>Title: 解码大学申请：全面了解美国本科申请流程（EducationUSA线上讲座），6月11日, 周四, 晚上6:30-8:00</p><p>Source: 美国驻华大使馆</p><p>Published at: 2026-06-09T10:30:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&amp;mid=2651346286&amp;idx=8&amp;sn=26be446b238cd64db05f3658ca82963b</p><p>Expected action: extract</p><p>Rationale: Public online EducationUSA lecture with a registration link.</p><p>Event: 解码大学申请：全面了解美国本科申请流程</p><p>Organizer: EducationUSA</p><p>Starts: 2026-06-11T18:30:00+08:00</p><p>Ends: 2026-06-11T20:00:00+08:00</p><p>Schedule: 6月11日 周四 18:30-20:00</p><p>Venue: Online / Zoom</p><p>Registration action: external_url</p><p>Registration URL: https://forms.office.com/g/JafNgzaw1R?origin=lprLink</p><p>Summary: EducationUSA online lecture about the U.S. undergraduate application process.</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "text": "解码大学申请：全面了解美国本科申请流程\n时间：6月11日 周四 18:30-20:00。\n地点：线上 Zoom。\nEducationUSA 顾问将介绍美国本科申请流程、选校准备和申请材料。\n活动面向公众开放，参加者需通过报名链接提前注册。",
+  "html": "<article><p>解码大学申请：全面了解美国本科申请流程</p><p>时间：6月11日 周四 18:30-20:00。</p><p>地点：线上 Zoom。</p><p>EducationUSA 顾问将介绍美国本科申请流程、选校准备和申请材料。</p><p>活动面向公众开放，参加者需通过报名链接提前注册。</p></article>",
   "images": [],
   "links": [
     {
@@ -28,13 +28,12 @@
     }
   ],
   "miniPrograms": [],
-  "contentHash": "cd5e61809c0fa77fb2bc6eaf6a9c90cf9269910d130c5dadfe1a5986f0bc6243",
-  "diagnostics": [],
-  "captureWarnings": [
+  "contentHash": "74642186f297ae27602bbace73a5ac277d85114739ab2252ec06524db6483a6a",
+  "diagnostics": [
     {
-      "code": "public_safe_curated_excerpt",
-      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
-      "severity": "info"
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
     }
-  ]
+  ],
+  "captureWarnings": []
 }

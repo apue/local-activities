@@ -17,6 +17,8 @@
     "not_general_public",
     "official_visit_non_public_news",
     "ordinary_public_event",
+    "poster_or_image_dominant",
+    "qr_registration",
     "recurring_or_multiple_occurrences",
     "registration_required"
   ],
@@ -159,6 +161,15 @@
       "labels": [
         "not_beijing",
         "long_running_exhibition"
+      ]
+    },
+    {
+      "id": "us-center-qr-lecture-2026-06",
+      "labels": [
+        "ordinary_public_event",
+        "registration_required",
+        "qr_registration",
+        "poster_or_image_dominant"
       ]
     }
   ]

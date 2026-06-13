@@ -1,0 +1,51 @@
+{
+  "version": "captured-article-bundle-v1",
+  "captureId": "capture-us-center-qr-lecture-2026-06",
+  "sourceId": "us-center-qr-lecture-2026-06",
+  "sourceName": "北京美国中心",
+  "provider": "local_fixture",
+  "sourceUrl": "https://mp.weixin.qq.com/s/wbwPWrQsb0m3FmcgAhhmkw",
+  "canonicalUrl": "https://mp.weixin.qq.com/s/wbwPWrQsb0m3FmcgAhhmkw",
+  "finalUrl": "https://mp.weixin.qq.com/s/wbwPWrQsb0m3FmcgAhhmkw",
+  "title": "北京美国中心线下讲座：Grotto Art of China: A Sourcebook ，6月8日，星期一，晚18:00–20:00",
+  "authorName": "北京美国中心",
+  "publishedAt": "2026-06-03T00:00:00.000Z",
+  "capturedAt": "2026-06-10T00:00:00.000Z",
+  "languageHints": [
+    "zh",
+    "en"
+  ],
+  "captureMode": "image_with_qr_registration",
+  "text": "北京美国中心线下讲座：Grotto Art of China: A Sourcebook。\n时间：6月8日 星期一 18:00-20:00。\n地点：北京美国中心。\n蒋人和教授将分享关于中国佛教石窟寺的研究。\n活动向公众开放，需扫码注册。",
+  "html": "<article><p>北京美国中心线下讲座：Grotto Art of China: A Sourcebook。</p><p>时间：6月8日 星期一 18:00-20:00。</p><p>地点：北京美国中心。</p><p>蒋人和教授将分享关于中国佛教石窟寺的研究。</p><p>活动向公众开放，需扫码注册。</p></article>",
+  "images": [
+    {
+      "id": "image-001",
+      "role": "qr",
+      "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/as5rNaLvou2ciapspcRrGFibHJrbnBTngBQ8kf6DQw4jNhWiaZxFA4raPxHMS7ARhj4GZyqrxyxx35N8wY410XcOduOXEpwwZ2UcPamH0ouWuo/640?wx_fmt=jpeg&from=appmsg",
+      "alt": "报名二维码",
+      "extractedBy": "dom",
+      "confidence": 0.8,
+      "contentHash": "d58809c65f0530a063b698fc496fc1e90eaca8628a2d5daecb52b03c697f5b27"
+    },
+    {
+      "id": "image-002",
+      "role": "poster",
+      "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/as5rNaLvou3ZWmAjpRIYf4NK84GiawG20fTL1nh9HC80dUK6NrcLY6sGe6Bs13XGMJDczSWEHNuibciafUYCLk0BJFicUBOdrQRk6CzBSBhCK08/640?wx_fmt=jpeg&from=appmsg",
+      "alt": "活动海报",
+      "extractedBy": "dom",
+      "confidence": 0.75,
+      "contentHash": "943cc45b5bab91b15beda3bd357351a24b07022be4a85b8bfebf6c266de05572"
+    }
+  ],
+  "links": [],
+  "miniPrograms": [],
+  "diagnostics": [
+    {
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
+    }
+  ],
+  "captureWarnings": [],
+  "contentHash": "be5f853320ceb42d4ced4fa9282a37b0f6d7c4c8e5c854f7aaf495729cec75a1"
+}

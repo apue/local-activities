@@ -3,7 +3,7 @@
   "captureId": "capture-5ab6b0a39286d9a36c40e93b",
   "sourceId": "3550320948",
   "sourceName": "北平机器",
-  "provider": "wechat2rss_public_safe_excerpt",
+  "provider": "local_fixture",
   "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518666&idx=1&sn=2b07a8ccba4da28aa88aaed8530470f0",
   "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518666&idx=1&sn=2b07a8ccba4da28aa88aaed8530470f0",
   "finalUrl": "https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518666&idx=1&sn=2b07a8ccba4da28aa88aaed8530470f0",
@@ -16,8 +16,8 @@
     "en"
   ],
   "captureMode": "text_complete",
-  "text": "Title: 北平机器友谊万岁精酿啤酒节终极指南！\nSource: 北平机器\nPublished at: 2026-06-09T07:02:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&mid=2247518666&idx=1&sn=2b07a8ccba4da28aa88aaed8530470f0\nExpected action: extract\nRationale: Large public festival guide with mini-program actions, free entry, paid tokens, and dense schedule text.\nEvent: 北平机器友谊万岁精酿啤酒节\nOrganizer: 北平机器\nStarts: 2026-06-12T15:00:00+08:00\nEnds: 2026-06-14T23:00:00+08:00\nSchedule: 2026.06.12-06.14 15:00-23:00\nVenue: 友谊花园\nAddress: 北京市建国门外大街17号\nRegistration action: mini_program\nSummary: Three-day craft beer festival with beer, food, games, music, and free entry.\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
-  "html": "<article><p>Title: 北平机器友谊万岁精酿啤酒节终极指南！</p><p>Source: 北平机器</p><p>Published at: 2026-06-09T07:02:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MzU1MDMyMDk0OA==&amp;mid=2247518666&amp;idx=1&amp;sn=2b07a8ccba4da28aa88aaed8530470f0</p><p>Expected action: extract</p><p>Rationale: Large public festival guide with mini-program actions, free entry, paid tokens, and dense schedule text.</p><p>Event: 北平机器友谊万岁精酿啤酒节</p><p>Organizer: 北平机器</p><p>Starts: 2026-06-12T15:00:00+08:00</p><p>Ends: 2026-06-14T23:00:00+08:00</p><p>Schedule: 2026.06.12-06.14 15:00-23:00</p><p>Venue: 友谊花园</p><p>Address: 北京市建国门外大街17号</p><p>Registration action: mini_program</p><p>Summary: Three-day craft beer festival with beer, food, games, music, and free entry.</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "text": "北平机器友谊万岁精酿啤酒节终极指南。\n时间：2026.06.12-06.14 15:00-23:00。\n地点：友谊花园，北京市建国门外大街17号。\n现场有精酿啤酒、美食、游戏、音乐和周边活动。\n免费入场，部分酒水和代币可通过文中小程序报名、了解或购买。",
+  "html": "<article><p>北平机器友谊万岁精酿啤酒节终极指南。</p><p>时间：2026.06.12-06.14 15:00-23:00。</p><p>地点：友谊花园，北京市建国门外大街17号。</p><p>现场有精酿啤酒、美食、游戏、音乐和周边活动。</p><p>免费入场，部分酒水和代币可通过文中小程序报名、了解或购买。</p></article>",
   "images": [],
   "links": [],
   "miniPrograms": [
@@ -34,13 +34,12 @@
       "source": "html"
     }
   ],
-  "contentHash": "915631cf5ec621bd8409f6375b54efac231f687942ec48cafe35d01cb4901465",
-  "diagnostics": [],
-  "captureWarnings": [
+  "contentHash": "3dc41b13dd5d2a690f130b64fb5ca4e85d2a1c79da0ee52d86153f99cd7af7d9",
+  "diagnostics": [
     {
-      "code": "public_safe_curated_excerpt",
-      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
-      "severity": "info"
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
     }
-  ]
+  ],
+  "captureWarnings": []
 }

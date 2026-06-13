@@ -12,7 +12,7 @@
       "city": "Beijing",
       "venueName": "友谊花园",
       "venueAddress": "北京市建国门外大街17号",
-      "registrationAction": "mini_program",
+      "registrationAction": "not_required",
       "scheduleText": "2026.06.12-06.14 15:00-23:00",
       "summary": "Three-day craft beer festival with beer, food, games, music, and free entry."
     }
@@ -21,6 +21,6 @@
     "decision": "new_event"
   },
   "publish": {
-    "state": "public"
+    "state": "published"
   }
 }
