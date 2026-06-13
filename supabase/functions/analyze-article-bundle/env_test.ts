@@ -1,7 +1,11 @@
 /// <reference lib="deno.ns" />
 
 import { assertEquals } from "./test_assertions.ts";
-import { readAnalysisTimeoutMs, readServiceRoleKey } from "./env.ts";
+import {
+  readAnalysisTimeoutMs,
+  readBooleanEnv,
+  readServiceRoleKey,
+} from "./env.ts";
 
 Deno.test("readServiceRoleKey prefers hosted secret key and falls back to compatibility names", () => {
   assertEquals(
@@ -40,6 +44,27 @@ Deno.test("readAnalysisTimeoutMs accepts seconds env used by docs and ms env for
   assertEquals(
     readAnalysisTimeoutMs(() => undefined),
     30_000,
+  );
+});
+
+Deno.test("readBooleanEnv accepts common true and false values", () => {
+  assertEquals(
+    readBooleanEnv("ANALYSIS_LLM_ENABLE_THINKING", envReader({
+      ANALYSIS_LLM_ENABLE_THINKING: "false",
+    })),
+    false,
+  );
+  assertEquals(
+    readBooleanEnv("ANALYSIS_LLM_ENABLE_THINKING", envReader({
+      ANALYSIS_LLM_ENABLE_THINKING: "1",
+    })),
+    true,
+  );
+  assertEquals(
+    readBooleanEnv("ANALYSIS_LLM_ENABLE_THINKING", envReader({
+      ANALYSIS_LLM_ENABLE_THINKING: "not-a-boolean",
+    })),
+    undefined,
   );
 });
 

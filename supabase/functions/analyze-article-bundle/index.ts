@@ -11,6 +11,7 @@ import {
 } from "./db.ts";
 import {
   readAnalysisTimeoutMs,
+  readBooleanEnv,
   readNumberEnv,
   readRequiredEnv,
   readServiceRoleKey,
@@ -74,6 +75,7 @@ function createProviderFromEnv() {
     apiKey: readRequiredEnv("ANALYSIS_LLM_API_KEY"),
     model: readRequiredEnv("ANALYSIS_LLM_MODEL"),
     maxOutputTokens: readNumberEnv("ANALYSIS_LLM_MAX_OUTPUT_TOKENS"),
+    enableThinking: readBooleanEnv("ANALYSIS_LLM_ENABLE_THINKING"),
     timeoutMs: readAnalysisTimeoutMs(),
   });
 }

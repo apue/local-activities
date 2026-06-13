@@ -84,6 +84,7 @@ export function createOpenAiCompatibleProvider({
   apiKey,
   model,
   maxOutputTokens,
+  enableThinking,
   timeoutMs = 30000,
   fetchImpl = fetch,
 }: {
@@ -91,6 +92,7 @@ export function createOpenAiCompatibleProvider({
   apiKey: string;
   model: string;
   maxOutputTokens?: number;
+  enableThinking?: boolean;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }): AnalysisProvider {
@@ -104,6 +106,7 @@ export function createOpenAiCompatibleProvider({
         apiKey,
         model,
         maxOutputTokens,
+        enableThinking,
         timeoutMs,
         fetchImpl,
       });
@@ -117,6 +120,7 @@ async function requestOpenAiCompatible({
   apiKey,
   model,
   maxOutputTokens,
+  enableThinking,
   timeoutMs,
   fetchImpl,
 }: {
@@ -125,6 +129,7 @@ async function requestOpenAiCompatible({
   apiKey: string;
   model: string;
   maxOutputTokens?: number;
+  enableThinking?: boolean;
   timeoutMs: number;
   fetchImpl: typeof fetch;
 }): Promise<ProviderResponse> {
@@ -150,6 +155,9 @@ async function requestOpenAiCompatible({
             response_format: { type: "json_object" },
             max_tokens: maxOutputTokens,
             temperature: 0.1,
+            ...(enableThinking === undefined
+              ? {}
+              : { enable_thinking: enableThinking }),
           }),
           signal: controller.signal,
         },
