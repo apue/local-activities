@@ -507,6 +507,13 @@ function normalizeReservationStatus(
     text.includes("未确认") ||
     text.includes("不明确")
   ) return "unknown";
+  if (
+    text === "not_required" ||
+    text.includes("not required") ||
+    text.includes("no reservation") ||
+    text.includes("无需") ||
+    text.includes("不需要")
+  ) return "not_required";
   if (text === "required" || text.includes("required")) return "required";
   if (
     text.includes("booking") ||
@@ -519,13 +526,6 @@ function normalizeReservationStatus(
       ? "not_required"
       : "required";
   }
-  if (
-    text === "not_required" ||
-    text.includes("not required") ||
-    text.includes("no reservation") ||
-    text.includes("无需") ||
-    text.includes("不需要")
-  ) return "not_required";
   return "unknown";
 }
 

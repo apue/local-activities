@@ -135,6 +135,14 @@ Deno.test("runAnalysisPipeline does not publish non-Beijing events to canonical 
   assertEquals(result.status, "needs_review");
   assertEquals(db.table("event_drafts").length, 1);
   assertEquals(db.table("event_drafts")[0].city, "成都");
+  assertEquals(db.table("event_drafts")[0].editor_decision, "needs_exception");
+  assertEquals(db.table("event_drafts")[0].exception_reason_codes, [
+    "not_beijing_event",
+  ]);
+  assertEquals(
+    db.table("event_drafts")[0].actionability_status,
+    "not_actionable",
+  );
   assertEquals(db.table("canonical_events").length, 0);
   assertEquals(db.table("processing_ledger")[0].state, "needs_review");
 });
@@ -167,7 +175,13 @@ Deno.test("runAnalysisPipeline blocks source article URLs masquerading as regist
   assertEquals(db.table("canonical_events").length, 0);
   assertEquals(db.table("processing_ledger")[0].state, "needs_review");
   const draft = db.table("event_drafts")[0];
-  assertEquals(draft.review_state, "needs_review");
+  assertEquals(draft.review_state, "needs_info");
+  assertEquals(draft.editor_decision, "needs_exception");
+  assertEquals(draft.actionability_status, "needs_info");
+  assertEquals(draft.exception_reason_codes, [
+    "registration_url_is_source_article",
+    "registration_evidence_missing",
+  ]);
   assertEquals(draft.registration_url, undefined);
   assertEquals(draft.soft_blockers, [
     {
@@ -209,6 +223,9 @@ Deno.test("runAnalysisPipeline clears source registration URLs but can publish w
 
   assertEquals(result.status, "published");
   assertEquals(db.table("event_drafts")[0].registration_url, undefined);
+  assertEquals(db.table("event_drafts")[0].editor_decision, "publish");
+  assertEquals(db.table("event_drafts")[0].actionability_status, "actionable");
+  assertEquals(db.table("event_drafts")[0].exception_reason_codes, []);
   assertEquals(
     db.table("event_drafts")[0].registration_qr_asset_id,
     "evidence-1-qr-poster-1-bundle-1",
@@ -248,6 +265,55 @@ Deno.test("runAnalysisPipeline auto-publishes high-confidence public activities 
   assertEquals(db.table("canonical_events").length, 1);
   assertEquals(db.table("canonical_events")[0].public_eligibility, "unclear");
   assertEquals(db.table("processing_ledger")[0].state, "published");
+});
+
+Deno.test("runAnalysisPipeline publishes high-confidence possible public activities when actionable", async () => {
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        title: "BEING YOUNG：值得共同生活的未来？",
+        triageDecision: "possible_public_activity",
+        confidence: 0.95,
+        reservationStatus: "not_required",
+        registrationAction: "none",
+        registrationUrl: undefined,
+        publish: { createCanonicalEvent: false, confidence: 0.2 },
+      },
+      outputOverrides: {
+        confidence: 0.95,
+        dedupe: { decision: "new_event", confidence: 0.95 },
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  const draft = db.table("event_drafts")[0];
+  assertEquals(draft.exception_reason_codes, []);
+  assertEquals(draft.editor_decision, "publish");
+  assertEquals(result.status, "published");
+  assertEquals(draft.review_state, "approved");
+  assertEquals(
+    draft.editor_reason,
+    "Actionable public Beijing event with required publication fields.",
+  );
+  assertEquals(draft.actionability_status, "actionable");
+  assertEquals(db.table("canonical_events").length, 1);
+  assertEquals(db.table("canonical_events")[0].editor_decision, "publish");
+  const metadata = db.table("processing_ledger")[0].metadata as {
+    editorDecisions: unknown[];
+  };
+  assertEquals(metadata.editorDecisions[0], {
+    draftId: "draft-1-bundle-1",
+    title: "BEING YOUNG：值得共同生活的未来？",
+    decision: "publish",
+    reason: "Actionable public Beijing event with required publication fields.",
+    actionabilityStatus: "actionable",
+    exceptionReasonCodes: [],
+  });
 });
 
 Deno.test("runAnalysisPipeline auto-publishes explicit single-session Beijing events when provider marks schedule unsupported", async () => {
@@ -308,6 +374,14 @@ Deno.test("runAnalysisPipeline does not auto-publish high-confidence activities 
   assertEquals(result.status, "needs_review");
   assertEquals(db.table("event_drafts").length, 1);
   assertEquals(db.table("event_drafts")[0].review_state, "needs_review");
+  assertEquals(db.table("event_drafts")[0].editor_decision, "needs_exception");
+  assertEquals(db.table("event_drafts")[0].exception_reason_codes, [
+    "not_public_eligibility",
+  ]);
+  assertEquals(
+    db.table("event_drafts")[0].actionability_status,
+    "not_actionable",
+  );
   assertEquals(db.table("canonical_events").length, 0);
   assertEquals(db.table("processing_ledger")[0].state, "needs_review");
 });

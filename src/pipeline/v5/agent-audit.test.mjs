@@ -93,6 +93,8 @@ describe("agent audit packet", () => {
       "public_visibility_gap",
       "usage_spike",
       "review_backlog",
+      "review_exception_contract_gap",
+      "likely_editor_false_negative",
     ]));
     expect(packet.candidateIndex.candidates[0]).toMatchObject({
       candidateId: "finding-001",
@@ -358,6 +360,14 @@ function auditData() {
         articleBundleId: "bundle-review",
         sourceId: "source-b",
         title: "Needs review event",
+        organizer: "Culture Source B",
+        startsAt: "2026-06-20T10:00:00.000Z",
+        venueName: "Cultural Center",
+        triageDecision: "possible_public_activity",
+        publicEligibility: "public",
+        eventKind: "single",
+        scheduleKind: "single",
+        confidence: 0.95,
         processingState: "draft",
         reviewState: "needs_review",
         createdAt: "2026-06-10T12:00:00.000Z",

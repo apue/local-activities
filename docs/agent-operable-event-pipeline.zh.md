@@ -96,6 +96,8 @@ monthly_estimated_token_cost_cny <= 100
 3. **每个失败必须能定位到节点**。
    不接受只知道 `needs_review`，不知道是 extractor、validator、editor 还是
    publish policy 的设计。
+   同理，review queue 不是默认人工审核池，而是 AI Editor 的异常队列；每条
+   `needs_review` / `needs_info` 都必须能说明为什么没有自动发布。
 4. **真实评测不能泄漏答案**。
    Public regression corpus 可用于 contract smoke；严肃模型评测必须使用
    private raw corpus，expected 只能在 case metadata 中。

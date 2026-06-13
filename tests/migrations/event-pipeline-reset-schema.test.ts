@@ -276,6 +276,32 @@ describe("event pipeline reset migration", () => {
     );
   });
 
+  it("adds AI Editor decision metadata for exception-driven review", () => {
+    for (const table of ["event_drafts", "canonical_events"]) {
+      expect(allMigrationSql).toContain(`alter table public.${table}`);
+    }
+    for (const column of [
+      "editor_decision text",
+      "editor_reason text",
+      "exception_reason_codes text[] not null default '{}'",
+      "actionability_status text",
+      "editor_version text",
+    ]) {
+      expect(allMigrationSql).toContain(column);
+    }
+
+    expect(allMigrationSql).toContain(
+      "check (editor_decision is null or editor_decision in ('publish', 'needs_exception'))",
+    );
+    expect(allMigrationSql).toContain(
+      "actionability_status in ('actionable', 'needs_info', 'not_actionable', 'possible_duplicate')",
+    );
+    expect(allMigrationSql).toContain(
+      "event_drafts_data_class_editor_exception_idx",
+    );
+    expect(allMigrationSql).toContain("event_drafts_exception_reason_codes_idx");
+  });
+
   it("does not reintroduce removed active collector and Vercel asset paths", () => {
     expect(sql).not.toMatch(/vercel[_-]?sandbox/i);
     expect(sql).not.toContain(["BLOB", "READ", "WRITE", "TOKEN"].join("_"));
