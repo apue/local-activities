@@ -22,10 +22,21 @@ Deno.test("runAnalysisPipeline writes production bundle, usage, evidence, draft,
   assert(db.table("dedupe_decisions").length === 1);
   assert(db.table("processing_ledger").length === 1);
   assertEquals(db.table("llm_usage_ledger")[0].source_id, "embassy-feed");
-  assertEquals(db.table("llm_usage_ledger")[0].source_url, "https://mp.weixin.qq.com/s/example");
-  assertEquals(db.table("llm_usage_ledger")[0].prompt_version, "analyze-article-bundle-v1");
-  assertEquals(db.table("llm_usage_ledger")[0].schema_version, "analysis-output-v1");
-  assertEquals(db.table("llm_usage_ledger")[0].params, { responseFormat: "json_object" });
+  assertEquals(
+    db.table("llm_usage_ledger")[0].source_url,
+    "https://mp.weixin.qq.com/s/example",
+  );
+  assertEquals(
+    db.table("llm_usage_ledger")[0].prompt_version,
+    "analyze-article-bundle-v1",
+  );
+  assertEquals(
+    db.table("llm_usage_ledger")[0].schema_version,
+    "analysis-output-v1",
+  );
+  assertEquals(db.table("llm_usage_ledger")[0].params, {
+    responseFormat: "json_object",
+  });
 });
 
 Deno.test("runAnalysisPipeline writes article bundle status through protected status writer", async () => {
@@ -128,6 +139,89 @@ Deno.test("runAnalysisPipeline does not publish non-Beijing events to canonical 
   assertEquals(db.table("processing_ledger")[0].state, "needs_review");
 });
 
+Deno.test("runAnalysisPipeline blocks source article URLs masquerading as registration URLs", async () => {
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        confidence: 0.99,
+        reservationStatus: "required",
+        registrationAction: "Scan QR code to register",
+        registrationUrl: "https://mp.weixin.qq.com/s/example",
+        evidence: [],
+        publish: { createCanonicalEvent: true, confidence: 0.99 },
+      },
+      outputOverrides: {
+        decision: "published",
+        confidence: 0.99,
+        dedupe: { decision: "new_event", confidence: 0.99 },
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "needs_review");
+  assertEquals(db.table("canonical_events").length, 0);
+  assertEquals(db.table("processing_ledger")[0].state, "needs_review");
+  const draft = db.table("event_drafts")[0];
+  assertEquals(draft.review_state, "needs_review");
+  assertEquals(draft.registration_url, undefined);
+  assertEquals(draft.soft_blockers, [
+    {
+      code: "registration_url_is_source_article",
+      message:
+        "Registration URL points back to the source article instead of an actionable registration path.",
+    },
+    {
+      code: "registration_evidence_missing",
+      message:
+        "Registration is required but no URL, QR, or evidence path is present.",
+    },
+  ]);
+});
+
+Deno.test("runAnalysisPipeline clears source registration URLs but can publish with QR evidence", async () => {
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        confidence: 0.99,
+        reservationStatus: "required",
+        registrationAction: "Scan QR code to register",
+        registrationUrl: "https://mp.weixin.qq.com/s/example",
+        evidence: [{ imageId: "poster-1", role: "qr", confidence: 0.93 }],
+        publish: { createCanonicalEvent: true, confidence: 0.99 },
+      },
+      outputOverrides: {
+        decision: "published",
+        confidence: 0.99,
+        dedupe: { decision: "new_event", confidence: 0.99 },
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "published");
+  assertEquals(db.table("event_drafts")[0].registration_url, undefined);
+  assertEquals(
+    db.table("event_drafts")[0].registration_qr_asset_id,
+    "evidence-1-qr-poster-1-bundle-1",
+  );
+  assertEquals(db.table("event_drafts")[0].soft_blockers, []);
+  assertEquals(db.table("canonical_events").length, 1);
+  assertEquals(db.table("canonical_events")[0].registration_url, undefined);
+  assertEquals(
+    db.table("canonical_events")[0].registration_qr_asset_id,
+    "evidence-1-qr-poster-1-bundle-1",
+  );
+});
+
 Deno.test("runAnalysisPipeline auto-publishes high-confidence public activities even when model leaves eligibility unclear", async () => {
   const db = createRecordingDb();
   const result = await runAnalysisPipeline({
@@ -184,7 +278,10 @@ Deno.test("runAnalysisPipeline auto-publishes explicit single-session Beijing ev
 
   assertEquals(result.status, "published");
   assertEquals(db.table("event_drafts")[0].schedule_kind, "single");
-  assertEquals(db.table("event_drafts")[0].starts_at, "2026-06-13T09:00:00+08:00");
+  assertEquals(
+    db.table("event_drafts")[0].starts_at,
+    "2026-06-13T09:00:00+08:00",
+  );
   assertEquals(db.table("canonical_events").length, 1);
 });
 
