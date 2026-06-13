@@ -606,6 +606,45 @@ Deno.test("openai-compatible provider surfaces vision HTTP failures instead of r
   assertEquals(JSON.stringify(bodies[0]).includes("image_url"), true);
 });
 
+Deno.test("openai-compatible provider passes configured thinking control", async () => {
+  let requestBody: Record<string, unknown> | undefined;
+  const provider = createOpenAiCompatibleProvider({
+    baseUrl: "https://llm.test/v1",
+    apiKey: "key",
+    model: "qwen-model",
+    enableThinking: false,
+    fetchImpl: async (_url, init) => {
+      const requestInit = init as { body?: unknown } | undefined;
+      requestBody = JSON.parse(String(requestInit?.body));
+      return new Response(
+        JSON.stringify({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                decision: "excluded",
+                reason: "Not an event.",
+                confidence: 0.9,
+                events: [],
+                dedupe: { decision: "insufficient_info", confidence: 0.9 },
+              }),
+            },
+          }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  await provider.analyze({
+    system: "system",
+    responseFormat: "json",
+    user: [{ type: "text", text: "article text" }],
+  });
+
+  assertEquals(requestBody?.enable_thinking, false);
+});
+
 Deno.test("openai-compatible provider surfaces vision provider 5xx instead of retrying text-only", async () => {
   const bodies: unknown[] = [];
   const provider = createOpenAiCompatibleProvider({

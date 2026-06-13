@@ -47,6 +47,18 @@ export function readNumberEnv(
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+export function readBooleanEnv(
+  name: string,
+  read: EnvReader = (key) => Deno.env.get(key),
+): boolean | undefined {
+  const value = clean(read(name));
+  if (!value) return undefined;
+  const normalized = value.toLowerCase();
+  if (["true", "1", "yes", "y"].includes(normalized)) return true;
+  if (["false", "0", "no", "n"].includes(normalized)) return false;
+  return undefined;
+}
+
 function firstEnv(names: string[], read: EnvReader): string | undefined {
   for (const name of names) {
     const value = clean(read(name));
