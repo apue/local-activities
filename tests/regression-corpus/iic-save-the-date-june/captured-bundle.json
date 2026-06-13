@@ -3,7 +3,7 @@
   "captureId": "capture-390dd03fb2da37ca040d3ba3",
   "sourceId": "2399449400",
   "sourceName": "IICPechino",
-  "provider": "wechat2rss_public_safe_excerpt",
+  "provider": "local_fixture",
   "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917370&idx=1&sn=aff12ae5c5adde82f5fea7395f6de25e",
   "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917370&idx=1&sn=aff12ae5c5adde82f5fea7395f6de25e",
   "finalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917370&idx=1&sn=aff12ae5c5adde82f5fea7395f6de25e",
@@ -18,18 +18,17 @@
     "en"
   ],
   "captureMode": "text_complete",
-  "text": "Title: Save the Date 2026年6月活动计划\nSource: IICPechino\nPublished at: 2026-06-05T08:43:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917370&idx=1&sn=aff12ae5c5adde82f5fea7395f6de25e\nExpected action: review\nRationale: Dense monthly event listing; useful as a review-required multi-event hard case.\nReview/exclusion reasons: information_sparse_requires_review\nEvent: 与Francesco Magni一起做饭\nOrganizer: IICPechino\nStarts: 2026-06-08T19:00:00+08:00\nVenue: 意大利驻华使馆文化中心\nEvent: Lo sguardo della Cina sugli Stati Uniti 新书介绍\nOrganizer: IICPechino\nStarts: 2026-06-15T19:00:00+08:00\nVenue: 意大利驻华使馆文化中心\nEvent: Giulia Poeta 朗读与演绎莱奥帕尔迪诗作\nOrganizer: IICPechino\nStarts: 2026-06-16T19:00:00+08:00\nVenue: 意大利驻华使馆文化中心\nEvent: Mining Memories Digging Words Elisa Biagini\nOrganizer: IICPechino\nStarts: 2026-05-13T10:00:00+08:00\nEnds: 2026-06-13T18:00:00+08:00\nVenue: 意大利驻华使馆文化中心\nEvent: 系列讲座“艺术的生命”：法尔内塞盘——穿越时间与空间的旅程\nOrganizer: IICPechino\nStarts: 2026-06-17T09:00:00+08:00\nEnds: 2026-06-17T11:30:00+08:00\nVenue: 北京师范大学主楼C区5049\nEvent: Emma Dante presents L'angelo del focolare\nOrganizer: IICPechino\nStarts: 2026-06-24T18:30:00+08:00\nVenue: 清华大学美术学院C528报告厅\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
-  "html": "<article><p>Title: Save the Date 2026年6月活动计划</p><p>Source: IICPechino</p><p>Published at: 2026-06-05T08:43:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&amp;mid=2649917370&amp;idx=1&amp;sn=aff12ae5c5adde82f5fea7395f6de25e</p><p>Expected action: review</p><p>Rationale: Dense monthly event listing; useful as a review-required multi-event hard case.</p><p>Review/exclusion reasons: information_sparse_requires_review</p><p>Event: 与Francesco Magni一起做饭</p><p>Organizer: IICPechino</p><p>Starts: 2026-06-08T19:00:00+08:00</p><p>Venue: 意大利驻华使馆文化中心</p><p>Event: Lo sguardo della Cina sugli Stati Uniti 新书介绍</p><p>Organizer: IICPechino</p><p>Starts: 2026-06-15T19:00:00+08:00</p><p>Venue: 意大利驻华使馆文化中心</p><p>Event: Giulia Poeta 朗读与演绎莱奥帕尔迪诗作</p><p>Organizer: IICPechino</p><p>Starts: 2026-06-16T19:00:00+08:00</p><p>Venue: 意大利驻华使馆文化中心</p><p>Event: Mining Memories Digging Words Elisa Biagini</p><p>Organizer: IICPechino</p><p>Starts: 2026-05-13T10:00:00+08:00</p><p>Ends: 2026-06-13T18:00:00+08:00</p><p>Venue: 意大利驻华使馆文化中心</p><p>Event: 系列讲座“艺术的生命”：法尔内塞盘——穿越时间与空间的旅程</p><p>Organizer: IICPechino</p><p>Starts: 2026-06-17T09:00:00+08:00</p><p>Ends: 2026-06-17T11:30:00+08:00</p><p>Venue: 北京师范大学主楼C区5049</p><p>Event: Emma Dante presents L'angelo del focolare</p><p>Organizer: IICPechino</p><p>Starts: 2026-06-24T18:30:00+08:00</p><p>Venue: 清华大学美术学院C528报告厅</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "text": "Save the Date 2026年6月活动计划。\n意大利驻华使馆文化中心发布六月活动排期。\n与 Francesco Magni 一起做饭：6月8日 19:00。\nLo sguardo della Cina sugli Stati Uniti 新书介绍：6月15日 19:00。\nGiulia Poeta 朗读与演绎莱奥帕尔迪诗作：6月16日 19:00。\n系列讲座“艺术的生命”：6月17日 09:00-11:30，北京师范大学主楼C区5049。\nEmma Dante presents L'angelo del focolare：6月24日 18:30，清华大学美术学院C528报告厅。",
+  "html": "<article><p>Save the Date 2026年6月活动计划。</p><p>意大利驻华使馆文化中心发布六月活动排期。</p><p>与 Francesco Magni 一起做饭：6月8日 19:00。</p><p>Lo sguardo della Cina sugli Stati Uniti 新书介绍：6月15日 19:00。</p><p>Giulia Poeta 朗读与演绎莱奥帕尔迪诗作：6月16日 19:00。</p><p>系列讲座“艺术的生命”：6月17日 09:00-11:30，北京师范大学主楼C区5049。</p><p>Emma Dante presents L'angelo del focolare：6月24日 18:30，清华大学美术学院C528报告厅。</p></article>",
   "images": [],
   "links": [],
   "miniPrograms": [],
-  "contentHash": "ef9bda953d811b84ab1ef467b5aec914ccbb3e642095fce7590a2951c16d9986",
-  "diagnostics": [],
-  "captureWarnings": [
+  "contentHash": "b33857c63f9e0bb115d2b98f5f563704e2b64662b53c80cc907af2a627cb018a",
+  "diagnostics": [
     {
-      "code": "public_safe_curated_excerpt",
-      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
-      "severity": "info"
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
     }
-  ]
+  ],
+  "captureWarnings": []
 }

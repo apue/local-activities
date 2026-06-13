@@ -7,7 +7,7 @@
     "decision": "insufficient_info"
   },
   "publish": {
-    "state": "rejected",
+    "state": "excluded",
     "reasons": [
       "official_visit_non_public_news"
     ]

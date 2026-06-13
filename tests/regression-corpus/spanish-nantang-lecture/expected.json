@@ -19,6 +19,6 @@
     "decision": "new_event"
   },
   "publish": {
-    "state": "public"
+    "state": "published"
   }
 }

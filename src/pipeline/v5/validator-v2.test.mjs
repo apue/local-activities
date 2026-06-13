@@ -285,6 +285,88 @@ describe("V5 Validator v2", () => {
     expect(validation.softIssues.map((issue) => issue.code)).toContain("registration_evidence_missing");
   });
 
+  it("does not treat plain registration text as an actionable registration path", () => {
+    const validation = validateV5Extraction({
+      normalized,
+      now: fixedNow,
+      extraction: eventExtraction({
+        events: [{
+          title: "需要提前预约的活动",
+          city: "Beijing",
+          startsAt: "2026-06-20T10:00:00+08:00",
+          venue: "北京文化中心",
+          registrationAction: "required",
+          registrationEvidence: "入场需提前预约，名额有限。",
+        }],
+      }),
+    });
+
+    expect(validation.status).toBe("needs_info");
+    expect(validation.softIssues.map((issue) => issue.code)).toContain("registration_evidence_missing");
+  });
+
+  it("does not treat the source article URL as a registration URL", () => {
+    const validation = validateV5Extraction({
+      normalized,
+      now: fixedNow,
+      extraction: eventExtraction({
+        events: [{
+          title: "需要提前预约的活动",
+          city: "Beijing",
+          startsAt: "2026-06-20T10:00:00+08:00",
+          venue: "北京文化中心",
+          registrationAction: "required",
+          registrationUrl: normalized.sourceUrl,
+        }],
+      }),
+    });
+
+    expect(validation.status).toBe("needs_info");
+    expect(validation.softIssues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(["registration_url_is_source_article", "registration_evidence_missing"]),
+    );
+  });
+
+  it("accepts image evidence as a QR registration path", () => {
+    const validation = validateV5Extraction({
+      normalized,
+      now: fixedNow,
+      extraction: eventExtraction({
+        events: [{
+          title: "需要扫码预约的活动",
+          city: "Beijing",
+          startsAt: "2026-06-20T10:00:00+08:00",
+          venue: "北京文化中心",
+          registrationAction: "qr_code",
+          evidence: [{ imageId: "image-001", role: "registration_qr", confidence: 0.93 }],
+        }],
+      }),
+    });
+
+    expect(validation.status).toBe("valid");
+    expect(validation.softIssues).toEqual([]);
+  });
+
+  it("accepts a mini-program path as a mini-program registration path", () => {
+    const validation = validateV5Extraction({
+      normalized,
+      now: fixedNow,
+      extraction: eventExtraction({
+        events: [{
+          title: "需要小程序预约的活动",
+          city: "Beijing",
+          startsAt: "2026-06-20T10:00:00+08:00",
+          venue: "北京文化中心",
+          registrationAction: "mini_program",
+          miniProgramPath: "pages/events/detail?id=123",
+        }],
+      }),
+    });
+
+    expect(validation.status).toBe("valid");
+    expect(validation.softIssues).toEqual([]);
+  });
+
   it("treats non-event and failed extraction decisions as invalid hard issues", () => {
     for (const [decision, code] of [
       ["non_event", "extraction_non_event"],

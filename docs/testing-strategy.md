@@ -59,17 +59,18 @@ Expected checks:
 
 ## Regression Corpus
 
-The trusted committed product corpus lives in `tests/regression-corpus`. It was
-rebuilt as public-safe derived bundles from real locally captured Wechat2RSS
-article bundles. It includes public events, registration-required cases,
-multi-event and long-running cases, recurring occurrences, and negative
-news/non-public/not-Beijing cases.
+The trusted committed product corpus lives in `tests/regression-corpus`. It uses
+public-safe source-like bundles for deterministic replay, plus selected
+provider-readable public image references for live vision smoke. It includes
+public events, registration-required cases, multi-event and long-running cases,
+recurring occurrences, and negative news/non-public/not-Beijing cases.
 
 The committed corpus does not include full third-party article mirrors or copied
-article images. It is suitable for V5 deterministic replay and pipeline
-contract regression. Live vision checks for posters or registration QR codes
-require a private local corpus rebuilt from Wechat2RSS and kept outside the
-public repository.
+article images. Expected outcomes must stay in `expected.json` and must not leak
+into captured bundle text, HTML, links, or image metadata. Production acceptance
+still uses real Wechat2RSS capture bundles uploaded through the capture worker;
+the committed corpus is for regression and smoke, not a substitute for the
+production ingestion path.
 
 V5 replay is the active corpus replay path. Every run must point to an explicit
 corpus directory.

@@ -102,9 +102,9 @@ describe("V5 evaluation runner", () => {
       store: "memory",
       runId: "v5-eval-20260610050000",
       corpusVersion: "event-pipeline-regression-corpus-v1",
-      caseCount: 17,
-      runCount: 17,
-      passCount: 17,
+      caseCount: 18,
+      runCount: 18,
+      passCount: 18,
       failCount: 0,
       falsePositiveCount: 0,
       falseNegativeCount: 0,
@@ -133,7 +133,7 @@ describe("V5 evaluation runner", () => {
     );
     expect(result.variantSummaries).toHaveLength(1);
     expect(result.variantSummaries.find((item) => item.variant === "mock-expected-v1")).toMatchObject({
-      passCount: 17,
+      passCount: 18,
       failCount: 0,
       actionAccuracy: 1,
       finalStateAccuracy: 1,
@@ -149,12 +149,12 @@ describe("V5 evaluation runner", () => {
     expect(result.cases.find((item) => item.caseId === "korean-movie-two-screenings")).toMatchObject({
       expectedSignals: {
         expectsRegistration: true,
-        expectsRegistrationQr: true,
+        expectsRegistrationQr: false,
         expectsMultipleEvents: true,
       },
       predictedSignals: {
         hasRegistration: true,
-        hasRegistrationQr: true,
+        hasRegistrationQr: false,
         eventCount: 1,
       },
       signalScores: {
@@ -176,13 +176,13 @@ describe("V5 evaluation runner", () => {
     });
 
     expect(result.variantSummaries.find((item) => item.variant === "mock-overfilter-v1")).toMatchObject({
-      caseCount: 17,
+      caseCount: 18,
       passCount: 7,
-      failCount: 10,
+      failCount: 11,
       falsePositiveCount: 0,
-      falseNegativeCount: 10,
-      actionAccuracy: 7 / 17,
-      finalStateAccuracy: 7 / 17,
+      falseNegativeCount: 11,
+      actionAccuracy: 7 / 18,
+      finalStateAccuracy: 7 / 18,
       reviewMetrics: {
         qrExtractionSuccessRate: 0,
         registrationSuccessRate: 0,
@@ -190,13 +190,13 @@ describe("V5 evaluation runner", () => {
       },
     });
     expect(result.variantSummaries.find((item) => item.variant === "mock-underfilter-v1")).toMatchObject({
-      caseCount: 17,
-      passCount: 9,
-      failCount: 8,
-      falsePositiveCount: 8,
+      caseCount: 18,
+      passCount: 5,
+      failCount: 13,
+      falsePositiveCount: 13,
       falseNegativeCount: 0,
-      actionAccuracy: 9 / 17,
-      finalStateAccuracy: 9 / 17,
+      actionAccuracy: 5 / 18,
+      finalStateAccuracy: 5 / 18,
     });
   });
 
@@ -238,7 +238,7 @@ describe("V5 evaluation runner", () => {
         variant: "mock-overfilter-v1",
         metrics: {
           falsePositiveRate: 0,
-          falseNegativeRate: 10 / 17,
+          falseNegativeRate: 11 / 18,
           publicEventRecall: 0,
           qrExtractionSuccessRate: 0,
           registrationSuccessRate: 0,
@@ -251,7 +251,7 @@ describe("V5 evaluation runner", () => {
         expect.objectContaining({
           name: "known_bad_regressions",
           passed: false,
-          value: 10,
+          value: 11,
           threshold: 0,
         }),
         expect.objectContaining({
@@ -294,7 +294,7 @@ describe("V5 evaluation runner", () => {
     });
 
     expect(report.recommended).toBe(true);
-    expect(report.candidate.metrics.caseCount).toBe(17);
+    expect(report.candidate.metrics.caseCount).toBe(18);
     expect(report.recommendation).toMatchObject({
       status: "recommended",
       failedGates: [],
@@ -559,6 +559,72 @@ describe("V5 evaluation runner", () => {
     });
     expect(fetchCalls).toHaveLength(2);
     expect(fetchCalls[0].url).toBe("https://llm.example/v1/chat/completions");
+  });
+
+  it("honors expected publish state separately from review action", async () => {
+    const sourceUrl = "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=7&sn=4b5c580fba9eb5e2f474c0c71ec4c2ac";
+    const fetchImpl = async () => {
+      const body = {
+        decision: "event",
+        events: [{
+          title: "缅怀过去，展望未来：追求平等的未竟之路",
+          startsAt: "2026-06-16T15:00:00+08:00",
+          city: "Beijing",
+          venue: "北京美国中心",
+          registrationAction: "required",
+          registrationUrl: sourceUrl,
+          summary: "Public seminar with registration mentioned but no actionable registration path.",
+        }],
+        publicEligibility: "public",
+        publicEligibilityReason: "Open to the public.",
+        confidence: 0.92,
+        reason: "The article describes a public Beijing event.",
+      };
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            choices: [{ message: { content: JSON.stringify(body) } }],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              total_tokens: 15,
+              cost_micro_cny: 20,
+            },
+          };
+        },
+      };
+    };
+
+    const result = await runV5Evaluation({
+      corpusDir: "tests/regression-corpus",
+      caseIds: ["bac-equality-history-talk"],
+      variants: ["live-configured"],
+      allowLive: true,
+      maxCostCny: 1,
+      env: {
+        V5_LIVE_PROVIDER: "test-openai-compatible",
+        V5_LIVE_BASE_URL: "https://llm.example/v1",
+        V5_LIVE_MODEL: "test-vl-model",
+        V5_LIVE_API_KEY: "test-key",
+      },
+      fetchImpl,
+      now: new Date("2026-06-10T05:00:00.000Z"),
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      passCount: 1,
+      failCount: 0,
+    });
+    expect(result.cases[0]).toMatchObject({
+      expectedAction: "review",
+      predictedAction: "review",
+      expectedFinalState: "needs_info",
+      predictedFinalState: "needs_info",
+      status: "passed",
+    });
   });
 
   it("passes configured live provider generation options from env", async () => {

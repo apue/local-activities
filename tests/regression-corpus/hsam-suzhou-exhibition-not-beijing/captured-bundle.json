@@ -3,7 +3,7 @@
   "captureId": "capture-fe75d6fdc39d04e7254b9b9d",
   "sourceId": "2399449400",
   "sourceName": "IICPechino",
-  "provider": "wechat2rss_public_safe_excerpt",
+  "provider": "local_fixture",
   "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917382&idx=2&sn=194bd3ff5245cc5f10445d77f3358b65",
   "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917382&idx=2&sn=194bd3ff5245cc5f10445d77f3358b65",
   "finalUrl": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917382&idx=2&sn=194bd3ff5245cc5f10445d77f3358b65",
@@ -18,18 +18,17 @@
     "en"
   ],
   "captureMode": "text_complete",
-  "text": "Title: 【HSAM|展览预告】镜像错时——巴尔别里和老安相机中的意大利与中国\nSource: IICPechino\nPublished at: 2026-06-08T08:14:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917382&idx=2&sn=194bd3ff5245cc5f10445d77f3358b65\nExpected action: exclude\nRationale: Long-running exhibition article, but the venue is in Suzhou rather than Beijing.\nReview/exclusion reasons: not_beijing\nThis case is retained as a negative product judgment. The original article content is not mirrored in the public repository.",
-  "html": "<article><p>Title: 【HSAM|展览预告】镜像错时——巴尔别里和老安相机中的意大利与中国</p><p>Source: IICPechino</p><p>Published at: 2026-06-08T08:14:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&amp;mid=2649917382&amp;idx=2&amp;sn=194bd3ff5245cc5f10445d77f3358b65</p><p>Expected action: exclude</p><p>Rationale: Long-running exhibition article, but the venue is in Suzhou rather than Beijing.</p><p>Review/exclusion reasons: not_beijing</p><p>This case is retained as a negative product judgment. The original article content is not mirrored in the public repository.</p></article>",
+  "text": "苏州展览活动信息。\n展览为长期展览，地点在苏州。\n虽有展期和开放时间，但不属于北京活动范围。",
+  "html": "<article><p>苏州展览活动信息。</p><p>展览为长期展览，地点在苏州。</p><p>虽有展期和开放时间，但不属于北京活动范围。</p></article>",
   "images": [],
   "links": [],
   "miniPrograms": [],
-  "contentHash": "1488ddb69c7812db5dc99efc1287975e0be7b1d3ff98ff3024da58e662efa34e",
-  "diagnostics": [],
-  "captureWarnings": [
+  "contentHash": "ac73312b08781236a47ad1163b926a78f4b69119ce45931f7f2d44a6040a22cd",
+  "diagnostics": [
     {
-      "code": "public_safe_curated_excerpt",
-      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
-      "severity": "info"
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
     }
-  ]
+  ],
+  "captureWarnings": []
 }

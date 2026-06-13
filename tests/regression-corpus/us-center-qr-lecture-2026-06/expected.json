@@ -1,0 +1,41 @@
+{
+  "action": "extract",
+  "eventCount": 1,
+  "requiresReservation": true,
+  "evidence": {
+    "expectsRegistrationQr": true,
+    "expectsPoster": true
+  },
+  "eventDrafts": [
+    {
+      "draftId": "us-center-qr-lecture-2026-06",
+      "title": "Grotto Art of China: A Sourcebook",
+      "organizer": "北京美国中心",
+      "startsAt": "2026-06-08T18:00:00+08:00",
+      "endsAt": "2026-06-08T20:00:00+08:00",
+      "city": "Beijing",
+      "venueName": "北京美国中心",
+      "registrationAction": "qr_code",
+      "scheduleText": "6月8日 星期一 18:00-20:00",
+      "summary": "Public Beijing American Center lecture about Chinese grotto art.",
+      "evidence": [
+        {
+          "imageId": "image-001",
+          "role": "qr",
+          "confidence": 0.8
+        },
+        {
+          "imageId": "image-002",
+          "role": "poster",
+          "confidence": 0.75
+        }
+      ]
+    }
+  ],
+  "dedupe": {
+    "decision": "new_event"
+  },
+  "publish": {
+    "state": "published"
+  }
+}

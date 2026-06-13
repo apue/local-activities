@@ -3,7 +3,7 @@
   "captureId": "capture-d3f10d1376e10825bbc808f6",
   "sourceId": "3294900553",
   "sourceName": "西班牙驻华大使馆",
-  "provider": "wechat2rss_public_safe_excerpt",
+  "provider": "local_fixture",
   "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MzI5NDkwMDU1Mw==&mid=2247493179&idx=1&sn=5c55e9f75252b63db9004a188753f20f",
   "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MzI5NDkwMDU1Mw==&mid=2247493179&idx=1&sn=5c55e9f75252b63db9004a188753f20f",
   "finalUrl": "https://mp.weixin.qq.com/s?__biz=MzI5NDkwMDU1Mw==&mid=2247493179&idx=1&sn=5c55e9f75252b63db9004a188753f20f",
@@ -18,18 +18,17 @@
     "en"
   ],
   "captureMode": "text_complete",
-  "text": "Title: 西班牙驻华使馆文化处 | 讲座《北京南堂的文化交流》\nSource: 西班牙驻华大使馆\nPublished at: 2026-06-09T07:48:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MzI5NDkwMDU1Mw==&mid=2247493179&idx=1&sn=5c55e9f75252b63db9004a188753f20f\nExpected action: extract\nRationale: Clear public Beijing lecture with time, venue, language, and free admission.\nEvent: 讲座《北京南堂的文化交流》\nOrganizer: 西班牙驻华大使馆文化处\nStarts: 2026-06-10T18:30:00+08:00\nSchedule: 2026年6月10日 18:30\nVenue: 北京南堂庞迪我会议室\nAddress: 北京市西城区前门西大街141号\nSummary: Free Spanish-language lecture with Chinese simultaneous interpretation.\nThis case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.",
-  "html": "<article><p>Title: 西班牙驻华使馆文化处 | 讲座《北京南堂的文化交流》</p><p>Source: 西班牙驻华大使馆</p><p>Published at: 2026-06-09T07:48:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MzI5NDkwMDU1Mw==&amp;mid=2247493179&amp;idx=1&amp;sn=5c55e9f75252b63db9004a188753f20f</p><p>Expected action: extract</p><p>Rationale: Clear public Beijing lecture with time, venue, language, and free admission.</p><p>Event: 讲座《北京南堂的文化交流》</p><p>Organizer: 西班牙驻华大使馆文化处</p><p>Starts: 2026-06-10T18:30:00+08:00</p><p>Schedule: 2026年6月10日 18:30</p><p>Venue: 北京南堂庞迪我会议室</p><p>Address: 北京市西城区前门西大街141号</p><p>Summary: Free Spanish-language lecture with Chinese simultaneous interpretation.</p><p>This case is retained as a public-safe factual extraction target. The original article content is not mirrored in the public repository.</p></article>",
+  "text": "讲座《北京南堂的文化交流》。\n时间：2026年6月10日 18:30。\n地点：北京南堂庞迪我会议室，北京市西城区前门西大街141号。\n西班牙驻华使馆文化处举办西语讲座，现场提供中文同传。\n免费入场，面向公众。",
+  "html": "<article><p>讲座《北京南堂的文化交流》。</p><p>时间：2026年6月10日 18:30。</p><p>地点：北京南堂庞迪我会议室，北京市西城区前门西大街141号。</p><p>西班牙驻华使馆文化处举办西语讲座，现场提供中文同传。</p><p>免费入场，面向公众。</p></article>",
   "images": [],
   "links": [],
   "miniPrograms": [],
-  "contentHash": "2c086d70de35f081f9e5d398eb352e7a31ed008af2d0614223c16b31424e470c",
-  "diagnostics": [],
-  "captureWarnings": [
+  "contentHash": "03e372ace686b3de77ff1f55b814c5abb414f2372e3f8b33f43d8a9eb19783b3",
+  "diagnostics": [
     {
-      "code": "public_safe_curated_excerpt",
-      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
-      "severity": "info"
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
     }
-  ]
+  ],
+  "captureWarnings": []
 }

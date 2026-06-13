@@ -1,22 +1,24 @@
 # Regression Corpus
 
 This document defines the current regression corpus policy. The committed corpus
-under `tests/regression-corpus` is public-safe regression data derived from real
-locally captured Wechat2RSS article bundles. It is the default product
-regression set for V5 offline pipeline replay.
+under `tests/regression-corpus` is public-safe regression data. It is the
+default product regression set for V5 offline pipeline replay.
 
 ## Current State
 
-The trusted corpus currently contains 17 cases derived from the local Wechat2RSS
-cache on 2026-06-10. It includes public events, registration-required cases, the
+The trusted corpus currently contains 18 cases. Most are source-like local
+fixtures derived from earlier local Wechat2RSS captures; one QR/poster case
+keeps provider-readable public image URLs for V5 live vision smoke. It includes
+public events, registration-required cases, the
 Beiping beer festival mini-program case, multi-event and long-running exhibition
 cases, recurring occurrences, and negative news/non-public/not-Beijing cases.
 
 Because the repository is public, committed cases intentionally do not mirror
-full third-party article HTML or image assets. Their bundles contain concise
-derived factual text, expected outcomes, and source metadata. Use a private local
-corpus rebuilt from Wechat2RSS when validating live vision behavior for posters
-or registration QR codes.
+full third-party article HTML or copied image files. Their bundles contain
+concise source-like text, source metadata, and selected public image references
+where needed. Expected outcomes live only in `expected.json` and must never be
+embedded in model input fields such as `captured-bundle.json` text, HTML, links,
+or image metadata.
 
 V5 replay must point at an explicit corpus directory:
 
@@ -46,15 +48,17 @@ Capture-failure cases use `capture-result.json` instead of
 `captured-bundle.json`.
 
 Committed `captured-bundle.json` files must conform to the capture contract, but
-may be public-safe derived bundles rather than complete article mirrors. If a
-private local case requires poster or QR understanding, it must include
-consumable image assets through fields such as `publicUrl`, `dataUrl`, or
-storage-backed assets resolved to provider-readable URLs. Raw upstream
-references such as `images[*].sourceUrl` are metadata only.
+may be public-safe source-like fixtures rather than complete article mirrors.
+If a committed or private local case requires poster or QR understanding, it
+must include consumable image references through fields such as `sourceUrl`,
+`publicUrl`, `dataUrl`, or storage-backed assets resolved to provider-readable
+URLs. `localhost`/`127.0.0.1` image proxy URLs are not valid corpus assets.
 
-Do not create corpus cases with fake image URLs or nonexistent assets. If a
-case has useful text-only expectations but lacks real assets, mark it as not
-eligible for live vision evaluation in `case.json`:
+Do not create corpus cases with fake image URLs, nonexistent assets, or hidden
+answer labels. If a case has useful text-only expectations but lacks real
+poster/QR assets, its expected result should reflect the missing evidence, for
+example by routing to review instead of expecting automatic publication.
+Optionally mark it as not eligible for live vision evaluation in `case.json`:
 
 ```json
 {
@@ -86,9 +90,6 @@ Current covered labels:
 
 Known gaps are recorded in `manifest.json`:
 
-- QR registration: the public repository does not commit third-party QR images
-- poster or image-dominant articles: the public repository does not commit
-  third-party poster/image assets
 - duplicate/update: needs a stateful dedupe candidate-set harness
 - QR present but not registration: no reliable real footer/share QR sample was
   exposed by the current local cache

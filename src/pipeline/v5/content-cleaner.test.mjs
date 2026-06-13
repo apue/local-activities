@@ -19,7 +19,7 @@ describe("V5 content cleaner", () => {
       sourceUrl: bundle.sourceUrl,
     });
     expect(normalized.markdown).toContain("北平机器友谊万岁精酿啤酒节");
-    expect(normalized.markdown).toContain("Registration action: mini_program");
+    expect(normalized.markdown).toContain("小程序");
     expect(normalized.miniPrograms).toHaveLength(2);
     expect(normalized.contentStats).toMatchObject({
       imageCount: 0,

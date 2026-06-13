@@ -1,5 +1,5 @@
 {
-  "action": "extract",
+  "action": "review",
   "eventCount": 1,
   "requiresReservation": true,
   "evidence": {},
@@ -11,16 +11,16 @@
       "startsAt": "2026-06-09T00:00:00+08:00",
       "city": "Beijing",
       "venueName": "驻华韩国文化院",
-      "registrationAction": "qr_code",
+      "registrationAction": "required",
       "scheduleText": "6月9日，预约开放时间为6月8日10:00",
-      "summary": "Public K-Beauty lecture by Professor Kim Joo-ri; reservation required."
+      "summary": "Public K-Beauty lecture by Professor Kim Joo-ri; reservation required. Registration evidence is not present in this public fixture, so publication requires missing-info review."
     }
   ],
   "dedupe": {
     "decision": "new_event"
   },
   "publish": {
-    "state": "needs_review",
+    "state": "needs_info",
     "reasons": [
       "start_time_missing_in_text"
     ]

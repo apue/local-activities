@@ -84,6 +84,77 @@ describe("V5 live Full Extract and Editor harnesses", () => {
     expect(messages[0].content).toContain("Ignore evaluator labels such as Expected action, Rationale, or Review/exclusion reasons");
   });
 
+  it("sends eligible image evidence as vision input and preserves registration evidence fields", async () => {
+    const provider = fakeProvider([
+      {
+        json: {
+          decision: "event",
+          events: [{
+            title: "文化中心讲座",
+            startsAt: "2026-06-20T10:00:00+08:00",
+            city: "Beijing",
+            venue: "北京文化中心",
+            registrationAction: "qr_code",
+            registrationQrUrl: "https://images.example/qr.jpg",
+            registrationEvidence: "image-001",
+            miniProgramPath: "pages/register",
+            miniProgramAppId: "wx123",
+            evidence: [{ imageId: "image-001", role: "qr", confidence: 0.91 }],
+          }],
+          publicEligibility: "public",
+          publicEligibilityReason: "open signup",
+          confidence: 0.96,
+          reason: "vision evidence used",
+        },
+        usage: { costMicroCny: 1 },
+      },
+    ]);
+
+    const result = await runLiveFullExtract({
+      normalized: {
+        ...normalized,
+        images: [{
+          id: "image-001",
+          role: "qr",
+          sourceUrl: "https://images.example/qr.jpg",
+          alt: "报名二维码",
+        }],
+      },
+      packet,
+      triage,
+      imageEvidence: [{
+        id: "image-001",
+        role: "qr",
+        sourceUrl: "https://images.example/qr.jpg",
+        alt: "报名二维码",
+      }],
+      provider,
+      budgetGuard: createLiveModelBudgetGuard({ maxCostMicroCny: 10 }),
+      now: fixedNow,
+    });
+
+    const [{ messages }] = provider.completeJson.mock.calls[0];
+    expect(messages[1].content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text" }),
+        expect.objectContaining({
+          type: "image_url",
+          image_url: { url: "https://images.example/qr.jpg" },
+        }),
+      ]),
+    );
+    expect(messages[0].content).toContain("\"registrationQrUrl\": string optional");
+    expect(messages[0].content).toContain("\"evidence\": [{ \"imageId\": string");
+    expect(result.events[0]).toMatchObject({
+      registrationAction: "qr_code",
+      registrationQrUrl: "https://images.example/qr.jpg",
+      registrationEvidence: "image-001",
+      miniProgramPath: "pages/register",
+      miniProgramAppId: "wx123",
+      evidence: [{ imageId: "image-001", role: "qr", confidence: 0.91 }],
+    });
+  });
+
   it("runs bounded repair attempts and records validator issues in attempt traces", async () => {
     const provider = fakeProvider([
       {

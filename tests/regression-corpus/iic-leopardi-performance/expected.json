@@ -1,5 +1,5 @@
 {
-  "action": "extract",
+  "action": "review",
   "eventCount": 1,
   "requiresReservation": true,
   "evidence": {},

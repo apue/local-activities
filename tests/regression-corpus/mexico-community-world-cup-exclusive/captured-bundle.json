@@ -3,7 +3,7 @@
   "captureId": "capture-bb0beb4ccb843427912cfed1",
   "sourceId": "3095330064",
   "sourceName": "墨西哥驻华大使馆",
-  "provider": "wechat2rss_public_safe_excerpt",
+  "provider": "local_fixture",
   "sourceUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743873&idx=1&sn=be1ad3f8b02d04a0eb3ce542df95343f",
   "canonicalUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743873&idx=1&sn=be1ad3f8b02d04a0eb3ce542df95343f",
   "finalUrl": "https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743873&idx=1&sn=be1ad3f8b02d04a0eb3ce542df95343f",
@@ -18,18 +18,17 @@
     "en"
   ],
   "captureMode": "text_complete",
-  "text": "Title: ¡Acompáñanos a vivir la inauguración del Mundial como en casa!\nSource: 墨西哥驻华大使馆\nPublished at: 2026-06-03T04:00:00.000Z\nSource URL: https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&mid=2651743873&idx=1&sn=be1ad3f8b02d04a0eb3ce542df95343f\nExpected action: exclude\nRationale: Embassy event in Beijing but explicitly exclusive to the Mexican community in China.\nReview/exclusion reasons: not_general_public\nThis case is retained as a negative product judgment. The original article content is not mirrored in the public repository.",
-  "html": "<article><p>Title: ¡Acompáñanos a vivir la inauguración del Mundial como en casa!</p><p>Source: 墨西哥驻华大使馆</p><p>Published at: 2026-06-03T04:00:00.000Z</p><p>Source URL: https://mp.weixin.qq.com/s?__biz=MzA5NTMzMDA2NA==&amp;mid=2651743873&amp;idx=1&amp;sn=be1ad3f8b02d04a0eb3ce542df95343f</p><p>Expected action: exclude</p><p>Rationale: Embassy event in Beijing but explicitly exclusive to the Mexican community in China.</p><p>Review/exclusion reasons: not_general_public</p><p>This case is retained as a negative product judgment. The original article content is not mirrored in the public repository.</p></article>",
+  "text": "¡Acompáñanos a vivir la inauguración del Mundial como en casa!\n墨西哥驻华使馆邀请在华墨西哥社群共同观看世界杯开幕相关活动。\n活动地点在北京，但参与对象限定为墨西哥社群成员。\n该信息不是面向普通公众开放的活动。",
+  "html": "<article><p>¡Acompáñanos a vivir la inauguración del Mundial como en casa!</p><p>墨西哥驻华使馆邀请在华墨西哥社群共同观看世界杯开幕相关活动。</p><p>活动地点在北京，但参与对象限定为墨西哥社群成员。</p><p>该信息不是面向普通公众开放的活动。</p></article>",
   "images": [],
   "links": [],
   "miniPrograms": [],
-  "contentHash": "6e3b05c01561aecffe4321d6e798bcf7787c74cda278bb5b3078ff4d1c226d6b",
-  "diagnostics": [],
-  "captureWarnings": [
+  "contentHash": "1ad5d8543bbd1603766e503eff1d98aa99d6ee7ce14eb09798ae90f2c95f690c",
+  "diagnostics": [
     {
-      "code": "public_safe_curated_excerpt",
-      "message": "Full article HTML and images are not committed to the public repository. Rebuild a private local corpus from Wechat2RSS for live vision evaluation.",
-      "severity": "info"
+      "key": "fixture_kind",
+      "value": "source_like_public_regression_fixture"
     }
-  ]
+  ],
+  "captureWarnings": []
 }

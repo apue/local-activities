@@ -1,5 +1,5 @@
 {
-  "action": "extract",
+  "action": "review",
   "eventCount": 1,
   "requiresReservation": true,
   "evidence": {},
@@ -11,15 +11,15 @@
       "startsAt": "2026-06-16T15:00:00+08:00",
       "city": "Beijing",
       "venueName": "北京美国中心",
-      "registrationAction": "qr_code",
+      "registrationAction": "required",
       "scheduleText": "6月16日 周二 15:00",
-      "summary": "English-language public seminar at the Beijing American Center."
+      "summary": "English-language public seminar at the Beijing American Center. Registration evidence is not present in this public fixture, so publication requires missing-info review."
     }
   ],
   "dedupe": {
     "decision": "new_event"
   },
   "publish": {
-    "state": "public"
+    "state": "needs_info"
   }
 }

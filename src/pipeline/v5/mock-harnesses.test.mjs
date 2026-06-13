@@ -116,6 +116,61 @@ describe("V5 mock Full Extract and Editor harnesses", () => {
     expect(editor.editorDecision).toBe("needs_info");
     expect(publishTrace.state).toBe("needs_info");
   });
+
+  it("keeps complete expected review cases in review instead of mock-publishing them", () => {
+    const normalized = cleanCapturedArticleBundle({
+      title: "测试活动需审核",
+      sourceName: "Test Source",
+      sourceUrl: "https://mp.weixin.qq.com/s/review",
+      publishedAt: "2026-06-10T00:00:00.000Z",
+      text: "测试活动，6月20日 19:00 在北京文化中心举办，报名证据缺失。",
+      links: [],
+      images: [],
+      miniPrograms: [],
+    });
+    const extraction = mockFullExtract({
+      normalized,
+      expected: {
+        action: "review",
+        eventCount: 1,
+        eventDrafts: [{
+          title: "测试活动需审核",
+          startsAt: "2026-06-20T19:00:00+08:00",
+          venueName: "北京文化中心",
+        }],
+      },
+      now: fixedNow,
+    });
+
+    const validation = validateMockExtraction({ extraction, normalized, now: fixedNow });
+    const editor = mockEditorPass({ normalized, extraction, validation, now: fixedNow });
+    const publishTrace = publishTraceFromEditor({ extraction, validation, editor });
+
+    expect(extraction.decision).toBe("needs_review");
+    expect(validation.status).toBe("valid");
+    expect(editor.editorDecision).toBe("review");
+    expect(publishTrace.state).toBe("needs_review");
+  });
+
+  it("routes expected missing registration evidence cases to needs_info", async () => {
+    const caseItem = await loadCase("bac-equality-history-talk");
+    const normalized = cleanCapturedArticleBundle(caseItem.bundle);
+    const extraction = mockFullExtract({
+      normalized,
+      expected: caseItem.expected,
+      now: fixedNow,
+    });
+
+    const validation = validateMockExtraction({ extraction, normalized, now: fixedNow });
+    const editor = mockEditorPass({ normalized, extraction, validation, now: fixedNow });
+    const publishTrace = publishTraceFromEditor({ extraction, validation, editor });
+
+    expect(extraction.decision).toBe("event");
+    expect(validation.status).toBe("needs_info");
+    expect(validation.issues.map((issue) => issue.code)).toContain("registration_evidence_missing");
+    expect(editor.editorDecision).toBe("needs_info");
+    expect(publishTrace.state).toBe("needs_info");
+  });
 });
 
 async function loadCase(caseId) {

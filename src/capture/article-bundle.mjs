@@ -235,6 +235,8 @@ function normalizeBundleImage(image, index) {
     id: clean(image.id) ?? `image-${String(index + 1).padStart(3, "0")}`,
     path: clean(image.path),
     sourceUrl: clean(image.sourceUrl),
+    publicUrl: clean(image.publicUrl),
+    dataUrl: clean(image.dataUrl),
     storagePath: clean(image.storagePath),
     role: clean(image.role) ?? "article_image",
     width: positiveInteger(image.width),

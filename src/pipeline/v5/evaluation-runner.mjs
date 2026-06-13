@@ -362,7 +362,7 @@ async function evaluateCaseVariant({
   evaluationRunId,
 }) {
   const expectedAction = caseItem.expected.action;
-  const expectedFinalState = finalStateFromExpectedAction(expectedAction);
+  const expectedFinalState = expectedFinalStateFromCase(caseItem);
   const expectedSignals = expectedReviewSignals(caseItem);
   const baseVariant = baseVariantFromEvaluationVariant(variant);
   const prediction = liveVariants.has(baseVariant)
@@ -572,7 +572,7 @@ function predictionForVariant({
   if (variant === "mock-expected-v1") {
     return {
       action: expectedAction,
-      finalState: finalStateFromExpectedAction(expectedAction),
+      finalState: expectedFinalStateFromExpected({ expected, expectedAction }),
       artifactPaths: artifactPathsFromReplayCase(replayCase),
       signals: {
         hasRegistration: expectedSignals.expectsRegistration,
@@ -840,6 +840,17 @@ function finalStateFromExpectedAction(action) {
   if (action === "review") return "needs_review";
   if (action === "capture_failure") return "failed";
   return "excluded";
+}
+
+function expectedFinalStateFromCase(caseItem) {
+  return expectedFinalStateFromExpected({
+    expected: caseItem?.expected,
+    expectedAction: caseItem?.expected?.action,
+  });
+}
+
+function expectedFinalStateFromExpected({ expected, expectedAction }) {
+  return clean(expected?.publish?.state) ?? finalStateFromExpectedAction(expectedAction);
 }
 
 function artifactPathsFromReplayCase(replayCase) {
