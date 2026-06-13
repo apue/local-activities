@@ -56,9 +56,9 @@ describe("agent audit packet", () => {
     expect(packet.publicSnapshot).toMatchObject({
       kind: "agent_public_snapshot",
       counts: {
-        publishedRows: 2,
-        publicRenderableRows: 2,
-        missingPosterCount: 2,
+        publishedRows: 3,
+        publicRenderableRows: 3,
+        missingPosterCount: 3,
         missingRegistrationQrCount: 2,
       },
     });
@@ -398,6 +398,18 @@ function auditData() {
         status: "published",
         publicEligibility: "public",
         eventKind: "single",
+      },
+      {
+        eventId: "event-unsupported-kind",
+        dataClass: "production",
+        title: "World Cup Viewing Party",
+        startsAt: "2026-06-19T09:00:00.000Z",
+        venueName: "Gran Moji",
+        reservationStatus: "not_required",
+        sourceUrl: "https://mp.weixin.qq.com/s/world-cup",
+        status: "published",
+        publicEligibility: "public",
+        eventKind: "unsupported",
       },
     ],
     feedback: [
