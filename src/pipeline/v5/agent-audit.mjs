@@ -615,7 +615,7 @@ function isLikelyPublicActivityDraft(draft) {
   return hasPublicTriage &&
     hasRequiredFields &&
     draft.publicEligibility !== "not_public" &&
-    !["news", "visit", "cancellation", "unsupported"].includes(draft.eventKind) &&
+    !["news", "visit", "cancellation"].includes(draft.eventKind) &&
     draft.scheduleKind !== "unsupported" &&
     (draft.confidence ?? 0) >= 0.9;
 }
@@ -1307,7 +1307,7 @@ function normalizeUsageRow(row) {
 function isPublicRenderableAuditEvent(event) {
   if (event.status !== "published") return false;
   if (event.publicEligibility === "not_public") return false;
-  if (["news", "visit", "cancellation", "unsupported"].includes(event.eventKind)) return false;
+  if (["news", "visit", "cancellation"].includes(event.eventKind)) return false;
   if (["not_public_activity", "insufficient_info"].includes(event.resolutionDecision)) return false;
   return true;
 }
