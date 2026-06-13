@@ -25,6 +25,10 @@ type WrittenEvidenceAsset = {
   role: string;
   publicUrl?: string;
 };
+type PublishBlocker = {
+  code: string;
+  message: string;
+};
 
 export async function runAnalysisPipeline({
   request,
@@ -235,8 +239,9 @@ async function writeAnalysisOutput({
       ? "same_event"
       : output.dedupe.decision;
     let eventCanonicalEventId: string | undefined;
-    const shouldCreateCanonicalEvent =
-      dedupeDecision === "new_event" && canCreateCanonicalEvent(event);
+    const blockers = collectPublishBlockers({ event, request });
+    const shouldCreateCanonicalEvent = dedupeDecision === "new_event" &&
+      canCreateCanonicalEvent(event, blockers);
     await writeUnique(
       db,
       "event_drafts",
@@ -251,6 +256,7 @@ async function writeAnalysisOutput({
         model,
         dedupeDecision,
         shouldCreateCanonicalEvent,
+        blockers,
       }),
       "draft_id",
     );
@@ -309,15 +315,20 @@ async function writeAnalysisOutput({
   return { state: ledgerState };
 }
 
-function canCreateCanonicalEvent(event: ExtractedEvent): boolean {
+function canCreateCanonicalEvent(
+  event: ExtractedEvent,
+  blockers: { hard: PublishBlocker[]; soft: PublishBlocker[] },
+): boolean {
+  if (blockers.hard.length > 0 || blockers.soft.length > 0) return false;
   if (!hasRequiredPublicFields(event)) return false;
   if (event.publicEligibility === "not_public") return false;
   if (!isPublicActivity(event)) return false;
   if (hasExcludedEventKind(event)) return false;
   if (event.scheduleKind === "unsupported") return false;
-  if (missingRequiredRegistrationEvidence(event)) return false;
 
-  if (event.publish?.createCanonicalEvent && event.publicEligibility === "public") {
+  if (
+    event.publish?.createCanonicalEvent && event.publicEligibility === "public"
+  ) {
     return true;
   }
 
@@ -345,13 +356,97 @@ function hasExcludedEventKind(event: ExtractedEvent): boolean {
   );
 }
 
-function missingRequiredRegistrationEvidence(event: ExtractedEvent): boolean {
-  if (event.reservationStatus !== "required") return false;
-  return !event.registrationAction &&
-    !event.registrationUrl &&
-    !(event.evidence ?? []).some((selection) =>
-      selection.role === "qr" || selection.role === "registration"
+function collectPublishBlockers({
+  event,
+  request,
+}: {
+  event: ExtractedEvent;
+  request: AnalyzeRequest;
+}): { hard: PublishBlocker[]; soft: PublishBlocker[] } {
+  const hard: PublishBlocker[] = [];
+  const soft: PublishBlocker[] = [];
+  if (
+    registrationUrlMatchesSourceArticle(event, request) &&
+    !hasRegistrationEvidenceSelection(event)
+  ) {
+    soft.push({
+      code: "registration_url_is_source_article",
+      message:
+        "Registration URL points back to the source article instead of an actionable registration path.",
+    });
+  }
+  if (missingRequiredRegistrationEvidence(event, request)) {
+    soft.push({
+      code: "registration_evidence_missing",
+      message:
+        "Registration is required but no URL, QR, or evidence path is present.",
+    });
+  }
+  return { hard, soft };
+}
+
+function missingRequiredRegistrationEvidence(
+  event: ExtractedEvent,
+  request: AnalyzeRequest,
+): boolean {
+  if (!registrationRequiresEvidence(event)) return false;
+  return !actionableRegistrationUrl(event, request) &&
+    !hasRegistrationEvidenceSelection(event);
+}
+
+function hasRegistrationEvidenceSelection(event: ExtractedEvent): boolean {
+  return (event.evidence ?? []).some((selection) =>
+    selection.role === "qr" || selection.role === "registration"
+  );
+}
+
+function registrationRequiresEvidence(event: ExtractedEvent): boolean {
+  if (event.reservationStatus === "required") return true;
+  const action = String(event.registrationAction ?? "").trim().toLowerCase();
+  if (!action || action === "none" || action === "not required") return false;
+  return /register|registration|rsvp|sign\s*up|reserve|reservation|apply|ticket|scan|qr|报名|预约|登记|扫码|二维码|购票|门票/
+    .test(
+      action,
     );
+}
+
+function actionableRegistrationUrl(
+  event: ExtractedEvent,
+  request: AnalyzeRequest,
+): string | undefined {
+  const url = stringValue(event.registrationUrl);
+  if (!url) return undefined;
+  return urlsMatch(url, request.sourceUrl) ? undefined : url;
+}
+
+function registrationUrlMatchesSourceArticle(
+  event: ExtractedEvent,
+  request: AnalyzeRequest,
+): boolean {
+  const url = stringValue(event.registrationUrl);
+  return Boolean(url && urlsMatch(url, request.sourceUrl));
+}
+
+function urlsMatch(
+  left: string | undefined,
+  right: string | undefined,
+): boolean {
+  const leftUrl = canonicalUrl(left);
+  const rightUrl = canonicalUrl(right);
+  return Boolean(leftUrl && rightUrl && leftUrl === rightUrl);
+}
+
+function canonicalUrl(value: string | undefined): string | undefined {
+  const text = stringValue(value);
+  if (!text) return undefined;
+  try {
+    const url = new URL(text);
+    url.hash = "";
+    url.searchParams.sort();
+    return url.toString();
+  } catch {
+    return text;
+  }
 }
 
 function isHighConfidencePublicActivity(event: ExtractedEvent): boolean {
@@ -610,6 +705,7 @@ function draftPayload({
   model,
   dedupeDecision,
   shouldCreateCanonicalEvent,
+  blockers,
 }: {
   draftId: string;
   request: AnalyzeRequest;
@@ -621,7 +717,9 @@ function draftPayload({
   model: string;
   dedupeDecision: string;
   shouldCreateCanonicalEvent: boolean;
+  blockers: { hard: PublishBlocker[]; soft: PublishBlocker[] };
 }) {
+  const registrationUrl = actionableRegistrationUrl(event, request);
   return {
     draft_id: draftId,
     data_class: request.dataClass,
@@ -639,7 +737,7 @@ function draftPayload({
     venue_address: event.venueAddress,
     reservation_status: event.reservationStatus ?? "unknown",
     registration_action: event.registrationAction,
-    registration_url: event.registrationUrl,
+    registration_url: registrationUrl,
     schedule_text: event.scheduleText,
     poster_image_url: poster?.publicUrl,
     registration_qr_image_url: qr?.publicUrl,
@@ -658,6 +756,8 @@ function draftPayload({
     poster_asset_id: poster?.assetId,
     qr_asset_id: qr?.assetId,
     registration_qr_asset_id: qr?.assetId,
+    hard_blockers: blockers.hard,
+    soft_blockers: blockers.soft,
     resolution_decision: dedupeDecision,
     confidence: event.confidence ?? 0,
     review_state: shouldCreateCanonicalEvent
@@ -687,6 +787,7 @@ function canonicalPayload({
   poster?: WrittenEvidenceAsset;
   qr?: WrittenEvidenceAsset;
 }) {
+  const registrationUrl = actionableRegistrationUrl(event, request);
   return {
     event_id: eventId,
     data_class: request.dataClass,
@@ -701,7 +802,7 @@ function canonicalPayload({
     venue_address: event.venueAddress,
     reservation_status: event.reservationStatus ?? "unknown",
     registration_action: event.registrationAction,
-    registration_url: event.registrationUrl,
+    registration_url: registrationUrl,
     source_url: request.sourceUrl,
     schedule_text: event.scheduleText,
     triage_decision: event.triageDecision,
@@ -835,9 +936,9 @@ function evidenceStoragePath({
   contentType?: string;
 }): string {
   const extension = extensionFromContentType(contentType);
-  return `${safePathSegment(dataClass)}/articles/${safePathSegment(bundleId)}/${assetId}${
-    extension ? `.${extension}` : ""
-  }`;
+  return `${safePathSegment(dataClass)}/articles/${
+    safePathSegment(bundleId)
+  }/${assetId}${extension ? `.${extension}` : ""}`;
 }
 
 function safePathSegment(value: string): string {
@@ -878,7 +979,8 @@ function errorDetails(error: unknown) {
 
 function errorCode(error: unknown): string {
   if (isRecord(error)) {
-    return stringValue(error.code) ?? stringValue(error.message) ?? "analysis_error";
+    return stringValue(error.code) ?? stringValue(error.message) ??
+      "analysis_error";
   }
   return errorMessage(error) || "analysis_error";
 }
