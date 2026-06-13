@@ -428,8 +428,7 @@ function isPublicRenderableEvent(event: CanonicalEventRow) {
   if (
     event.event_kind === "news" ||
     event.event_kind === "visit" ||
-    event.event_kind === "cancellation" ||
-    event.event_kind === "unsupported"
+    event.event_kind === "cancellation"
   ) {
     return false;
   }

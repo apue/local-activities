@@ -427,7 +427,7 @@ function isPublicCandidate(event: ExtractedEvent): boolean {
 }
 
 function hasExcludedEventKind(event: ExtractedEvent): boolean {
-  return ["news", "visit", "cancellation", "unsupported"].includes(
+  return ["news", "visit", "cancellation"].includes(
     event.eventKind ?? "",
   );
 }
