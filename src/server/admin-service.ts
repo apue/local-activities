@@ -15,6 +15,14 @@ export type AdminPublishBlocker = {
   evidenceAssetIds?: string[];
 };
 
+export type AdminEditorDecision = "publish" | "needs_exception";
+
+export type AdminActionabilityStatus =
+  | "actionable"
+  | "needs_info"
+  | "not_actionable"
+  | "possible_duplicate";
+
 export type AdminEventDraftRecord = {
   id: string;
   articleUrl: string;
@@ -73,6 +81,11 @@ export type AdminEventDraftRecord = {
   registrationQrAssetId?: string;
   hardBlockers?: AdminPublishBlocker[];
   softBlockers?: AdminPublishBlocker[];
+  editorDecision?: AdminEditorDecision;
+  editorReason?: string;
+  exceptionReasonCodes?: string[];
+  actionabilityStatus?: AdminActionabilityStatus;
+  editorVersion?: string;
   operatorOverrideReason?: string;
   publishDecision?: PublishDecision;
   resolutionDecision?:

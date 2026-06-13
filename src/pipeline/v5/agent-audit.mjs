@@ -13,6 +13,8 @@ const candidateTypes = new Set([
   "public_visibility_gap",
   "usage_spike",
   "review_backlog",
+  "review_exception_contract_gap",
+  "likely_editor_false_negative",
 ]);
 
 export async function buildAgentAuditPacket({
@@ -356,6 +358,8 @@ function buildCandidateIndex({ context, auditFacts, publicSnapshot, usageSummary
     ...publicVisibilityGapCandidates({ auditFacts }),
     ...usageSpikeCandidates({ usageSummary }),
     ...reviewBacklogCandidates({ auditFacts }),
+    ...reviewExceptionContractCandidates({ auditFacts }),
+    ...likelyEditorFalseNegativeCandidates({ auditFacts }),
   ].map((candidate, index) => normalizeCandidate(candidate, index, context.outputDir));
   return {
     kind: "agent_candidate_index",
@@ -528,9 +532,7 @@ function usageSpikeCandidates({ usageSummary }) {
 }
 
 function reviewBacklogCandidates({ auditFacts }) {
-  const backlogDrafts = auditFacts.records.eventDrafts.filter((draft) => {
-    return ["needs_review", "needs_info", "possible_duplicate", "ready_for_review"].includes(draft.reviewState);
-  });
+  const backlogDrafts = auditFacts.records.eventDrafts.filter(isReviewQueueDraft);
   if (backlogDrafts.length === 0) return [];
   return [{
     candidateType: "review_backlog",
@@ -545,6 +547,77 @@ function reviewBacklogCandidates({ auditFacts }) {
     affectedEventIds: unique(backlogDrafts.map((draft) => draft.canonicalEventId).filter(Boolean)),
     artifactPaths: [],
   }];
+}
+
+function reviewExceptionContractCandidates({ auditFacts }) {
+  const gaps = auditFacts.records.eventDrafts.filter((draft) => {
+    return isReviewQueueDraft(draft) && exceptionReasonCodesForDraft(draft).length === 0;
+  });
+  if (gaps.length === 0) return [];
+  return [{
+    candidateType: "review_exception_contract_gap",
+    severityHint: "high",
+    signals: {
+      gapCount: gaps.length,
+      byReviewState: countBy(gaps, "reviewState"),
+      titles: gaps.map((draft) => draft.title).filter(Boolean).slice(0, 10),
+    },
+    affectedSourceIds: unique(gaps.map((draft) => draft.sourceId).filter(Boolean)),
+    affectedArticleIds: unique(gaps.map((draft) => draft.articleBundleId).filter(Boolean)),
+    affectedDraftIds: unique(gaps.map((draft) => draft.draftId).filter(Boolean)),
+    affectedEventIds: unique(gaps.map((draft) => draft.canonicalEventId).filter(Boolean)),
+    artifactPaths: [],
+  }];
+}
+
+function likelyEditorFalseNegativeCandidates({ auditFacts }) {
+  const drafts = auditFacts.records.eventDrafts.filter((draft) => {
+    return isReviewQueueDraft(draft) &&
+      exceptionReasonCodesForDraft(draft).length === 0 &&
+      isLikelyPublicActivityDraft(draft);
+  });
+  if (drafts.length === 0) return [];
+  return [{
+    candidateType: "likely_editor_false_negative",
+    severityHint: "high",
+    signals: {
+      candidateCount: drafts.length,
+      titles: drafts.map((draft) => draft.title).filter(Boolean).slice(0, 10),
+    },
+    affectedSourceIds: unique(drafts.map((draft) => draft.sourceId).filter(Boolean)),
+    affectedArticleIds: unique(drafts.map((draft) => draft.articleBundleId).filter(Boolean)),
+    affectedDraftIds: unique(drafts.map((draft) => draft.draftId).filter(Boolean)),
+    affectedEventIds: unique(drafts.map((draft) => draft.canonicalEventId).filter(Boolean)),
+    artifactPaths: [],
+  }];
+}
+
+function isReviewQueueDraft(draft) {
+  return ["needs_review", "needs_info", "possible_duplicate", "ready_for_review"].includes(draft.reviewState);
+}
+
+function exceptionReasonCodesForDraft(draft) {
+  return unique([
+    ...(draft.exceptionReasonCodes ?? []),
+    ...(draft.hardBlockers ?? []).map((blocker) => blocker.code),
+    ...(draft.softBlockers ?? []).map((blocker) => blocker.code),
+  ]);
+}
+
+function isLikelyPublicActivityDraft(draft) {
+  const hasPublicTriage = ["public_activity", "possible_public_activity"].includes(draft.triageDecision);
+  const hasRequiredFields = Boolean(
+    draft.title &&
+      draft.startsAt &&
+      draft.organizer &&
+      (draft.venueName || draft.venueAddress),
+  );
+  return hasPublicTriage &&
+    hasRequiredFields &&
+    draft.publicEligibility !== "not_public" &&
+    !["news", "visit", "cancellation", "unsupported"].includes(draft.eventKind) &&
+    draft.scheduleKind !== "unsupported" &&
+    (draft.confidence ?? 0) >= 0.9;
 }
 
 function normalizeCandidate(candidate, index, outputDir) {
@@ -1123,12 +1196,26 @@ function normalizeDraftRow(row) {
     startsAt: optionalIsoTimestamp(row.startsAt ?? row.starts_at),
     endsAt: optionalIsoTimestamp(row.endsAt ?? row.ends_at),
     venueName: clean(row.venueName ?? row.venue_name),
+    venueAddress: clean(row.venueAddress ?? row.venue_address),
+    city: clean(row.city),
     reservationStatus: clean(row.reservationStatus ?? row.reservation_status),
     registrationUrl: clean(row.registrationUrl ?? row.registration_url),
     posterImageUrl: clean(row.posterImageUrl ?? row.poster_image_url),
     registrationQrImageUrl: clean(row.registrationQrImageUrl ?? row.registration_qr_image_url),
     posterAssetId: clean(row.posterAssetId ?? row.poster_asset_id),
     registrationQrAssetId: clean(row.registrationQrAssetId ?? row.registration_qr_asset_id),
+    hardBlockers: row.hardBlockers ?? row.hard_blockers ?? [],
+    softBlockers: row.softBlockers ?? row.soft_blockers ?? [],
+    editorDecision: clean(row.editorDecision ?? row.editor_decision),
+    editorReason: clean(row.editorReason ?? row.editor_reason),
+    exceptionReasonCodes: row.exceptionReasonCodes ?? row.exception_reason_codes ?? [],
+    actionabilityStatus: clean(row.actionabilityStatus ?? row.actionability_status),
+    editorVersion: clean(row.editorVersion ?? row.editor_version),
+    triageDecision: clean(row.triageDecision ?? row.triage_decision),
+    publicEligibility: clean(row.publicEligibility ?? row.public_eligibility),
+    eventKind: clean(row.eventKind ?? row.event_kind),
+    scheduleKind: clean(row.scheduleKind ?? row.schedule_kind),
+    confidence: optionalNumber(row.confidence ?? row.triage_confidence),
     processingState: clean(row.processingState ?? row.processing_state),
     reviewState: clean(row.reviewState ?? row.review_state),
     canonicalEventId: clean(row.canonicalEventId ?? row.canonical_event_id),

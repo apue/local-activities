@@ -101,6 +101,11 @@ type EventDraftRow = {
   registration_qr_asset_id: string | null;
   hard_blockers: AdminEventDraftRecord["hardBlockers"] | null;
   soft_blockers: AdminEventDraftRecord["softBlockers"] | null;
+  editor_decision: AdminEventDraftRecord["editorDecision"] | null;
+  editor_reason: string | null;
+  exception_reason_codes: string[] | null;
+  actionability_status: AdminEventDraftRecord["actionabilityStatus"] | null;
+  editor_version: string | null;
   operator_override_reason: string | null;
   resolution_decision: AdminEventDraftRecord["resolutionDecision"] | null;
   canonical_event_id: string | number | null;
@@ -1708,6 +1713,11 @@ function toDraftRecord(row: EventDraftRow): AdminEventDraftRecord {
     registrationQrAssetId: row.registration_qr_asset_id ?? undefined,
     hardBlockers: row.hard_blockers ?? undefined,
     softBlockers: row.soft_blockers ?? undefined,
+    editorDecision: row.editor_decision ?? undefined,
+    editorReason: row.editor_reason ?? undefined,
+    exceptionReasonCodes: row.exception_reason_codes ?? undefined,
+    actionabilityStatus: row.actionability_status ?? undefined,
+    editorVersion: row.editor_version ?? undefined,
     operatorOverrideReason: row.operator_override_reason ?? undefined,
     resolutionDecision: row.resolution_decision ?? undefined,
     canonicalEventId:

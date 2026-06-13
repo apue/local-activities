@@ -29,6 +29,28 @@ type PublishBlocker = {
   code: string;
   message: string;
 };
+type EditorActionabilityStatus =
+  | "actionable"
+  | "needs_info"
+  | "not_actionable"
+  | "possible_duplicate";
+type EditorDecision = {
+  decision: "publish" | "needs_exception";
+  reason: string;
+  actionabilityStatus: EditorActionabilityStatus;
+  exceptionReasonCodes: string[];
+  blockers: { hard: PublishBlocker[]; soft: PublishBlocker[] };
+};
+type WrittenEditorDecision = {
+  draftId: string;
+  title?: string;
+  decision: EditorDecision["decision"];
+  reason: string;
+  actionabilityStatus: EditorActionabilityStatus;
+  exceptionReasonCodes: string[];
+};
+
+const editorVersion = "ai-editor-policy-v1";
 
 export async function runAnalysisPipeline({
   request,
@@ -215,6 +237,7 @@ async function writeAnalysisOutput({
   }
 
   const draftIds: string[] = [];
+  const editorDecisions: WrittenEditorDecision[] = [];
   let firstCanonicalEventId: string | undefined;
   for (let index = 0; index < output.events.length; index += 1) {
     const event = output.events[index];
@@ -240,8 +263,20 @@ async function writeAnalysisOutput({
       : output.dedupe.decision;
     let eventCanonicalEventId: string | undefined;
     const blockers = collectPublishBlockers({ event, request });
-    const shouldCreateCanonicalEvent = dedupeDecision === "new_event" &&
-      canCreateCanonicalEvent(event, blockers);
+    const editorDecision = decideEditorDecision({
+      event,
+      dedupeDecision,
+      blockers,
+    });
+    const shouldCreateCanonicalEvent = editorDecision.decision === "publish";
+    editorDecisions.push({
+      draftId,
+      title: event.title,
+      decision: editorDecision.decision,
+      reason: editorDecision.reason,
+      actionabilityStatus: editorDecision.actionabilityStatus,
+      exceptionReasonCodes: editorDecision.exceptionReasonCodes,
+    });
     await writeUnique(
       db,
       "event_drafts",
@@ -256,7 +291,7 @@ async function writeAnalysisOutput({
         model,
         dedupeDecision,
         shouldCreateCanonicalEvent,
-        blockers,
+        editorDecision,
       }),
       "draft_id",
     );
@@ -272,6 +307,7 @@ async function writeAnalysisOutput({
           event,
           poster,
           qr,
+          editorDecision,
         }),
         "event_id",
       );
@@ -311,28 +347,65 @@ async function writeAnalysisOutput({
     state: ledgerState,
     draftId: draftIds[0],
     canonicalEventId: firstCanonicalEventId,
+    editorDecisions,
   });
   return { state: ledgerState };
 }
 
-function canCreateCanonicalEvent(
-  event: ExtractedEvent,
-  blockers: { hard: PublishBlocker[]; soft: PublishBlocker[] },
-): boolean {
-  if (blockers.hard.length > 0 || blockers.soft.length > 0) return false;
-  if (!hasRequiredPublicFields(event)) return false;
-  if (event.publicEligibility === "not_public") return false;
-  if (!isPublicActivity(event)) return false;
-  if (hasExcludedEventKind(event)) return false;
-  if (event.scheduleKind === "unsupported") return false;
+function decideEditorDecision({
+  event,
+  dedupeDecision,
+  blockers,
+}: {
+  event: ExtractedEvent;
+  dedupeDecision: string;
+  blockers: { hard: PublishBlocker[]; soft: PublishBlocker[] };
+}): EditorDecision {
+  const hard = [...blockers.hard];
+  const soft = [...blockers.soft];
+  hard.push(...hardEditorBlockers(event));
+  soft.push(...softEditorBlockers(event));
+  const exceptionReasonCodes = uniqueReasonCodes([
+    ...hard.map((blocker) => blocker.code),
+    ...soft.map((blocker) => blocker.code),
+    ...(dedupeDecision === "same_event" ? ["possible_duplicate"] : []),
+  ]);
+  const hasBlockingException = exceptionReasonCodes.length > 0;
+  const canPublish = dedupeDecision === "new_event" &&
+    !hasBlockingException &&
+    hasRequiredPublicFields(event) &&
+    isPublicCandidate(event) &&
+    !hasExcludedEventKind(event) &&
+    event.scheduleKind !== "unsupported" &&
+    (modelExplicitlyRequestsPublication(event) ||
+      isHighConfidencePublicActivity(event));
 
-  if (
-    event.publish?.createCanonicalEvent && event.publicEligibility === "public"
-  ) {
-    return true;
+  if (canPublish) {
+    return {
+      decision: "publish",
+      reason:
+        "Actionable public Beijing event with required publication fields.",
+      actionabilityStatus: "actionable",
+      exceptionReasonCodes: [],
+      blockers: { hard, soft },
+    };
   }
 
-  return isHighConfidencePublicActivity(event);
+  const fallbackReasonCodes = exceptionReasonCodes.length > 0
+    ? exceptionReasonCodes
+    : ["low_editor_confidence"];
+  return {
+    decision: "needs_exception",
+    reason: editorExceptionReason(fallbackReasonCodes),
+    actionabilityStatus: editorActionabilityStatus({
+      hard,
+      soft,
+      dedupeDecision,
+      exceptionReasonCodes: fallbackReasonCodes,
+    }),
+    exceptionReasonCodes: fallbackReasonCodes,
+    blockers: { hard, soft },
+  };
 }
 
 function hasRequiredPublicFields(event: ExtractedEvent): boolean {
@@ -345,8 +418,11 @@ function hasRequiredPublicFields(event: ExtractedEvent): boolean {
   );
 }
 
-function isPublicActivity(event: ExtractedEvent): boolean {
-  return event.triageDecision === "public_activity" &&
+function isPublicCandidate(event: ExtractedEvent): boolean {
+  return [
+    "public_activity",
+    "possible_public_activity",
+  ].includes(event.triageDecision ?? "") &&
     event.triageAction === "extract";
 }
 
@@ -383,6 +459,119 @@ function collectPublishBlockers({
     });
   }
   return { hard, soft };
+}
+
+function hardEditorBlockers(event: ExtractedEvent): PublishBlocker[] {
+  const blockers: PublishBlocker[] = [];
+  if (!isPublicCandidate(event)) {
+    blockers.push({
+      code: "not_public_activity",
+      message:
+        "Extractor did not classify this article as a public activity candidate.",
+    });
+  }
+  if (event.publicEligibility === "not_public") {
+    blockers.push({
+      code: "not_public_eligibility",
+      message: "Event eligibility is not public.",
+    });
+  }
+  if (hasExcludedEventKind(event)) {
+    blockers.push({
+      code: "excluded_event_kind",
+      message: `Event kind '${event.eventKind}' is not publishable.`,
+    });
+  }
+  if (event.scheduleKind === "unsupported") {
+    blockers.push({
+      code: "unsupported_schedule",
+      message: "Schedule shape is unsupported for public catalog publishing.",
+    });
+  }
+  if (!isBeijingEvent(event)) {
+    blockers.push({
+      code: "not_beijing_event",
+      message: "Event city is outside the Beijing catalog scope.",
+    });
+  }
+  return blockers;
+}
+
+function softEditorBlockers(event: ExtractedEvent): PublishBlocker[] {
+  return missingRequiredPublicFieldCodes(event).map((code) => ({
+    code,
+    message: missingPublicFieldMessage(code),
+  }));
+}
+
+function missingRequiredPublicFieldCodes(event: ExtractedEvent): string[] {
+  const codes: string[] = [];
+  if (!event.title) codes.push("missing_title");
+  if (!event.startsAt) codes.push("missing_start_time");
+  if (!event.organizer) codes.push("missing_organizer");
+  if (!event.venueName && !event.venueAddress) codes.push("missing_venue");
+  return codes;
+}
+
+function missingPublicFieldMessage(code: string): string {
+  const messages: Record<string, string> = {
+    missing_title: "Event title is missing.",
+    missing_start_time: "Event start time is missing.",
+    missing_organizer: "Event organizer is missing.",
+    missing_venue: "Event venue is missing.",
+  };
+  return messages[code] ?? code;
+}
+
+function modelExplicitlyRequestsPublication(event: ExtractedEvent): boolean {
+  return event.publish?.createCanonicalEvent === true &&
+    event.publicEligibility === "public";
+}
+
+function editorActionabilityStatus({
+  hard,
+  soft,
+  dedupeDecision,
+  exceptionReasonCodes,
+}: {
+  hard: PublishBlocker[];
+  soft: PublishBlocker[];
+  dedupeDecision: string;
+  exceptionReasonCodes: string[];
+}): EditorActionabilityStatus {
+  if (dedupeDecision === "same_event") return "possible_duplicate";
+  if (
+    hard.some((blocker) =>
+      [
+        "not_public_activity",
+        "not_public_eligibility",
+        "excluded_event_kind",
+        "unsupported_schedule",
+        "not_beijing_event",
+      ].includes(blocker.code)
+    )
+  ) {
+    return "not_actionable";
+  }
+  if (
+    soft.length > 0 ||
+    exceptionReasonCodes.some((code) =>
+      code.startsWith("missing_") ||
+      code === "registration_evidence_missing" ||
+      code === "registration_url_is_source_article"
+    )
+  ) {
+    return "needs_info";
+  }
+  return "needs_info";
+}
+
+function editorExceptionReason(reasonCodes: string[]): string {
+  return `AI Editor exception: ${reasonCodes.join(", ")}`;
+}
+
+function uniqueReasonCodes(reasonCodes: string[]): string[] {
+  return [...new Set(reasonCodes.filter(Boolean))];
 }
 
 function missingRequiredRegistrationEvidence(
@@ -705,7 +894,7 @@ function draftPayload({
   model,
   dedupeDecision,
   shouldCreateCanonicalEvent,
-  blockers,
+  editorDecision,
 }: {
   draftId: string;
   request: AnalyzeRequest;
@@ -717,7 +906,7 @@ function draftPayload({
   model: string;
   dedupeDecision: string;
   shouldCreateCanonicalEvent: boolean;
-  blockers: { hard: PublishBlocker[]; soft: PublishBlocker[] };
+  editorDecision: EditorDecision;
 }) {
   const registrationUrl = actionableRegistrationUrl(event, request);
   return {
@@ -756,14 +945,21 @@ function draftPayload({
     poster_asset_id: poster?.assetId,
     qr_asset_id: qr?.assetId,
     registration_qr_asset_id: qr?.assetId,
-    hard_blockers: blockers.hard,
-    soft_blockers: blockers.soft,
+    hard_blockers: editorDecision.blockers.hard,
+    soft_blockers: editorDecision.blockers.soft,
+    editor_decision: editorDecision.decision,
+    editor_reason: editorDecision.reason,
+    exception_reason_codes: editorDecision.exceptionReasonCodes,
+    actionability_status: editorDecision.actionabilityStatus,
+    editor_version: editorVersion,
     resolution_decision: dedupeDecision,
     confidence: event.confidence ?? 0,
     review_state: shouldCreateCanonicalEvent
       ? "approved"
       : dedupeDecision === "same_event"
       ? "possible_duplicate"
+      : editorDecision.actionabilityStatus === "needs_info"
+      ? "needs_info"
       : "needs_review",
     evidence_asset_ids: evidenceAssetIds,
     field_evidence: event.fieldEvidence ?? {},
@@ -780,12 +976,14 @@ function canonicalPayload({
   event,
   poster,
   qr,
+  editorDecision,
 }: {
   eventId: string;
   request: AnalyzeRequest;
   event: ExtractedEvent;
   poster?: WrittenEvidenceAsset;
   qr?: WrittenEvidenceAsset;
+  editorDecision: EditorDecision;
 }) {
   const registrationUrl = actionableRegistrationUrl(event, request);
   return {
@@ -814,6 +1012,13 @@ function canonicalPayload({
     poster_asset_id: poster?.assetId,
     qr_asset_id: qr?.assetId,
     registration_qr_asset_id: qr?.assetId,
+    hard_blockers: editorDecision.blockers.hard,
+    soft_blockers: editorDecision.blockers.soft,
+    editor_decision: editorDecision.decision,
+    editor_reason: editorDecision.reason,
+    exception_reason_codes: editorDecision.exceptionReasonCodes,
+    actionability_status: editorDecision.actionabilityStatus,
+    editor_version: editorVersion,
     resolution_decision: "new_event",
     poster_image_url: poster?.publicUrl,
     registration_qr_image_url: qr?.publicUrl,
@@ -838,6 +1043,7 @@ async function writeLedger(
     draftId,
     canonicalEventId,
     excludedArticleId,
+    editorDecisions = [],
   }: {
     request: AnalyzeRequest;
     output: AnalysisOutput;
@@ -849,6 +1055,7 @@ async function writeLedger(
     draftId?: string;
     canonicalEventId?: string;
     excludedArticleId?: string;
+    editorDecisions?: WrittenEditorDecision[];
   },
 ) {
   await writeUnique(db, "processing_ledger", {
@@ -873,6 +1080,8 @@ async function writeLedger(
     metadata: {
       storagePrefix: request.storagePrefix,
       dedupe: output.dedupe,
+      editorVersion,
+      editorDecisions,
     },
   }, "ledger_id");
 }
