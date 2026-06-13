@@ -92,13 +92,19 @@ describe("public event helpers", () => {
           },
           {
             ...baseEvent,
+            event_id: "unsupported-kind-but-actionable",
+            event_kind: "unsupported",
+            title: "World Cup Viewing Party",
+          },
+          {
+            ...baseEvent,
             event_id: "rejected-resolution",
             resolution_decision: "not_public_activity",
           },
         ],
         now,
       ).map((event) => event.event_id),
-    ).toEqual(["event-1"]);
+    ).toEqual(["event-1", "unsupported-kind-but-actionable"]);
   });
 
   it("keeps ongoing published events when the end time is still future", () => {

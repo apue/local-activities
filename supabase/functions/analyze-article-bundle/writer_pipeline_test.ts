@@ -316,6 +316,43 @@ Deno.test("runAnalysisPipeline publishes high-confidence possible public activit
   });
 });
 
+Deno.test("runAnalysisPipeline does not hard block actionable public activities only because event kind is unsupported", async () => {
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        title: "Support Mexico vs South Korea - World Cup Viewing Party",
+        triageDecision: "possible_public_activity",
+        publicEligibility: "public",
+        eventKind: "unsupported",
+        scheduleKind: "single",
+        confidence: 0.95,
+        reservationStatus: "not_required",
+        registrationAction: "visit",
+        registrationUrl: undefined,
+        publish: { createCanonicalEvent: false, confidence: 0.2 },
+      },
+      outputOverrides: {
+        confidence: 0.95,
+        dedupe: { decision: "new_event", confidence: 0.95 },
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  const draft = db.table("event_drafts")[0];
+  assertEquals(result.status, "published");
+  assertEquals(draft.editor_decision, "publish");
+  assertEquals(draft.exception_reason_codes, []);
+  assertEquals(draft.actionability_status, "actionable");
+  assertEquals(draft.event_kind, "unsupported");
+  assertEquals(db.table("canonical_events").length, 1);
+  assertEquals(db.table("canonical_events")[0].event_kind, "unsupported");
+});
+
 Deno.test("runAnalysisPipeline auto-publishes explicit single-session Beijing events when provider marks schedule unsupported", async () => {
   const db = createRecordingDb();
   const result = await runAnalysisPipeline({
