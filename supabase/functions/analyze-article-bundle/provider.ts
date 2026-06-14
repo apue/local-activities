@@ -13,6 +13,11 @@ import type {
 export const promptVersion = "analyze-article-bundle-v1";
 export const schemaVersion = "analysis-output-v1";
 
+type TokenPricing = {
+  inputPriceCnyPer1M?: number;
+  outputPriceCnyPer1M?: number;
+};
+
 export function buildProviderInput({
   request,
   bundle,
@@ -85,6 +90,7 @@ export function createOpenAiCompatibleProvider({
   model,
   maxOutputTokens,
   enableThinking,
+  tokenPricing,
   timeoutMs = 30000,
   fetchImpl = fetch,
 }: {
@@ -93,6 +99,7 @@ export function createOpenAiCompatibleProvider({
   model: string;
   maxOutputTokens?: number;
   enableThinking?: boolean;
+  tokenPricing?: TokenPricing;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
 }): AnalysisProvider {
@@ -107,6 +114,7 @@ export function createOpenAiCompatibleProvider({
         model,
         maxOutputTokens,
         enableThinking,
+        tokenPricing,
         timeoutMs,
         fetchImpl,
       });
@@ -121,6 +129,7 @@ async function requestOpenAiCompatible({
   model,
   maxOutputTokens,
   enableThinking,
+  tokenPricing,
   timeoutMs,
   fetchImpl,
 }: {
@@ -130,6 +139,7 @@ async function requestOpenAiCompatible({
   model: string;
   maxOutputTokens?: number;
   enableThinking?: boolean;
+  tokenPricing?: TokenPricing;
   timeoutMs: number;
   fetchImpl: typeof fetch;
 }): Promise<ProviderResponse> {
@@ -182,19 +192,32 @@ async function requestOpenAiCompatible({
         prompt_tokens?: number;
         completion_tokens?: number;
         total_tokens?: number;
+        cost_micro_cny?: number;
+        costMicroCny?: number;
         prompt_tokens_details?: { cached_tokens?: number };
         completion_tokens_details?: { reasoning_tokens?: number };
       };
     };
     const json = body.choices?.[0]?.message?.content;
     if (!json) throw new Error("provider_empty_output");
+    const inputTokens = numberValue(body.usage?.prompt_tokens);
+    const outputTokens = numberValue(body.usage?.completion_tokens);
+    const providerCostMicroCny = numberValue(
+      body.usage?.cost_micro_cny ?? body.usage?.costMicroCny,
+    );
     return {
       json,
       raw: body,
       usage: {
-        inputTokens: body.usage?.prompt_tokens,
-        outputTokens: body.usage?.completion_tokens,
+        inputTokens,
+        outputTokens,
         totalTokens: body.usage?.total_tokens,
+        costMicroCny: providerCostMicroCny ??
+          estimateUsageCostMicroCny({
+            inputTokens,
+            outputTokens,
+            tokenPricing,
+          }),
         cachedInputTokens: body.usage?.prompt_tokens_details?.cached_tokens,
         reasoningOutputTokens: body.usage?.completion_tokens_details
           ?.reasoning_tokens,
@@ -708,6 +731,8 @@ function mergeUsage(...values: unknown[]): UsageMetrics {
     usage.inputTokens = numberValue(value.inputTokens) ?? usage.inputTokens;
     usage.outputTokens = numberValue(value.outputTokens) ?? usage.outputTokens;
     usage.totalTokens = numberValue(value.totalTokens) ?? usage.totalTokens;
+    usage.costMicroCny = numberValue(value.costMicroCny) ??
+      usage.costMicroCny;
     usage.cachedInputTokens = numberValue(value.cachedInputTokens) ??
       usage.cachedInputTokens;
     usage.reasoningOutputTokens = numberValue(value.reasoningOutputTokens) ??
@@ -715,6 +740,23 @@ function mergeUsage(...values: unknown[]): UsageMetrics {
     usage.latencyMs = numberValue(value.latencyMs) ?? usage.latencyMs;
   }
   return usage;
+}
+
+export function estimateUsageCostMicroCny({
+  inputTokens,
+  outputTokens,
+  tokenPricing,
+}: {
+  inputTokens?: number;
+  outputTokens?: number;
+  tokenPricing?: TokenPricing;
+}): number | undefined {
+  const inputPrice = nonNegativeNumber(tokenPricing?.inputPriceCnyPer1M);
+  const outputPrice = nonNegativeNumber(tokenPricing?.outputPriceCnyPer1M);
+  if (inputPrice === undefined && outputPrice === undefined) return undefined;
+  const inputCost = (numberValue(inputTokens) ?? 0) * (inputPrice ?? 0);
+  const outputCost = (numberValue(outputTokens) ?? 0) * (outputPrice ?? 0);
+  return Math.max(0, Math.round(inputCost + outputCost));
 }
 
 function summarizeHtml(html: string): string {
@@ -840,6 +882,11 @@ function numberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+function nonNegativeNumber(value: unknown): number | undefined {
+  const number = numberValue(value);
+  return number !== undefined && number >= 0 ? number : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

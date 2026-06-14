@@ -59,6 +59,29 @@ export function readBooleanEnv(
   return undefined;
 }
 
+export function readAnalysisTokenPricing(
+  read: EnvReader = (key) => Deno.env.get(key),
+): { inputPriceCnyPer1M?: number; outputPriceCnyPer1M?: number } {
+  return {
+    inputPriceCnyPer1M: readNonNegativeNumberEnv(
+      "ANALYSIS_LLM_INPUT_PRICE_CNY_PER_1M",
+      read,
+    ),
+    outputPriceCnyPer1M: readNonNegativeNumberEnv(
+      "ANALYSIS_LLM_OUTPUT_PRICE_CNY_PER_1M",
+      read,
+    ),
+  };
+}
+
+function readNonNegativeNumberEnv(
+  name: string,
+  read: EnvReader,
+): number | undefined {
+  const value = readNumberEnv(name, read);
+  return value !== undefined && value >= 0 ? value : undefined;
+}
+
 function firstEnv(names: string[], read: EnvReader): string | undefined {
   for (const name of names) {
     const value = clean(read(name));

@@ -47,9 +47,11 @@ describe("Wechat2RSS capture worker", () => {
 
   it("uploads and invokes analysis for new articles", async () => {
     const uploaded = [];
+    const progress = [];
     const result = await runWechat2RssCaptureOnce({
       now: new Date("2026-06-08T12:00:00.000Z"),
       dryRun: false,
+      onProgress: (event) => progress.push(event),
       wechat2rss: fakeWechat2Rss({
         accounts: [{ status: "healthy", name: "account" }],
         articles: [sampleArticle("upload")],
@@ -84,6 +86,20 @@ describe("Wechat2RSS capture worker", () => {
     });
     expect(uploaded).toHaveLength(1);
     expect(uploaded[0].files.map((file) => file.path)).toContain("manifest.json");
+    expect(progress.map((event) => event.type)).toEqual([
+      "article_started",
+      "article_bundled",
+      "article_completed",
+    ]);
+    expect(progress[0]).toMatchObject({
+      index: 1,
+      total: 1,
+      sourceUrl: "https://mp.weixin.qq.com/s/upload",
+    });
+    expect(progress[2]).toMatchObject({
+      dryRun: false,
+      sourceUrl: "https://mp.weixin.qq.com/s/upload",
+    });
   });
 
   it("hydrates WeChat image bytes before uploading analysis bundles", async () => {
@@ -188,9 +204,11 @@ describe("Wechat2RSS capture worker", () => {
   });
 
   it("skips articles that already have an article bundle row", async () => {
+    const progress = [];
     const result = await runWechat2RssCaptureOnce({
       now: new Date("2026-06-08T12:00:00.000Z"),
       dryRun: false,
+      onProgress: (event) => progress.push(event),
       wechat2rss: fakeWechat2Rss({
         accounts: [{ status: "healthy", name: "account" }],
         articles: [sampleArticle("existing")],
@@ -226,6 +244,53 @@ describe("Wechat2RSS capture worker", () => {
         },
       },
     ]);
+    expect(progress.map((event) => event.type)).toEqual([
+      "article_started",
+      "article_skipped",
+    ]);
+  });
+
+  it("classifies edge function invocation failures as analyze errors", async () => {
+    const progress = [];
+    const result = await runWechat2RssCaptureOnce({
+      now: new Date("2026-06-08T12:00:00.000Z"),
+      dryRun: false,
+      onProgress: (event) => progress.push(event),
+      wechat2rss: fakeWechat2Rss({
+        accounts: [{ status: "healthy", name: "account" }],
+        articles: [sampleArticle("edge-failure")],
+      }),
+      idempotency: fakeIdempotency(),
+      supabase: {
+        async uploadAndAnalyzeBundle() {
+          throw new Error("Failed to send a request to the Edge Function");
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      bundledCount: 1,
+      uploadedCount: 0,
+      triggeredCount: 0,
+      failureCount: 1,
+      failures: [
+        {
+          sourceUrl: "https://mp.weixin.qq.com/s/edge-failure",
+          reason: "analyze_error",
+          message: "Failed to send a request to the Edge Function",
+        },
+      ],
+    });
+    expect(progress.map((event) => event.type)).toEqual([
+      "article_started",
+      "article_bundled",
+      "article_failed",
+    ]);
+    expect(progress.at(-1)).toMatchObject({
+      reason: "analyze_error",
+      sourceUrl: "https://mp.weixin.qq.com/s/edge-failure",
+    });
   });
 
   it("maps unhealthy Wechat2RSS accounts to typed capture failure reasons", async () => {

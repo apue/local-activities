@@ -28,6 +28,13 @@ describe("capture worker CLI", () => {
       limit: 3,
       proxyUrl: "http://127.0.0.1:7897",
       help: false,
+      quietProgress: false,
+    });
+  });
+
+  it("accepts quiet progress output for automation", () => {
+    expect(parseArgs(["--quiet-progress"])).toMatchObject({
+      quietProgress: true,
     });
   });
 

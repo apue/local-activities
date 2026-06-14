@@ -70,6 +70,12 @@ Deno.test("runAnalysisPipeline does not downgrade committed output when final bu
     storage: bundleStorage(),
     db,
     provider: successfulProvider({
+      usage: {
+        inputTokens: 120,
+        outputTokens: 80,
+        totalTokens: 200,
+        costMicroCny: 456,
+      },
       outputOverrides: {
         decision: "excluded",
         reason: "Not a public event.",
@@ -90,6 +96,7 @@ Deno.test("runAnalysisPipeline does not downgrade committed output when final bu
   assertEquals(db.table("processing_ledger")[0].state, "excluded");
   assertEquals(db.table("llm_usage_ledger").length, 1);
   assertEquals(db.table("llm_usage_ledger")[0].status, "succeeded");
+  assertEquals(db.table("llm_usage_ledger")[0].cost_micro_cny, 456);
 });
 
 Deno.test("runAnalysisPipeline records duplicate candidates as merge terminal decisions", async () => {
@@ -1040,9 +1047,11 @@ function bundleStorage(
 function successfulProvider({
   eventOverrides = {},
   outputOverrides = {},
+  usage = { inputTokens: 120, outputTokens: 80, totalTokens: 200 },
 }: {
   eventOverrides?: Record<string, unknown>;
   outputOverrides?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
 } = {}) {
   return {
     name: "mock",
@@ -1082,10 +1091,10 @@ function successfulProvider({
             },
           ],
           dedupe: { decision: "new_event", confidence: 0.74 },
-          usage: { inputTokens: 120, outputTokens: 80, totalTokens: 200 },
+          usage,
           ...outputOverrides,
         }),
-        usage: { inputTokens: 120, outputTokens: 80, totalTokens: 200 },
+        usage,
       };
     },
   };
