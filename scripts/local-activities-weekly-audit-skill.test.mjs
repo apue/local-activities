@@ -18,6 +18,14 @@ describe("local activities weekly audit skill", () => {
     expect(text).toContain("pnpm agent:inspect-event");
     expect(text).toContain("pnpm agent:inspect-source");
     expect(text).toContain("pnpm agent:export-case");
+    expect(text).toContain("Capture Reproduction");
+    expect(text).toContain("launchctl print gui/$(id -u)/com.local-activities.capture-daily");
+    expect(text).toContain("~/Library/Logs/local-activities/capture-daily.out.log");
+    expect(text).toContain("~/Library/Logs/local-activities/capture-daily.err.log");
+    expect(text).toContain("pnpm smoke:wechat2rss --env-file .env.collector");
+    expect(text).toContain("pnpm capture:wechat2rss:once -- --dry-run --env-file .env.local --env-file .env.collector");
+    expect(text).toContain("pnpm capture:wechat2rss:once -- --apply --env-file .env.local --env-file .env.collector");
+    expect(text).toContain("--limit 3");
     expect(text).toContain("Live Eval Review Loop");
     expect(text).toContain("pnpm agent:eval");
     expect(text).toContain("/admin/eval-runs/<eval-run-id>/preview");
