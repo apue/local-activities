@@ -146,13 +146,13 @@ versions.
 Publish Policy v2 maps extraction + validation + editor outputs to:
 
 - `published`
-- `needs_review`
-- `needs_info`
 - `excluded`
+- `duplicate`
 - `failed`
 
 It owns final publication state for replay/eval/admin trace. LLM/editor outputs
-remain untrusted.
+remain untrusted. `needs_review` and `needs_info` are exception states only,
+not the default destination for uncertain business decisions.
 
 ### Pipeline Ledger And Admin Visibility
 

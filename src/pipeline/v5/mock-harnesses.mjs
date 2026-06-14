@@ -22,29 +22,20 @@ export function mockFullExtract({
   ].join("\n"));
   const action = expected?.action ?? "review";
   const events = (expected?.eventDrafts ?? []).map(normalizeExpectedEvent);
-  const expectedPublishState = clean(expected?.publish?.state);
-  const decision = action === "exclude"
-    ? "non_event"
-    : action === "review" && expectedPublishState === "needs_info" && events.length > 0
+  const decision = events.length > 0
     ? "event"
-    : action === "review"
-    ? "needs_review"
-    : events.length > 0
-    ? "event"
-    : "needs_review";
+    : "non_event";
   const reason = action === "exclude"
-    ? "mock expected output marks article as non-event"
-    : action === "review"
-    ? "mock expected output requires review"
+    ? "mock expected output marks article for terminal exclusion"
     : events.length > 0
     ? "mock expected event drafts available"
-    : "mock expected output requires review";
+    : "mock expected output has no event drafts";
 
   return {
     version: mockFullExtractVersion,
     decision,
     events,
-    confidence: decision === "event" ? 0.9 : decision === "non_event" ? 0.84 : 0.55,
+    confidence: decision === "event" ? 0.9 : 0.84,
     reason,
     provider: "mock",
     model: "mock-full-extract",
@@ -136,10 +127,10 @@ export function mockEditorPass({
   const editorDecision = validation?.status === "invalid"
     ? "exclude"
     : validation?.status === "needs_info"
-    ? "needs_info"
+    ? "exclude"
     : extraction.decision === "event"
     ? "publish"
-    : "review";
+    : "exclude";
   const usage = usageForText([
     normalized?.title,
     firstEvent?.title,
@@ -182,11 +173,9 @@ export function mockEditorPass({
 export function publishTraceFromEditor({ extraction, validation, editor } = {}) {
   const state = editor?.editorDecision === "publish"
     ? "published"
-    : editor?.editorDecision === "exclude"
-    ? "excluded"
-    : editor?.editorDecision === "needs_info"
-    ? "needs_info"
-    : "needs_review";
+    : editor?.editorDecision === "failed"
+    ? "failed"
+    : "excluded";
   const reasons = [
     extraction?.decision === "non_event" ? "mock_non_event" : undefined,
     ...(validation?.issues ?? []).map((issue) => issue.code),
@@ -279,8 +268,8 @@ function tagsForEvent(event) {
 function reasonForEditorDecision(decision) {
   if (decision === "publish") return "mock editor found publishable event facts";
   if (decision === "exclude") return "mock editor excludes non-event article";
-  if (decision === "needs_info") return "mock editor requires missing event details";
-  return "mock editor routes ambiguous output to review";
+  if (decision === "failed") return "mock editor failed";
+  return "mock editor excludes ambiguous output";
 }
 
 function usageForText(text) {

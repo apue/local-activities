@@ -92,7 +92,7 @@ Deno.test("runAnalysisPipeline does not downgrade committed output when final bu
   assertEquals(db.table("llm_usage_ledger")[0].status, "succeeded");
 });
 
-Deno.test("runAnalysisPipeline does not create a canonical event when dedupe candidates exist", async () => {
+Deno.test("runAnalysisPipeline records duplicate candidates as merge terminal decisions", async () => {
   const db = createRecordingDb({
     canonicalCandidates: [
       {
@@ -111,10 +111,16 @@ Deno.test("runAnalysisPipeline does not create a canonical event when dedupe can
     env: { provider: "mock", model: "mock-vision" },
   });
 
-  assertEquals(result.status, "needs_review");
+  assertEquals(result.status, "duplicate");
   assertEquals(db.table("canonical_events").length, 0);
-  assertEquals(db.table("event_drafts")[0].review_state, "possible_duplicate");
+  assertEquals(db.table("event_drafts")[0].review_state, "rejected");
+  assertEquals(db.table("event_drafts")[0].editor_decision, "merge");
+  assertEquals(db.table("event_drafts")[0].actionability_status, "merged");
+  assertEquals(db.table("event_drafts")[0].exception_reason_codes, [
+    "possible_duplicate",
+  ]);
   assertEquals(db.table("dedupe_decisions")[0].decision, "same_event");
+  assertEquals(db.table("processing_ledger")[0].state, "duplicate");
 });
 
 Deno.test("runAnalysisPipeline does not publish non-Beijing events to canonical catalog", async () => {
@@ -132,22 +138,23 @@ Deno.test("runAnalysisPipeline does not publish non-Beijing events to canonical 
     env: { provider: "mock", model: "mock-vision" },
   });
 
-  assertEquals(result.status, "needs_review");
+  assertEquals(result.status, "excluded");
   assertEquals(db.table("event_drafts").length, 1);
   assertEquals(db.table("event_drafts")[0].city, "成都");
-  assertEquals(db.table("event_drafts")[0].editor_decision, "needs_exception");
+  assertEquals(db.table("event_drafts")[0].review_state, "rejected");
+  assertEquals(db.table("event_drafts")[0].editor_decision, "discard");
   assertEquals(db.table("event_drafts")[0].exception_reason_codes, [
     "not_beijing_event",
   ]);
   assertEquals(
     db.table("event_drafts")[0].actionability_status,
-    "not_actionable",
+    "discarded",
   );
   assertEquals(db.table("canonical_events").length, 0);
-  assertEquals(db.table("processing_ledger")[0].state, "needs_review");
+  assertEquals(db.table("processing_ledger")[0].state, "excluded");
 });
 
-Deno.test("runAnalysisPipeline blocks source article URLs masquerading as registration URLs", async () => {
+Deno.test("runAnalysisPipeline publishes actionable events while clearing source article registration URLs", async () => {
   const db = createRecordingDb();
   const result = await runAnalysisPipeline({
     request: validRequest(),
@@ -171,17 +178,14 @@ Deno.test("runAnalysisPipeline blocks source article URLs masquerading as regist
     env: { provider: "mock", model: "mock-vision" },
   });
 
-  assertEquals(result.status, "needs_review");
-  assertEquals(db.table("canonical_events").length, 0);
-  assertEquals(db.table("processing_ledger")[0].state, "needs_review");
+  assertEquals(result.status, "published");
+  assertEquals(db.table("canonical_events").length, 1);
+  assertEquals(db.table("processing_ledger")[0].state, "published");
   const draft = db.table("event_drafts")[0];
-  assertEquals(draft.review_state, "needs_info");
-  assertEquals(draft.editor_decision, "needs_exception");
-  assertEquals(draft.actionability_status, "needs_info");
-  assertEquals(draft.exception_reason_codes, [
-    "registration_url_is_source_article",
-    "registration_evidence_missing",
-  ]);
+  assertEquals(draft.review_state, "approved");
+  assertEquals(draft.editor_decision, "publish");
+  assertEquals(draft.actionability_status, "actionable");
+  assertEquals(draft.exception_reason_codes, []);
   assertEquals(draft.registration_url, undefined);
   assertEquals(draft.soft_blockers, [
     {
@@ -408,19 +412,19 @@ Deno.test("runAnalysisPipeline does not auto-publish high-confidence activities 
     env: { provider: "mock", model: "mock-vision" },
   });
 
-  assertEquals(result.status, "needs_review");
+  assertEquals(result.status, "excluded");
   assertEquals(db.table("event_drafts").length, 1);
-  assertEquals(db.table("event_drafts")[0].review_state, "needs_review");
-  assertEquals(db.table("event_drafts")[0].editor_decision, "needs_exception");
+  assertEquals(db.table("event_drafts")[0].review_state, "rejected");
+  assertEquals(db.table("event_drafts")[0].editor_decision, "discard");
   assertEquals(db.table("event_drafts")[0].exception_reason_codes, [
     "not_public_eligibility",
   ]);
   assertEquals(
     db.table("event_drafts")[0].actionability_status,
-    "not_actionable",
+    "discarded",
   );
   assertEquals(db.table("canonical_events").length, 0);
-  assertEquals(db.table("processing_ledger")[0].state, "needs_review");
+  assertEquals(db.table("processing_ledger")[0].state, "excluded");
 });
 
 Deno.test("runAnalysisPipeline in eval data class writes product-shaped rows scoped to eval", async () => {

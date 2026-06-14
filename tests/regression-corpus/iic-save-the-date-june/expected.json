@@ -1,5 +1,5 @@
 {
-  "action": "review",
+  "action": "exclude",
   "eventCount": 6,
   "evidence": {},
   "eventDrafts": [
@@ -58,9 +58,9 @@
     "decision": "new_event"
   },
   "publish": {
-    "state": "needs_review",
+    "state": "excluded",
     "reasons": [
-      "information_sparse_requires_review"
+      "information_sparse_terminal_exclude"
     ]
   }
 }

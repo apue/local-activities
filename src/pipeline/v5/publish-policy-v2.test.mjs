@@ -53,7 +53,7 @@ describe("V5 Publish Policy v2", () => {
     expect(invalid.reasons).toEqual(expect.arrayContaining(["validation_invalid", "city_not_beijing"]));
   });
 
-  it("routes soft or repairable validation issues to needs_info", () => {
+  it("terminally excludes soft or repairable validation issues with reason codes", () => {
     const decision = decideV5PublishState({
       extraction: { decision: "event", confidence: 0.82 },
       validation: {
@@ -66,7 +66,7 @@ describe("V5 Publish Policy v2", () => {
       editor: { editorDecision: "publish" },
     });
 
-    expect(decision.state).toBe("needs_info");
+    expect(decision.state).toBe("excluded");
     expect(decision.reasons).toEqual(expect.arrayContaining(["validation_needs_info", "event_schedule_missing"]));
   });
 
@@ -85,7 +85,7 @@ describe("V5 Publish Policy v2", () => {
     expect(decision.reasons).toContain("editor_failed");
   });
 
-  it("honors editor review and needs_info decisions after deterministic checks pass", () => {
+  it("terminally excludes editor review and needs_info decisions after deterministic checks pass", () => {
     const review = decideV5PublishState({
       extraction: { decision: "event", confidence: 0.86 },
       validation: { status: "valid", issues: [] },
@@ -98,16 +98,16 @@ describe("V5 Publish Policy v2", () => {
     });
 
     expect(review).toMatchObject({
-      state: "needs_review",
+      state: "excluded",
       reasons: ["editor_review"],
     });
     expect(needsInfo).toMatchObject({
-      state: "needs_info",
+      state: "excluded",
       reasons: ["editor_needs_info"],
     });
   });
 
-  it("routes low confidence or ambiguous extraction to needs_review", () => {
+  it("terminally excludes low confidence or ambiguous extraction", () => {
     const lowConfidence = decideV5PublishState({
       extraction: { decision: "event", confidence: 0.49 },
       validation: { status: "valid", issues: [] },
@@ -119,9 +119,9 @@ describe("V5 Publish Policy v2", () => {
       editor: { editorDecision: "publish" },
     });
 
-    expect(lowConfidence.state).toBe("needs_review");
+    expect(lowConfidence.state).toBe("excluded");
     expect(lowConfidence.reasons).toContain("extraction_confidence_low");
-    expect(ambiguous.state).toBe("needs_review");
+    expect(ambiguous.state).toBe("excluded");
     expect(ambiguous.reasons).toContain("extraction_needs_review");
   });
 });

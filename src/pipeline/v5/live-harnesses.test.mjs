@@ -649,7 +649,7 @@ describe("V5 live Full Extract and Editor harnesses", () => {
 
     const [{ messages, responseFormat }] = provider.completeJson.mock.calls[0];
     expect(responseFormat).toEqual({ type: "json_object" });
-    expect(messages[0].content).toContain("\"editorDecision\": \"publish\" | \"exclude\" | \"needs_info\" | \"review\" | \"failed\"");
+    expect(messages[0].content).toContain("\"editorDecision\": \"publish\" | \"exclude\" | \"failed\"");
     expect(messages[0].content).toContain("If extraction is event and validation.status is valid, return editorDecision=\"publish\"");
     expect(messages[0].content).toContain("Do not invent wrapper keys");
   });

@@ -1,5 +1,5 @@
 {
-  "action": "review",
+  "action": "exclude",
   "eventCount": 1,
   "requiresReservation": true,
   "evidence": {},
@@ -13,13 +13,13 @@
       "venueName": "北京美国中心",
       "registrationAction": "required",
       "scheduleText": "6月16日 周二 15:00",
-      "summary": "English-language public seminar at the Beijing American Center. Registration evidence is not present in this public fixture, so publication requires missing-info review."
+      "summary": "English-language public seminar at the Beijing American Center. Registration evidence is not present in this public fixture, so the AI Editor should terminally exclude it rather than create exception backlog."
     }
   ],
   "dedupe": {
     "decision": "new_event"
   },
   "publish": {
-    "state": "needs_info"
+    "state": "excluded"
   }
 }

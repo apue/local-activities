@@ -2,7 +2,7 @@
   "id": "iic-save-the-date-june",
   "labels": [
     "multi_event_article",
-    "information_sparse_requires_review"
+    "information_sparse_terminal_exclude"
   ],
   "source": {
     "type": "captured_bundle",
@@ -11,7 +11,7 @@
     "url": "https://mp.weixin.qq.com/s?__biz=MjM5OTQ0OTQwMA==&mid=2649917370&idx=1&sn=aff12ae5c5adde82f5fea7395f6de25e",
     "publishedAt": "2026-06-05T08:43:00.000Z"
   },
-  "rationale": "Dense monthly event listing; useful as a review-required multi-event hard case.",
+  "rationale": "Dense monthly event listing; useful as an information-sparse multi-event terminal-exclude hard case.",
   "capture": {
     "capturedAt": "2026-06-10T00:00:00.000Z",
     "assetCount": 0,

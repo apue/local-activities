@@ -593,7 +593,7 @@ function likelyEditorFalseNegativeCandidates({ auditFacts }) {
 }
 
 function isReviewQueueDraft(draft) {
-  return ["needs_review", "needs_info", "possible_duplicate", "ready_for_review"].includes(draft.reviewState);
+  return ["needs_review", "needs_info"].includes(draft.reviewState);
 }
 
 function exceptionReasonCodesForDraft(draft) {

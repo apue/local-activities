@@ -21,30 +21,30 @@ export function decideV5PublishState({ extraction, validation, editor } = {}) {
     state = "failed";
     reasons.push("editor_failed");
   } else if (hasSoftOrRepairableIssue(validation)) {
-    state = "needs_info";
+    state = "excluded";
     if (validationStatus === "needs_info") reasons.push("validation_needs_info");
     reasons.push(...issueCodes(validation));
   } else if (editorDecision === "exclude") {
     state = "excluded";
     reasons.push("editor_exclude");
   } else if (editorDecision === "needs_info") {
-    state = "needs_info";
+    state = "excluded";
     reasons.push("editor_needs_info");
   } else if (extractionDecision === "needs_review") {
-    state = "needs_review";
+    state = "excluded";
     reasons.push("extraction_needs_review");
   } else if (isLowConfidence(extraction)) {
-    state = "needs_review";
+    state = "excluded";
     reasons.push("extraction_confidence_low");
   } else if (editorDecision === "review") {
-    state = "needs_review";
+    state = "excluded";
     reasons.push("editor_review");
   } else if (editorDecision === "publish" && validationStatus === "valid" && extractionDecision === "event") {
     state = "published";
     reasons.push("editor_publish_valid");
   } else {
-    state = "needs_review";
-    reasons.push("publish_policy_default_review");
+    state = "excluded";
+    reasons.push("publish_policy_default_excluded");
   }
 
   return {

@@ -12,6 +12,7 @@ This project builds a mobile-first web app for aggregating official cultural act
 - Keep frontend, backend, collector, and data-model responsibilities explicit.
 - Treat collector and agent outputs as untrusted inputs. The backend must validate, deduplicate, and decide publish state.
 - Treat the event pipeline as an AI Editor system, not a human-review-first workflow. Actionable, high-confidence public Beijing events should publish automatically; `needs_review` and `needs_info` are exception queues and must carry machine-readable reason codes.
+- Treat review backlog as an AI Editor regression signal for Codex to diagnose and optimize, not as the intended steady-state human editing workload.
 - Preserve source health and failure reasons as product-visible state, not hidden logs.
 - Prefer mobile-first UI assumptions because early users will likely open the product on phones or inside WeChat.
 - Use Vercel built-in observation for MVP operations: dashboard logs, Observability, Web Analytics, and Speed Insights. Do not add Sentry, Datadog, New Relic, or other third-party APM unless the user explicitly expands scope.

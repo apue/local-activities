@@ -21,7 +21,7 @@ export const requiredV5CoverageLabels = [
   "generic_not_event",
   "not_beijing",
   "qr_present_not_registration",
-  "information_sparse_requires_review",
+  "information_sparse_terminal_exclude",
   "capture_failure",
 ];
 

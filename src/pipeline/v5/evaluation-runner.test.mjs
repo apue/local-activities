@@ -177,12 +177,12 @@ describe("V5 evaluation runner", () => {
 
     expect(result.variantSummaries.find((item) => item.variant === "mock-overfilter-v1")).toMatchObject({
       caseCount: 18,
-      passCount: 7,
-      failCount: 11,
+      passCount: 13,
+      failCount: 5,
       falsePositiveCount: 0,
-      falseNegativeCount: 11,
-      actionAccuracy: 7 / 18,
-      finalStateAccuracy: 7 / 18,
+      falseNegativeCount: 5,
+      actionAccuracy: 13 / 18,
+      finalStateAccuracy: 13 / 18,
       reviewMetrics: {
         qrExtractionSuccessRate: 0,
         registrationSuccessRate: 0,
@@ -238,7 +238,7 @@ describe("V5 evaluation runner", () => {
         variant: "mock-overfilter-v1",
         metrics: {
           falsePositiveRate: 0,
-          falseNegativeRate: 11 / 18,
+          falseNegativeRate: 5 / 18,
           publicEventRecall: 0,
           qrExtractionSuccessRate: 0,
           registrationSuccessRate: 0,
@@ -251,7 +251,7 @@ describe("V5 evaluation runner", () => {
         expect.objectContaining({
           name: "known_bad_regressions",
           passed: false,
-          value: 11,
+          value: 5,
           threshold: 0,
         }),
         expect.objectContaining({
@@ -561,7 +561,7 @@ describe("V5 evaluation runner", () => {
     expect(fetchCalls[0].url).toBe("https://llm.example/v1/chat/completions");
   });
 
-  it("honors expected publish state separately from review action", async () => {
+  it("honors terminal excluded state for sparse formerly-review fixtures", async () => {
     const sourceUrl = "https://mp.weixin.qq.com/s?__biz=MjM5MDA2NDk0MA==&mid=2651346286&idx=7&sn=4b5c580fba9eb5e2f474c0c71ec4c2ac";
     const fetchImpl = async () => {
       const body = {
@@ -619,10 +619,10 @@ describe("V5 evaluation runner", () => {
       failCount: 0,
     });
     expect(result.cases[0]).toMatchObject({
-      expectedAction: "review",
-      predictedAction: "review",
-      expectedFinalState: "needs_info",
-      predictedFinalState: "needs_info",
+      expectedAction: "exclude",
+      predictedAction: "exclude",
+      expectedFinalState: "excluded",
+      predictedFinalState: "excluded",
       status: "passed",
     });
   });

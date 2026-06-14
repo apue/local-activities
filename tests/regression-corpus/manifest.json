@@ -9,7 +9,7 @@
   },
   "requiredCoverageLabels": [
     "generic_not_event",
-    "information_sparse_requires_review",
+    "information_sparse_terminal_exclude",
     "long_running_exhibition",
     "mini_program_action_registration",
     "multi_event_article",
@@ -113,7 +113,7 @@
       "id": "iic-save-the-date-june",
       "labels": [
         "multi_event_article",
-        "information_sparse_requires_review"
+        "information_sparse_terminal_exclude"
       ]
     },
     {
