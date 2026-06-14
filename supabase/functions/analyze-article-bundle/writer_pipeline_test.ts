@@ -99,7 +99,7 @@ Deno.test("runAnalysisPipeline records duplicate candidates as merge terminal de
         event_id: "existing-event",
         title: "Example Public Lecture",
         starts_at: "2026-06-10T11:00:00+08:00",
-        source_url: "https://mp.weixin.qq.com/s/example",
+        source_url: "https://mp.weixin.qq.com/s/external-existing",
       },
     ],
   });
@@ -121,6 +121,32 @@ Deno.test("runAnalysisPipeline records duplicate candidates as merge terminal de
   ]);
   assertEquals(db.table("dedupe_decisions")[0].decision, "same_event");
   assertEquals(db.table("processing_ledger")[0].state, "duplicate");
+});
+
+Deno.test("runAnalysisPipeline ignores same-source candidates when deciding duplicates", async () => {
+  const db = createRecordingDb({
+    canonicalCandidates: [
+      {
+        event_id: "same-source-event",
+        title: "Example Public Lecture",
+        starts_at: "2026-06-10T11:00:00+08:00",
+        source_url: "https://mp.weixin.qq.com/s/example",
+      },
+    ],
+  });
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider(),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "published");
+  assertEquals(db.table("canonical_events").length, 1);
+  assertEquals(db.table("event_drafts")[0].editor_decision, "publish");
+  assertEquals(db.table("dedupe_decisions")[0].decision, "new_event");
+  assertEquals(db.table("dedupe_decisions")[0].candidate_count, 0);
 });
 
 Deno.test("runAnalysisPipeline does not publish non-Beijing events to canonical catalog", async () => {
@@ -740,6 +766,29 @@ Deno.test("runAnalysisPipeline falls back to bundle image roles when provider om
     metadata: { imageId: string };
   };
   assertEquals(evidence.role, "poster");
+  assertEquals(
+    db.table("canonical_events")[0].poster_image_url,
+    "https://supabase.test/storage/v1/object/public/event-evidence-assets/production/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",
+  );
+});
+
+Deno.test("runAnalysisPipeline falls back to the first byte-backed image as poster", async () => {
+  const storage = bundleStorage({ imageKind: "stable" });
+  const db = createRecordingDb();
+  await runAnalysisPipeline({
+    request: validRequest(),
+    storage,
+    db,
+    provider: successfulProvider({ eventOverrides: { evidence: [] } }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  const evidence = db.table("evidence_assets")[0] as {
+    role: string;
+    metadata: { imageId: string };
+  };
+  assertEquals(evidence.role, "poster");
+  assertEquals(evidence.metadata.imageId, "poster-1");
   assertEquals(
     db.table("canonical_events")[0].poster_image_url,
     "https://supabase.test/storage/v1/object/public/event-evidence-assets/production/articles/bundle-1/evidence-1-poster-poster-1-bundle-1.jpg",

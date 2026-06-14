@@ -279,7 +279,9 @@ async function writeAnalysisOutput({
     const qr = evidenceAssetIds.find((asset) =>
       asset.role === "qr" || asset.role === "registration"
     );
-    const candidates = await db.findCanonicalCandidates?.(event, request) ?? [];
+    const allCandidates = await db.findCanonicalCandidates?.(event, request) ??
+      [];
+    const candidates = externalDedupeCandidates(allCandidates, request);
     const dedupeDecision = candidates.length > 0
       ? "same_event"
       : output.dedupe.decision;
@@ -898,7 +900,61 @@ function evidenceSelectionsForEvent({
       confidence: 0.55,
     });
   }
+  const posterFallback = fallbackPosterImage(bundle, seenRoles);
+  if (posterFallback) {
+    seenRoles.add("poster");
+    selections.push({
+      imageId: posterFallback.imageId,
+      role: "poster",
+      confidence: 0.45,
+    });
+  }
   return selections;
+}
+
+function externalDedupeCandidates(
+  candidates: unknown[],
+  request: AnalyzeRequest,
+): Record<string, unknown>[] {
+  return candidates.filter(isRecord).filter((candidate) =>
+    !sameSourceArticle(candidate, request.sourceUrl)
+  );
+}
+
+function sameSourceArticle(
+  candidate: Record<string, unknown>,
+  sourceUrl: string,
+): boolean {
+  const candidateUrl = stringValue(candidate.source_url) ??
+    stringValue(candidate.sourceUrl);
+  return canonicalArticleUrl(candidateUrl) === canonicalArticleUrl(sourceUrl);
+}
+
+function canonicalArticleUrl(url: string | undefined): string | undefined {
+  const text = stringValue(url);
+  if (!text) return undefined;
+  try {
+    const parsed = new URL(text);
+    parsed.hash = "";
+    const biz = parsed.searchParams.get("__biz");
+    const mid = parsed.searchParams.get("mid");
+    const idx = parsed.searchParams.get("idx");
+    const sn = parsed.searchParams.get("sn");
+    if (biz && mid && idx && sn) {
+      return `${parsed.origin}${parsed.pathname}?__biz=${biz}&mid=${mid}&idx=${idx}&sn=${sn}`;
+    }
+    return parsed.toString();
+  } catch {
+    return text;
+  }
+}
+
+function fallbackPosterImage(
+  bundle: ArticleBundle,
+  seenRoles: Set<string>,
+): BundleImage | undefined {
+  if (seenRoles.has("poster") || seenRoles.has("cover")) return undefined;
+  return bundle.images.find((image) => image.hasBytes);
 }
 
 function imageForUrl(
