@@ -61,6 +61,24 @@ pnpm agent:inspect-source -- --source-id <id> --audit-dir .agent-runs/<run-id> -
    implement, test, open PR, wait for checks, merge only when allowed, and write
    issue handoff.
 
+## Capture Reproduction
+
+Use this when the issue may involve source freshness, Wechat2RSS, bundle upload,
+or the AI Editor production path. Start read-only; use `--apply` only when
+production mutation is intended and approved. After any apply run, collect a
+fresh audit packet and inspect new candidates.
+
+```bash
+launchctl print gui/$(id -u)/com.local-activities.capture-daily
+tail -100 ~/Library/Logs/local-activities/capture-daily.out.log
+tail -100 ~/Library/Logs/local-activities/capture-daily.err.log
+pnpm smoke:wechat2rss --env-file .env.collector
+pnpm capture:wechat2rss:once -- --dry-run --env-file .env.local --env-file .env.collector
+pnpm capture:wechat2rss:once -- --dry-run --env-file .env.local --env-file .env.collector --limit 3
+pnpm capture:wechat2rss:once -- --apply --env-file .env.local --env-file .env.collector
+pnpm capture:wechat2rss:once -- --apply --env-file .env.local --env-file .env.collector --limit 3
+```
+
 ## Live Eval Review Loop
 
 Use this checklist when the user wants Codex to evaluate recent model/prompt
