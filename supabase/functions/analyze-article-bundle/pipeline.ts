@@ -68,6 +68,7 @@ const terminalDiscardReasonCodes = new Set([
   "missing_start_time",
   "missing_organizer",
   "missing_venue",
+  "registration_evidence_missing",
   "dedupe_insufficient_info",
   "low_editor_confidence",
   "insufficient_editor_confidence",
@@ -287,7 +288,15 @@ async function writeAnalysisOutput({
       ? "same_event"
       : output.dedupe.decision;
     let eventCanonicalEventId: string | undefined;
-    const blockers = collectPublishBlockers({ event, request });
+    const hasWrittenRegistrationEvidence = evidenceAssetIds.some((asset) =>
+      (asset.role === "qr" || asset.role === "registration") &&
+      Boolean(asset.publicUrl)
+    );
+    const blockers = collectPublishBlockers({
+      event,
+      request,
+      hasWrittenRegistrationEvidence,
+    });
     const editorDecision = decideEditorDecision({
       event,
       dedupeDecision,
@@ -513,15 +522,18 @@ function hasExcludedEventKind(event: ExtractedEvent): boolean {
 function collectPublishBlockers({
   event,
   request,
+  hasWrittenRegistrationEvidence = false,
 }: {
   event: ExtractedEvent;
   request: AnalyzeRequest;
+  hasWrittenRegistrationEvidence?: boolean;
 }): { hard: PublishBlocker[]; soft: PublishBlocker[] } {
   const hard: PublishBlocker[] = [];
   const soft: PublishBlocker[] = [];
   if (
     registrationUrlMatchesSourceArticle(event, request) &&
-    !hasRegistrationEvidenceSelection(event)
+    !hasRegistrationEvidenceSelection(event) &&
+    !hasWrittenRegistrationEvidence
   ) {
     soft.push({
       code: "registration_url_is_source_article",
@@ -529,7 +541,11 @@ function collectPublishBlockers({
         "Registration URL points back to the source article instead of an actionable registration path.",
     });
   }
-  if (missingRequiredRegistrationEvidence(event, request)) {
+  if (
+    missingRequiredRegistrationEvidence(event, request, {
+      hasWrittenRegistrationEvidence,
+    })
+  ) {
     soft.push({
       code: "registration_evidence_missing",
       message:
@@ -662,10 +678,14 @@ function reasonCodesMatching(
 function missingRequiredRegistrationEvidence(
   event: ExtractedEvent,
   request: AnalyzeRequest,
+  {
+    hasWrittenRegistrationEvidence = false,
+  }: { hasWrittenRegistrationEvidence?: boolean } = {},
 ): boolean {
   if (!registrationRequiresEvidence(event)) return false;
   return !actionableRegistrationUrl(event, request) &&
-    !hasRegistrationEvidenceSelection(event);
+    !hasRegistrationEvidenceSelection(event) &&
+    !hasWrittenRegistrationEvidence;
 }
 
 function hasRegistrationEvidenceSelection(event: ExtractedEvent): boolean {
@@ -925,6 +945,19 @@ function evidenceSelectionsForEvent({
     });
     seenRoles.add("qr");
   }
+  const registrationFallback = fallbackRegistrationImage({
+    event,
+    bundle,
+    seenRoles,
+  });
+  if (registrationFallback) {
+    selections.push({
+      imageId: registrationFallback.imageId,
+      role: "registration",
+      confidence: registrationFallback.confidence,
+    });
+    seenRoles.add("registration");
+  }
   for (const image of bundle.images) {
     const role = fallbackEvidenceRole(image.roleHint);
     if (!role || seenRoles.has(role)) continue;
@@ -990,6 +1023,72 @@ function fallbackPosterImage(
 ): BundleImage | undefined {
   if (seenRoles.has("poster") || seenRoles.has("cover")) return undefined;
   return bundle.images.find((image) => image.hasBytes);
+}
+
+function fallbackRegistrationImage({
+  event,
+  bundle,
+  seenRoles,
+}: {
+  event: ExtractedEvent;
+  bundle: ArticleBundle;
+  seenRoles: Set<string>;
+}): { imageId: string; confidence: number } | undefined {
+  if (seenRoles.has("qr") || seenRoles.has("registration")) return undefined;
+  if (!registrationRequiresEvidence(event)) return undefined;
+  const action = String(event.registrationAction ?? "").toLowerCase();
+  if (!/scan|qr|二维码|扫码/.test(action)) return undefined;
+
+  const best = bundle.images
+    .filter((image) => image.hasBytes)
+    .map((image, index) => ({
+      image,
+      score: registrationImageScore(image, index),
+    }))
+    .filter((candidate) => candidate.score >= 60)
+    .sort((left, right) => right.score - left.score)[0];
+  return best
+    ? {
+      imageId: best.image.imageId,
+      confidence: best.score >= 90 ? 0.8 : 0.65,
+    }
+    : undefined;
+}
+
+function registrationImageScore(image: BundleImage, index: number): number {
+  const labelText = [
+    image.roleHint,
+    image.altText,
+    image.nearbyText,
+  ].map((value) => String(value ?? "").toLowerCase()).join(" ");
+  let score = 0;
+  if (/qr|registration|register|报名|预约|扫码|二维码/.test(labelText)) {
+    score += 90;
+  }
+  if (image.roleHint === "qr" || image.roleHint === "registration") {
+    score += 100;
+  }
+  if (looksLikeStandaloneQrImage(image)) score += 80;
+  if (index === 0) score -= 20;
+  return score;
+}
+
+function looksLikeStandaloneQrImage(image: BundleImage): boolean {
+  const contentType = String(image.contentType ?? "").toLowerCase();
+  const byteLength = image.byteLength ?? 0;
+  const hasSmallByteFootprint = byteLength > 0 && byteLength <= 120_000;
+  const hasImageType = /image\/(png|jpeg|jpg|webp)/.test(contentType);
+  if (!hasImageType || !hasSmallByteFootprint) return false;
+  const width = image.width ?? 0;
+  const height = image.height ?? 0;
+  if (!width || !height) return contentType.includes("png");
+  const ratio = width / Math.max(height, 1);
+  return width >= 80 &&
+    height >= 80 &&
+    width <= 600 &&
+    height <= 600 &&
+    ratio >= 0.75 &&
+    ratio <= 1.33;
 }
 
 function imageForUrl(

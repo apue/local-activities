@@ -45,8 +45,14 @@ async function signByteBackedImages(
     if (image.publicUrl || !image.hasBytes || !image.bundleStoragePath) {
       return image;
     }
-    const dataUrl = await readImageDataUrl(storage, image);
-    if (dataUrl) return { ...image, publicUrl: dataUrl };
+    const imageData = await readImageDataUrl(storage, image);
+    if (imageData) {
+      return {
+        ...image,
+        publicUrl: imageData.dataUrl,
+        byteLength: imageData.byteLength,
+      };
+    }
     const createSignedUrl = storage.createSignedUrl;
     if (!createSignedUrl) return image;
     const signedUrl = await safeCreateSignedUrl(
@@ -60,14 +66,17 @@ async function signByteBackedImages(
 async function readImageDataUrl(
   storage: StorageReader,
   image: BundleImage,
-): Promise<string | undefined> {
+): Promise<{ dataUrl: string; byteLength: number } | undefined> {
   const downloadBytes = storage.downloadBytes;
   if (!downloadBytes || !image.bundleStoragePath) return undefined;
   const contentType = normalizeImageContentType(image.contentType);
   if (!contentType) return undefined;
   const bytes = await safeDownloadBytes(downloadBytes, image.bundleStoragePath);
   if (!bytes?.length) return undefined;
-  return `data:${contentType};base64,${base64FromBytes(bytes)}`;
+  return {
+    dataUrl: `data:${contentType};base64,${base64FromBytes(bytes)}`,
+    byteLength: bytes.byteLength,
+  };
 }
 
 async function safeDownloadBytes(
@@ -220,6 +229,7 @@ function uniqueImages(objectPrefix: string, values: unknown[]): BundleImage[] {
       publicUrl: clean(value.publicUrl),
       contentType: clean(value.contentType),
       contentHash: clean(value.contentHash) ?? clean(value.byteHash),
+      byteLength: numberValue(value.byteLength),
       width: numberValue(value.width),
       height: numberValue(value.height),
       altText: clean(value.altText) ?? clean(value.alt),

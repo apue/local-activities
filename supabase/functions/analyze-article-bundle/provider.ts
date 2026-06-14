@@ -62,6 +62,7 @@ export function buildProviderInput({
       "Support multi-event extraction.",
       "For public events, include one event object per activity with title, organizer, startsAt, endsAt, timezone, city, venueName, venueAddress, reservationStatus, registrationAction, registrationUrl, scheduleText, summary, publicEligibility, triageDecision, triageAction, eventKind, scheduleKind, confidence, evidence, and publish.createCanonicalEvent.",
       "Select poster/QR evidence from image metadata and never rely on remote source URLs as stable product assets.",
+      "If reservationStatus or registrationAction says users must scan a QR code, include evidence with role registration or qr for the exact imageId containing that registration QR. If the QR is embedded in a poster, reuse the poster imageId with role registration. If no actionable registration URL or QR image is visible, do not set publish.createCanonicalEvent true.",
     ].join(" "),
     user,
     responseFormat: "json",
