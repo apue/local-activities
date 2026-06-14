@@ -55,6 +55,7 @@ export function buildProviderInput({
     system: [
       "You analyze official Beijing cultural activity articles. Return strict JSON only.",
       "Apply public event eligibility rules: public attendance or registration signals are required; internal/private/news-only/official visit articles must be excluded.",
+      "Scholarship, fellowship, grant, hiring, visa, training-program application, and online-only application opportunity articles are not Beijing public activities; exclude them even if they have deadlines or application links.",
       "Do not return prose. Do not return an eligible boolean. Always return this JSON object shape:",
       '{"decision":"published|needs_review|needs_info|excluded|duplicate","reason":"short reason","confidence":0.0,"events":[],"excludedArticle":{"triageDecision":"not_event|non_public_news|official_visit|internal_or_private|unsupported","exclusionReason":"why excluded","publicSignals":[],"exclusionSignals":[]},"dedupe":{"decision":"new_event|same_event|update_existing|cancel_existing|withdraw_existing|insufficient_info","confidence":0.0,"candidates":[],"reasoning":"short dedupe reasoning"}}',
       "For non-events, set decision to excluded, events to [], and dedupe.decision to insufficient_info.",

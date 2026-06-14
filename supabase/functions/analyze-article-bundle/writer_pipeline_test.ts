@@ -187,6 +187,50 @@ Deno.test("runAnalysisPipeline does not publish non-Beijing events to canonical 
   assertEquals(db.table("processing_ledger")[0].state, "excluded");
 });
 
+Deno.test("runAnalysisPipeline excludes online scholarship application opportunities", async () => {
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage: bundleStorage(),
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        title: "2027-2028 Hubert H. Humphrey Fellowship Program Application",
+        organizer: "U.S. Embassy Beijing",
+        startsAt: "2026-06-11T16:00:00.000Z",
+        endsAt: "2026-06-29T15:59:59.000Z",
+        city: "Beijing",
+        venueName: "Online Application",
+        venueAddress: "https://apply.iie.org/huberthhumphrey",
+        registrationAction: "Apply online before the deadline",
+        registrationUrl: "https://apply.iie.org/huberthhumphrey",
+        summary:
+          "The fellowship program accepts applications from mid-career professionals for non-degree graduate study and professional exchange.",
+        confidence: 0.95,
+        publish: { createCanonicalEvent: true, confidence: 0.95 },
+      },
+      outputOverrides: {
+        decision: "published",
+        confidence: 0.95,
+        dedupe: { decision: "new_event", confidence: 0.95 },
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "excluded");
+  assertEquals(db.table("canonical_events").length, 0);
+  assertEquals(db.table("event_drafts").length, 1);
+  const draft = db.table("event_drafts")[0];
+  assertEquals(draft.review_state, "rejected");
+  assertEquals(draft.editor_decision, "discard");
+  assertEquals(draft.actionability_status, "discarded");
+  assertEquals(draft.exception_reason_codes, [
+    "online_application_opportunity",
+  ]);
+  assertEquals(db.table("processing_ledger")[0].state, "excluded");
+});
+
 Deno.test("runAnalysisPipeline publishes actionable events while clearing source article registration URLs", async () => {
   const db = createRecordingDb();
   const result = await runAnalysisPipeline({

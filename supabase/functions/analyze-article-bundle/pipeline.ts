@@ -63,6 +63,7 @@ const terminalDiscardReasonCodes = new Set([
   "not_public_eligibility",
   "excluded_event_kind",
   "not_beijing_event",
+  "online_application_opportunity",
   "missing_title",
   "missing_start_time",
   "missing_organizer",
@@ -571,6 +572,13 @@ function hardEditorBlockers(event: ExtractedEvent): PublishBlocker[] {
       message: "Event city is outside the Beijing catalog scope.",
     });
   }
+  if (isOnlineApplicationOpportunity(event)) {
+    blockers.push({
+      code: "online_application_opportunity",
+      message:
+        "Scholarship, fellowship, grant, or online application opportunities are not local public activities.",
+    });
+  }
   return blockers;
 }
 
@@ -598,6 +606,32 @@ function missingPublicFieldMessage(code: string): string {
     missing_venue: "Event venue is missing.",
   };
   return messages[code] ?? code;
+}
+
+function isOnlineApplicationOpportunity(event: ExtractedEvent): boolean {
+  const text = [
+    event.title,
+    event.originalTitle,
+    event.summary,
+    event.entryNotes,
+    event.registrationAction,
+    event.registrationUrl,
+    event.venueName,
+    event.venueAddress,
+  ].map((value) => String(value ?? "").toLowerCase()).join("\n");
+  const hasApplicationSignal =
+    /fellowship|scholarship|grant|application|call for applications|apply online|applicant|non-degree|professional exchange|奖学金|申请|申请人|项目申请|资助|奖项/
+      .test(text);
+  if (!hasApplicationSignal) return false;
+  const venueText = `${event.venueName ?? ""}\n${event.venueAddress ?? ""}`
+    .toLowerCase();
+  const hasPhysicalVenue = Boolean(
+    venueText.trim() &&
+      !/(^|\b)(online|application|apply|https?:\/\/|www\.)/.test(venueText),
+  );
+  return !hasPhysicalVenue ||
+    /fellowship|scholarship|grant|non-degree|professional exchange|奖学金/
+      .test(text);
 }
 
 function modelExplicitlyRequestsPublication(event: ExtractedEvent): boolean {
