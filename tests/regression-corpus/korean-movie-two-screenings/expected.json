@@ -1,5 +1,5 @@
 {
-  "action": "review",
+  "action": "exclude",
   "eventCount": 1,
   "requiresReservation": true,
   "evidence": {},
@@ -17,14 +17,14 @@
         "2026-06-05T16:00:00+08:00",
         "2026-06-05T19:00:00+08:00"
       ],
-      "summary": "Free Korean movie screening with two reservable sessions. Registration evidence is not present in this public fixture, so publication requires missing-info review."
+      "summary": "Free Korean movie screening with two reservable sessions. Registration evidence is not present in this public fixture, so the AI Editor should terminally exclude it rather than create exception backlog."
     }
   ],
   "dedupe": {
     "decision": "new_event"
   },
   "publish": {
-    "state": "needs_info",
+    "state": "excluded",
     "reasons": [
       "recurring_schedule"
     ]

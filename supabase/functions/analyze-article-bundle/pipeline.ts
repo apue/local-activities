@@ -31,11 +31,15 @@ type PublishBlocker = {
 };
 type EditorActionabilityStatus =
   | "actionable"
+  | "discarded"
+  | "merged"
+  | "updated"
+  | "system_exception"
   | "needs_info"
   | "not_actionable"
   | "possible_duplicate";
 type EditorDecision = {
-  decision: "publish" | "needs_exception";
+  decision: "publish" | "discard" | "merge" | "update" | "system_exception";
   reason: string;
   actionabilityStatus: EditorActionabilityStatus;
   exceptionReasonCodes: string[];
@@ -51,6 +55,22 @@ type WrittenEditorDecision = {
 };
 
 const editorVersion = "ai-editor-policy-v1";
+const systemExceptionReasonCodes = new Set([
+  "unsupported_schedule",
+]);
+const terminalDiscardReasonCodes = new Set([
+  "not_public_activity",
+  "not_public_eligibility",
+  "excluded_event_kind",
+  "not_beijing_event",
+  "missing_title",
+  "missing_start_time",
+  "missing_organizer",
+  "missing_venue",
+  "dedupe_insufficient_info",
+  "low_editor_confidence",
+  "insufficient_editor_confidence",
+]);
 
 export async function runAnalysisPipeline({
   request,
@@ -239,6 +259,8 @@ async function writeAnalysisOutput({
   const draftIds: string[] = [];
   const editorDecisions: WrittenEditorDecision[] = [];
   let firstCanonicalEventId: string | undefined;
+  let hasSystemException = false;
+  let hasMergeOrUpdate = false;
   for (let index = 0; index < output.events.length; index += 1) {
     const event = output.events[index];
     const evidenceAssetIds = await writeEvidenceAssets({
@@ -269,6 +291,9 @@ async function writeAnalysisOutput({
       blockers,
     });
     const shouldCreateCanonicalEvent = editorDecision.decision === "publish";
+    hasSystemException ||= editorDecision.decision === "system_exception";
+    hasMergeOrUpdate ||= editorDecision.decision === "merge" ||
+      editorDecision.decision === "update";
     editorDecisions.push({
       draftId,
       title: event.title,
@@ -334,9 +359,11 @@ async function writeAnalysisOutput({
 
   const ledgerState = firstCanonicalEventId
     ? "published"
-    : output.decision === "published"
+    : hasSystemException
     ? "needs_review"
-    : output.decision;
+    : hasMergeOrUpdate
+    ? "duplicate"
+    : "excluded";
   await writeLedger(db, {
     request,
     output,
@@ -365,14 +392,61 @@ function decideEditorDecision({
   const soft = [...blockers.soft];
   hard.push(...hardEditorBlockers(event));
   soft.push(...softEditorBlockers(event));
-  const exceptionReasonCodes = uniqueReasonCodes([
-    ...hard.map((blocker) => blocker.code),
-    ...soft.map((blocker) => blocker.code),
-    ...(dedupeDecision === "same_event" ? ["possible_duplicate"] : []),
+
+  if (dedupeDecision === "same_event") {
+    const reasonCodes = ["possible_duplicate"];
+    return {
+      decision: "merge",
+      reason: editorTerminalReason("merge", reasonCodes),
+      actionabilityStatus: "merged",
+      exceptionReasonCodes: reasonCodes,
+      blockers: { hard, soft },
+    };
+  }
+
+  if (
+    dedupeDecision === "update_existing" ||
+    dedupeDecision === "cancel_existing" ||
+    dedupeDecision === "withdraw_existing"
+  ) {
+    const reasonCodes = [dedupeDecision];
+    return {
+      decision: "update",
+      reason: editorTerminalReason("update", reasonCodes),
+      actionabilityStatus: "updated",
+      exceptionReasonCodes: reasonCodes,
+      blockers: { hard, soft },
+    };
+  }
+
+  const systemExceptionCodes = uniqueReasonCodes(
+    reasonCodesMatching(hard, systemExceptionReasonCodes),
+  );
+  if (systemExceptionCodes.length > 0) {
+    return {
+      decision: "system_exception",
+      reason: editorTerminalReason("system_exception", systemExceptionCodes),
+      actionabilityStatus: "system_exception",
+      exceptionReasonCodes: systemExceptionCodes,
+      blockers: { hard, soft },
+    };
+  }
+
+  const terminalDiscardCodes = uniqueReasonCodes([
+    ...reasonCodesMatching(hard, terminalDiscardReasonCodes),
+    ...reasonCodesMatching(soft, terminalDiscardReasonCodes),
   ]);
-  const hasBlockingException = exceptionReasonCodes.length > 0;
+  if (terminalDiscardCodes.length > 0) {
+    return {
+      decision: "discard",
+      reason: editorTerminalReason("discard", terminalDiscardCodes),
+      actionabilityStatus: "discarded",
+      exceptionReasonCodes: terminalDiscardCodes,
+      blockers: { hard, soft },
+    };
+  }
+
   const canPublish = dedupeDecision === "new_event" &&
-    !hasBlockingException &&
     hasRequiredPublicFields(event) &&
     isPublicCandidate(event) &&
     !hasExcludedEventKind(event) &&
@@ -391,19 +465,20 @@ function decideEditorDecision({
     };
   }
 
-  const fallbackReasonCodes = exceptionReasonCodes.length > 0
-    ? exceptionReasonCodes
-    : ["low_editor_confidence"];
+  const fallbackReasonCodes = uniqueReasonCodes([
+    ...missingRequiredPublicFieldCodes(event),
+    dedupeDecision === "insufficient_info" ? "dedupe_insufficient_info" : "",
+    (event.confidence ?? 0) < 0.9 ? "low_editor_confidence" : "",
+    !isPublicCandidate(event) ? "not_public_activity" : "",
+  ]);
+  const reasonCodes = fallbackReasonCodes.length > 0
+    ? fallbackReasonCodes
+    : ["insufficient_editor_confidence"];
   return {
-    decision: "needs_exception",
-    reason: editorExceptionReason(fallbackReasonCodes),
-    actionabilityStatus: editorActionabilityStatus({
-      hard,
-      soft,
-      dedupeDecision,
-      exceptionReasonCodes: fallbackReasonCodes,
-    }),
-    exceptionReasonCodes: fallbackReasonCodes,
+    decision: "discard",
+    reason: editorTerminalReason("discard", reasonCodes),
+    actionabilityStatus: "discarded",
+    exceptionReasonCodes: reasonCodes,
     blockers: { hard, soft },
   };
 }
@@ -528,50 +603,24 @@ function modelExplicitlyRequestsPublication(event: ExtractedEvent): boolean {
     event.publicEligibility === "public";
 }
 
-function editorActionabilityStatus({
-  hard,
-  soft,
-  dedupeDecision,
-  exceptionReasonCodes,
-}: {
-  hard: PublishBlocker[];
-  soft: PublishBlocker[];
-  dedupeDecision: string;
-  exceptionReasonCodes: string[];
-}): EditorActionabilityStatus {
-  if (dedupeDecision === "same_event") return "possible_duplicate";
-  if (
-    hard.some((blocker) =>
-      [
-        "not_public_activity",
-        "not_public_eligibility",
-        "excluded_event_kind",
-        "unsupported_schedule",
-        "not_beijing_event",
-      ].includes(blocker.code)
-    )
-  ) {
-    return "not_actionable";
-  }
-  if (
-    soft.length > 0 ||
-    exceptionReasonCodes.some((code) =>
-      code.startsWith("missing_") ||
-      code === "registration_evidence_missing" ||
-      code === "registration_url_is_source_article"
-    )
-  ) {
-    return "needs_info";
-  }
-  return "needs_info";
-}
-
-function editorExceptionReason(reasonCodes: string[]): string {
-  return `AI Editor exception: ${reasonCodes.join(", ")}`;
+function editorTerminalReason(
+  decision: EditorDecision["decision"],
+  reasonCodes: string[],
+): string {
+  return `AI Editor ${decision}: ${reasonCodes.join(", ")}`;
 }
 
 function uniqueReasonCodes(reasonCodes: string[]): string[] {
   return [...new Set(reasonCodes.filter(Boolean))];
+}
+
+function reasonCodesMatching(
+  blockers: PublishBlocker[],
+  allowedCodes: Set<string>,
+): string[] {
+  return blockers
+    .filter((blocker) => allowedCodes.has(blocker.code))
+    .map((blocker) => blocker.code);
 }
 
 function missingRequiredRegistrationEvidence(
@@ -639,7 +688,7 @@ function canonicalUrl(value: string | undefined): string | undefined {
 }
 
 function isHighConfidencePublicActivity(event: ExtractedEvent): boolean {
-  return (event.confidence ?? 0) >= 0.95 &&
+  return (event.confidence ?? 0) >= 0.9 &&
     ["public", "unclear", undefined].includes(event.publicEligibility);
 }
 
@@ -954,13 +1003,7 @@ function draftPayload({
     editor_version: editorVersion,
     resolution_decision: dedupeDecision,
     confidence: event.confidence ?? 0,
-    review_state: shouldCreateCanonicalEvent
-      ? "approved"
-      : dedupeDecision === "same_event"
-      ? "possible_duplicate"
-      : editorDecision.actionabilityStatus === "needs_info"
-      ? "needs_info"
-      : "needs_review",
+    review_state: reviewStateForEditorDecision(editorDecision),
     evidence_asset_ids: evidenceAssetIds,
     field_evidence: event.fieldEvidence ?? {},
     prompt_version: promptVersion,
@@ -1028,6 +1071,20 @@ function canonicalPayload({
     review_state: "approved",
     published_at: new Date().toISOString(),
   };
+}
+
+function reviewStateForEditorDecision(
+  editorDecision: EditorDecision,
+): "approved" | "rejected" | "needs_review" | "needs_info" {
+  if (editorDecision.decision === "publish") return "approved";
+  if (editorDecision.decision === "system_exception") {
+    return editorDecision.exceptionReasonCodes.some((code) =>
+        code.startsWith("missing_") || code.includes("evidence")
+      )
+      ? "needs_info"
+      : "needs_review";
+  }
+  return "rejected";
 }
 
 async function writeLedger(

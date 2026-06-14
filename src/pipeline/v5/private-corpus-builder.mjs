@@ -242,7 +242,7 @@ function labelsForFeedback(feedback) {
     wrong_location: "ordinary_public_event",
     bad_summary: "ordinary_public_event",
     bad_category_or_tags: "ordinary_public_event",
-    other: "information_sparse_requires_review",
+    other: "information_sparse_terminal_exclude",
   }[type] ?? "ordinary_public_event";
   return [label];
 }

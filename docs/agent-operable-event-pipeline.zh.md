@@ -98,6 +98,8 @@ monthly_estimated_token_cost_cny <= 100
    publish policy 的设计。
    同理，review queue 不是默认人工审核池，而是 AI Editor 的异常队列；每条
    `needs_review` / `needs_info` 都必须能说明为什么没有自动发布。
+   正常业务分流应终止在 publish、discard、merge 或 update；review backlog
+   对 Codex 来说是需要归因和修复的系统信号，不是等待人类编辑逐条处理的工作池。
 4. **真实评测不能泄漏答案**。
    Public regression corpus 可用于 contract smoke；严肃模型评测必须使用
    private raw corpus，expected 只能在 case metadata 中。
@@ -226,10 +228,10 @@ agent:audit --days 7
 
 - source volume、freshness 和 failure。
 - article -> candidate -> draft -> event 的 pipeline funnel。
-- published / review / excluded / failed counts。
+- published / excluded / duplicate / failed / exception counts。
 - public homepage、Archive 和 detail visibility snapshot。
 - LLM usage、cost、provider/model error。
-- feedback 和 review action。
+- feedback 和 admin/operator actions。
 
 `candidate-index.json` 可以包含值得 Codex 关注的候选，但这些候选不是最终判断：
 
@@ -241,7 +243,7 @@ agent:audit --days 7
 - provider error cluster：某个 provider/model/operation 失败集中。
 - public visibility gap：DB 已发布但公开页面不可见，或详情页不可访问。
 - usage spike：token 或成本异常。
-- review backlog：待审核堆积。
+- exception backlog：`needs_review` / `needs_info` 异常积压。
 
 每个 candidate 应包含：
 
@@ -497,6 +499,10 @@ cost_per_published_event
 latency_p50 / latency_p95
 ```
 
+在 AI Editor 语义下，`needs_review_rate` 应理解为系统异常率。非公众活动、
+新闻、外地活动、重复活动或低置信输出应该尽量以带 reason code 的终态
+`discard` / `merge` / `update` 结束，而不是进入人工审核。
+
 默认 gate：
 
 ```text
@@ -623,7 +629,7 @@ operator 点击 “这条不是活动”
 ```text
 operator 说 “这周活动太少”
 -> agent:audit 生成 volume/funnel/public visibility facts
--> Codex 判断异常是否来自 source、triage/extract、review backlog 或 public UI
+-> Codex 判断异常是否来自 source、triage/extract、exception backlog 或 public UI
 -> agent:inspect-finding 生成 evidence pack
 -> 从 excluded 中抽样导出 case
 -> 调低 triage 阈值或修 source health

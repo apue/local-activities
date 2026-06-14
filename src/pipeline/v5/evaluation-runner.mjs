@@ -837,7 +837,7 @@ function selectCases({ cases, all, caseIds }) {
 
 function finalStateFromExpectedAction(action) {
   if (action === "extract") return "published";
-  if (action === "review") return "needs_review";
+  if (action === "review") return "excluded";
   if (action === "capture_failure") return "failed";
   return "excluded";
 }

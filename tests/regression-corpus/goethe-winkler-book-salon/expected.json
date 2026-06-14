@@ -1,5 +1,5 @@
 {
-  "action": "review",
+  "action": "exclude",
   "eventCount": 1,
   "evidence": {},
   "eventDrafts": [
@@ -18,7 +18,7 @@
     "decision": "new_event"
   },
   "publish": {
-    "state": "needs_review",
+    "state": "excluded",
     "reasons": [
       "source_text_needs_human_schedule_confirmation"
     ]

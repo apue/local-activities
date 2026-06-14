@@ -1,5 +1,5 @@
 {
-  "action": "review",
+  "action": "exclude",
   "eventCount": 1,
   "requiresReservation": true,
   "evidence": {},
@@ -20,9 +20,9 @@
     "decision": "new_event"
   },
   "publish": {
-    "state": "needs_review",
+    "state": "excluded",
     "reasons": [
-      "registration_or_capacity_details_need_review"
+      "registration_or_capacity_details_insufficient"
     ]
   }
 }

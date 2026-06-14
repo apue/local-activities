@@ -83,7 +83,7 @@ describe("V5 mock Full Extract and Editor harnesses", () => {
     expect(publishTrace.reasons).toEqual(expect.arrayContaining(["mock_non_event"]));
   });
 
-  it("validates missing event facts as needs_info and routes editor output to review", async () => {
+  it("validates missing event facts as needs_info and terminally excludes them", async () => {
     const normalized = cleanCapturedArticleBundle({
       title: "测试活动",
       sourceName: "Test Source",
@@ -113,11 +113,11 @@ describe("V5 mock Full Extract and Editor harnesses", () => {
     expect(validation.issues.map((issue) => issue.code)).toEqual(
       expect.arrayContaining(["event_start_missing", "event_venue_missing"]),
     );
-    expect(editor.editorDecision).toBe("needs_info");
-    expect(publishTrace.state).toBe("needs_info");
+    expect(editor.editorDecision).toBe("exclude");
+    expect(publishTrace.state).toBe("excluded");
   });
 
-  it("keeps complete expected review cases in review instead of mock-publishing them", () => {
+  it("publishes complete expected review cases when the extracted event is valid", () => {
     const normalized = cleanCapturedArticleBundle({
       title: "测试活动需审核",
       sourceName: "Test Source",
@@ -146,13 +146,13 @@ describe("V5 mock Full Extract and Editor harnesses", () => {
     const editor = mockEditorPass({ normalized, extraction, validation, now: fixedNow });
     const publishTrace = publishTraceFromEditor({ extraction, validation, editor });
 
-    expect(extraction.decision).toBe("needs_review");
+    expect(extraction.decision).toBe("event");
     expect(validation.status).toBe("valid");
-    expect(editor.editorDecision).toBe("review");
-    expect(publishTrace.state).toBe("needs_review");
+    expect(editor.editorDecision).toBe("publish");
+    expect(publishTrace.state).toBe("published");
   });
 
-  it("routes expected missing registration evidence cases to needs_info", async () => {
+  it("terminally excludes expected missing registration evidence cases", async () => {
     const caseItem = await loadCase("bac-equality-history-talk");
     const normalized = cleanCapturedArticleBundle(caseItem.bundle);
     const extraction = mockFullExtract({
@@ -168,8 +168,8 @@ describe("V5 mock Full Extract and Editor harnesses", () => {
     expect(extraction.decision).toBe("event");
     expect(validation.status).toBe("needs_info");
     expect(validation.issues.map((issue) => issue.code)).toContain("registration_evidence_missing");
-    expect(editor.editorDecision).toBe("needs_info");
-    expect(publishTrace.state).toBe("needs_info");
+    expect(editor.editorDecision).toBe("exclude");
+    expect(publishTrace.state).toBe("excluded");
   });
 });
 

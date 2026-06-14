@@ -62,13 +62,13 @@ Return ONLY valid JSON with exactly this top-level shape:
     "reason": string
   }],
   "qualityIssues": any[],
-  "editorDecision": "publish" | "exclude" | "needs_info" | "review" | "failed",
+  "editorDecision": "publish" | "exclude" | "failed",
   "reason": string
 }
 Rules:
 - Do not overwrite extracted facts. Use corrections for traceable changes only when needed.
 - If extraction is event and validation.status is valid, return editorDecision="publish" unless there is a concrete editorial quality issue.
-- If validation has soft or repairable issues, return editorDecision="needs_info".
+- If validation has soft, repairable, or unresolved quality issues, return editorDecision="exclude" and explain the reason.
 - If extraction is non_event, return editorDecision="exclude".
 - Do not invent wrapper keys.`;
 
@@ -735,8 +735,9 @@ function normalizeExtractionDecision(value, events) {
 
 function normalizeEditorDecision(value) {
   const decision = clean(value);
-  if (["publish", "exclude", "needs_info", "review", "failed"].includes(decision)) return decision;
-  return "review";
+  if (["publish", "exclude", "failed"].includes(decision)) return decision;
+  if (["needs_info", "review"].includes(decision)) return "exclude";
+  return "exclude";
 }
 
 function boundedConfidence(value) {

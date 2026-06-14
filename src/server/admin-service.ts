@@ -15,10 +15,20 @@ export type AdminPublishBlocker = {
   evidenceAssetIds?: string[];
 };
 
-export type AdminEditorDecision = "publish" | "needs_exception";
+export type AdminEditorDecision =
+  | "publish"
+  | "discard"
+  | "merge"
+  | "update"
+  | "system_exception"
+  | "needs_exception";
 
 export type AdminActionabilityStatus =
   | "actionable"
+  | "discarded"
+  | "merged"
+  | "updated"
+  | "system_exception"
   | "needs_info"
   | "not_actionable"
   | "possible_duplicate";

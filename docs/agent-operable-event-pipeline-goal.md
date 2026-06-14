@@ -275,6 +275,9 @@ latency_p50
 latency_p95
 ```
 
+`needs_review_rate` 在 AI Editor 语义下代表系统异常率。正常业务结果应终止在
+published、excluded、duplicate/merge 或 update，不应作为默认人工待审池。
+
 默认推荐门槛：
 
 ```text

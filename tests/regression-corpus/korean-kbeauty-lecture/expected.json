@@ -1,5 +1,5 @@
 {
-  "action": "review",
+  "action": "exclude",
   "eventCount": 1,
   "requiresReservation": true,
   "evidence": {},
@@ -13,14 +13,14 @@
       "venueName": "驻华韩国文化院",
       "registrationAction": "required",
       "scheduleText": "6月9日，预约开放时间为6月8日10:00",
-      "summary": "Public K-Beauty lecture by Professor Kim Joo-ri; reservation required. Registration evidence is not present in this public fixture, so publication requires missing-info review."
+      "summary": "Public K-Beauty lecture by Professor Kim Joo-ri; reservation required. Registration evidence is not present in this public fixture, so the AI Editor should terminally exclude it rather than create exception backlog."
     }
   ],
   "dedupe": {
     "decision": "new_event"
   },
   "publish": {
-    "state": "needs_info",
+    "state": "excluded",
     "reasons": [
       "start_time_missing_in_text"
     ]
