@@ -101,6 +101,9 @@ describe("agent audit packet", () => {
       severityHint: expect.any(String),
       drilldownCommand: expect.stringContaining("pnpm agent:inspect-finding"),
     });
+    expect(packet.candidateIndex.candidates[0].drilldownCommand).toContain(
+      "--audit-dir .agent-runs/test-audit",
+    );
     expect(packet.candidateIndex.candidates[0]).not.toHaveProperty("rootCause");
     expect(packet.auditBrief).toContain("These candidates are not final root causes");
   });

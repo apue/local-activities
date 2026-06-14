@@ -636,7 +636,7 @@ function normalizeCandidate(candidate, index, outputDir) {
     affectedDraftIds: unique(candidate.affectedDraftIds ?? []),
     affectedEventIds: unique(candidate.affectedEventIds ?? []),
     artifactPaths: unique(candidate.artifactPaths ?? []),
-    drilldownCommand: `pnpm agent:inspect-finding -- --finding-id ${candidateId} --output-dir ${path.join(outputDir ?? ".agent-runs/<run-id>", "evidence")}`,
+    drilldownCommand: `pnpm agent:inspect-finding -- --audit-dir ${outputDir ?? ".agent-runs/<run-id>"} --finding-id ${candidateId} --output-dir ${path.join(outputDir ?? ".agent-runs/<run-id>", "evidence")}`,
   };
 }
 

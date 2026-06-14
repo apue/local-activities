@@ -231,7 +231,7 @@ Deno.test("runAnalysisPipeline excludes online scholarship application opportuni
   assertEquals(db.table("processing_ledger")[0].state, "excluded");
 });
 
-Deno.test("runAnalysisPipeline publishes actionable events while clearing source article registration URLs", async () => {
+Deno.test("runAnalysisPipeline excludes source-article registration URLs without QR evidence", async () => {
   const db = createRecordingDb();
   const result = await runAnalysisPipeline({
     request: validRequest(),
@@ -255,14 +255,16 @@ Deno.test("runAnalysisPipeline publishes actionable events while clearing source
     env: { provider: "mock", model: "mock-vision" },
   });
 
-  assertEquals(result.status, "published");
-  assertEquals(db.table("canonical_events").length, 1);
-  assertEquals(db.table("processing_ledger")[0].state, "published");
+  assertEquals(result.status, "excluded");
+  assertEquals(db.table("canonical_events").length, 0);
+  assertEquals(db.table("processing_ledger")[0].state, "excluded");
   const draft = db.table("event_drafts")[0];
-  assertEquals(draft.review_state, "approved");
-  assertEquals(draft.editor_decision, "publish");
-  assertEquals(draft.actionability_status, "actionable");
-  assertEquals(draft.exception_reason_codes, []);
+  assertEquals(draft.review_state, "rejected");
+  assertEquals(draft.editor_decision, "discard");
+  assertEquals(draft.actionability_status, "discarded");
+  assertEquals(draft.exception_reason_codes, [
+    "registration_evidence_missing",
+  ]);
   assertEquals(draft.registration_url, undefined);
   assertEquals(draft.soft_blockers, [
     {
@@ -897,6 +899,86 @@ Deno.test("runAnalysisPipeline records QR evidence when registration URL points 
   );
 });
 
+Deno.test("runAnalysisPipeline falls back to byte-backed QR evidence for scan-code registration", async () => {
+  const storage = bundleStorage({
+    imageKind: "stable",
+    extraImages: [
+      {
+        imageId: "qr-1",
+        path: "images/qr.png",
+        hasBytes: true,
+        sourceUrl: "https://mmbiz.qpic.cn/remote-qr",
+        contentType: "image/png",
+        contentHash: "sha256:qr",
+        width: 182,
+        height: 189,
+      },
+    ],
+    extraImageBytes: {
+      "images/qr.png": new Uint8Array(20).fill(7),
+    },
+  });
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage,
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        confidence: 0.95,
+        registrationUrl: undefined,
+        registrationAction: "Scan QR code for registration",
+        evidence: [{ imageId: "poster-1", role: "poster", confidence: 0.8 }],
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "published");
+  assertEquals(
+    db.table("evidence_assets").map((asset) => asset.role),
+    ["poster", "registration"],
+  );
+  assertEquals(
+    db.table("event_drafts")[0].registration_qr_asset_id,
+    "evidence-1-registration-qr-1-bundle-1",
+  );
+  assertEquals(db.table("event_drafts")[0].soft_blockers, []);
+  assertEquals(db.table("canonical_events").length, 1);
+  assertEquals(
+    db.table("canonical_events")[0].registration_qr_image_url,
+    "https://supabase.test/storage/v1/object/public/event-evidence-assets/production/articles/bundle-1/evidence-1-registration-qr-1-bundle-1.png",
+  );
+});
+
+Deno.test("runAnalysisPipeline excludes scan-code registration events without registration evidence", async () => {
+  const storage = bundleStorage({ imageKind: "stable" });
+  const db = createRecordingDb();
+  const result = await runAnalysisPipeline({
+    request: validRequest(),
+    storage,
+    db,
+    provider: successfulProvider({
+      eventOverrides: {
+        confidence: 0.95,
+        registrationUrl: undefined,
+        registrationAction: "Scan QR code for registration",
+        evidence: [{ imageId: "poster-1", role: "poster", confidence: 0.8 }],
+      },
+    }),
+    env: { provider: "mock", model: "mock-vision" },
+  });
+
+  assertEquals(result.status, "excluded");
+  assertEquals(db.table("canonical_events").length, 0);
+  assertEquals(db.table("event_drafts")[0].review_state, "rejected");
+  assertEquals(db.table("event_drafts")[0].editor_decision, "discard");
+  assertEquals(db.table("event_drafts")[0].exception_reason_codes, [
+    "registration_evidence_missing",
+  ]);
+  assertEquals(db.table("processing_ledger")[0].state, "excluded");
+});
+
 Deno.test("runAnalysisPipeline keeps per-event canonical ids isolated in multi-event dedupe rows", async () => {
   const db = createRecordingDb();
   await runAnalysisPipeline({
@@ -999,10 +1081,14 @@ function bundleStorage(
     dataClass = "production",
     imageKind = "stable",
     roleHint,
+    extraImages = [],
+    extraImageBytes = {},
   }: {
     dataClass?: "production" | "eval" | "test" | "smoke";
     imageKind?: "stable" | "reference";
     roleHint?: string;
+    extraImages?: Record<string, unknown>[];
+    extraImageBytes?: Record<string, Uint8Array>;
   } = {},
 ) {
   const image = imageKind === "stable"
@@ -1030,6 +1116,7 @@ function bundleStorage(
       altText: "Poster",
       roleHint,
     };
+  const images = [image, ...extraImages];
   const prefix = `${dataClass}/bundle-1`;
   const files: Record<string, string> = {
     [`${prefix}/manifest.json`]: JSON.stringify({
@@ -1042,7 +1129,7 @@ function bundleStorage(
       publishedAt: "2026-06-08T10:00:00+08:00",
       capturedAt: "2026-06-08T10:30:00+08:00",
       contentHash: "sha256:abc",
-      images: [image],
+      images,
       links: [],
       diagnostics: [],
     }),
@@ -1056,6 +1143,12 @@ function bundleStorage(
   };
   const bytes: Record<string, Uint8Array> = {
     [`${prefix}/images/poster.jpg`]: new Uint8Array([1, 2, 3, 4]),
+    ...Object.fromEntries(
+      Object.entries(extraImageBytes).map(([path, body]) => [
+        `${prefix}/${path}`,
+        body,
+      ]),
+    ),
   };
   const uploaded: Array<{
     bucket: string;

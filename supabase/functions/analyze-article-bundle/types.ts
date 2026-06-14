@@ -28,6 +28,7 @@ export type BundleImage = {
   publicUrl?: string;
   contentType?: string;
   contentHash?: string;
+  byteLength?: number;
   width?: number;
   height?: number;
   altText?: string;

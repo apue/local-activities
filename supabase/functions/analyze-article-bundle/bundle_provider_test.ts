@@ -209,6 +209,7 @@ Deno.test("readArticleBundle inlines byte-backed bundle images as data URLs when
   });
 
   assertEquals(bundle.images[0].publicUrl, "data:image/jpeg;base64,AQID");
+  assertEquals(bundle.images[0].byteLength, 3);
   assert(
     input.user.some((part) =>
       part.type === "image_url" &&
@@ -216,6 +217,31 @@ Deno.test("readArticleBundle inlines byte-backed bundle images as data URLs when
     ),
   );
   assertEquals(JSON.stringify(input).includes("AQID"), true);
+});
+
+Deno.test("buildProviderInput instructs the model to select QR evidence for scan-code registration", () => {
+  const input = buildProviderInput({
+    request: {
+      sourceUrl: "https://mp.weixin.qq.com/s/example",
+      bundleId: "bundle-1",
+      storagePrefix: "article-bundles/production/bundle-1",
+      contentHash: "sha256:abc",
+      sourceProvider: "wechat2rss",
+      dataClass: "production",
+    },
+    bundle: {
+      manifest: {},
+      html: "",
+      text: "Scan QR code for registration",
+      links: [],
+      diagnostics: [],
+      images: [],
+    },
+  });
+
+  assert(input.system.includes("scan a QR code"));
+  assert(input.system.includes("role registration or qr"));
+  assert(input.system.includes("do not set publish.createCanonicalEvent true"));
 });
 
 Deno.test("readArticleBundle tolerates missing byte-backed image objects", async () => {
