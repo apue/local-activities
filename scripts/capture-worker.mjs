@@ -46,6 +46,9 @@ async function main() {
     lookbackDays: wechatConfig.lookbackDays,
     limit: args.limit,
     fetchImpl: runtime.fetchImpl,
+    onProgress: args.quietProgress
+      ? undefined
+      : (event) => console.error(JSON.stringify({ progress: event })),
   });
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exitCode = 1;
@@ -156,6 +159,7 @@ export function parseArgs(argv) {
     envFiles: [],
     proxyUrl: undefined,
     help: false,
+    quietProgress: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -184,6 +188,8 @@ export function parseArgs(argv) {
     } else if (arg === "--proxy-url") {
       args.proxyUrl = requiredValue(argv, index, arg);
       index += 1;
+    } else if (arg === "--quiet-progress") {
+      args.quietProgress = true;
     } else {
       throw new Error(`unknown_arg:${arg}`);
     }
@@ -254,7 +260,7 @@ function fetchForAnalyzeFunctionUrl({ analyzeFunctionUrl, fetchImpl }) {
 
 function helpText() {
   return [
-    "Usage: pnpm capture:wechat2rss:once [--dry-run|--apply] [--data-class production|eval|test|smoke] [--limit N] [--env-file .env.local] [--proxy-url http://127.0.0.1:7897]",
+    "Usage: pnpm capture:wechat2rss:once [--dry-run|--apply] [--data-class production|eval|test|smoke] [--limit N] [--env-file .env.local] [--proxy-url http://127.0.0.1:7897] [--quiet-progress]",
     "",
     "Dry-run is the default. Use --apply to upload article bundles and invoke analyze-article-bundle.",
   ].join("\n");

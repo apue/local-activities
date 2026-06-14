@@ -76,6 +76,7 @@ export type UsageMetrics = {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  costMicroCny?: number;
   cachedInputTokens?: number;
   reasoningOutputTokens?: number;
   latencyMs?: number;

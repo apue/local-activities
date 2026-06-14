@@ -6,6 +6,7 @@ import {
   buildProviderInput,
   createMockProvider,
   createOpenAiCompatibleProvider,
+  estimateUsageCostMicroCny,
   parseProviderOutput,
 } from "./provider.ts";
 
@@ -117,7 +118,10 @@ Deno.test("readArticleBundle signs byte-backed bundle images for provider vision
     }),
     "production/bundle-1/article.html": "<article><h1>Concert</h1></article>",
     "production/bundle-1/article.txt": "Concert in Beijing",
-    "production/bundle-1/links.json": JSON.stringify({ links: [], miniPrograms: [] }),
+    "production/bundle-1/links.json": JSON.stringify({
+      links: [],
+      miniPrograms: [],
+    }),
     "production/bundle-1/diagnostics.json": JSON.stringify({
       diagnostics: [],
       captureWarnings: [],
@@ -171,7 +175,10 @@ Deno.test("readArticleBundle inlines byte-backed bundle images as data URLs when
     }),
     "production/bundle-1/article.html": "<article><h1>Concert</h1></article>",
     "production/bundle-1/article.txt": "Concert in Beijing",
-    "production/bundle-1/links.json": JSON.stringify({ links: [], miniPrograms: [] }),
+    "production/bundle-1/links.json": JSON.stringify({
+      links: [],
+      miniPrograms: [],
+    }),
     "production/bundle-1/diagnostics.json": JSON.stringify({
       diagnostics: [],
       captureWarnings: [],
@@ -224,7 +231,10 @@ Deno.test("readArticleBundle tolerates missing byte-backed image objects", async
       }),
       "production/bundle-1/article.html": "",
       "production/bundle-1/article.txt": "Article text",
-      "production/bundle-1/links.json": JSON.stringify({ links: [], miniPrograms: [] }),
+      "production/bundle-1/links.json": JSON.stringify({
+        links: [],
+        miniPrograms: [],
+      }),
       "production/bundle-1/diagnostics.json": JSON.stringify({
         diagnostics: [],
         captureWarnings: [],
@@ -643,6 +653,113 @@ Deno.test("openai-compatible provider passes configured thinking control", async
   });
 
   assertEquals(requestBody?.enable_thinking, false);
+});
+
+Deno.test("estimateUsageCostMicroCny converts CNY per million token pricing to micro CNY", () => {
+  assertEquals(
+    estimateUsageCostMicroCny({
+      inputTokens: 1000,
+      outputTokens: 500,
+      tokenPricing: {
+        inputPriceCnyPer1M: 0.6,
+        outputPriceCnyPer1M: 4.8,
+      },
+    }),
+    3000,
+  );
+  assertEquals(
+    estimateUsageCostMicroCny({
+      inputTokens: 1000,
+      outputTokens: 500,
+      tokenPricing: {},
+    }),
+    undefined,
+  );
+});
+
+Deno.test("openai-compatible provider estimates cost when provider only returns tokens", async () => {
+  const provider = createOpenAiCompatibleProvider({
+    baseUrl: "https://llm.test/v1",
+    apiKey: "key",
+    model: "qwen-model",
+    tokenPricing: {
+      inputPriceCnyPer1M: 0.6,
+      outputPriceCnyPer1M: 4.8,
+    },
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                decision: "excluded",
+                reason: "Not an event.",
+                confidence: 0.9,
+                events: [],
+                dedupe: { decision: "insufficient_info", confidence: 0.9 },
+              }),
+            },
+          }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 500,
+            total_tokens: 1500,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+  });
+
+  const response = await provider.analyze({
+    system: "system",
+    responseFormat: "json",
+    user: [{ type: "text", text: "article text" }],
+  });
+
+  assertEquals(response.usage?.costMicroCny, 3000);
+});
+
+Deno.test("openai-compatible provider keeps provider-returned cost authoritative", async () => {
+  const provider = createOpenAiCompatibleProvider({
+    baseUrl: "https://llm.test/v1",
+    apiKey: "key",
+    model: "qwen-model",
+    tokenPricing: {
+      inputPriceCnyPer1M: 0.6,
+      outputPriceCnyPer1M: 4.8,
+    },
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                decision: "excluded",
+                reason: "Not an event.",
+                confidence: 0.9,
+                events: [],
+                dedupe: { decision: "insufficient_info", confidence: 0.9 },
+              }),
+            },
+          }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 500,
+            total_tokens: 1500,
+            cost_micro_cny: 123,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+  });
+
+  const response = await provider.analyze({
+    system: "system",
+    responseFormat: "json",
+    user: [{ type: "text", text: "article text" }],
+  });
+
+  assertEquals(response.usage?.costMicroCny, 123);
 });
 
 Deno.test("openai-compatible provider surfaces vision provider 5xx instead of retrying text-only", async () => {

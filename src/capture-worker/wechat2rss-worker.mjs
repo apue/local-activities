@@ -23,6 +23,7 @@ export async function runWechat2RssCaptureOnce({
   fetchImpl = fetch,
   hydrateImages = !dryRun,
   maxHydratedImages,
+  onProgress,
 } = {}) {
   if (!wechat2rss) throw new Error("wechat2rss_client_required");
   if (!idempotency) throw new Error("idempotency_adapter_required");
@@ -95,8 +96,19 @@ export async function runWechat2RssCaptureOnce({
   };
 
   const consideredArticles = limit === undefined ? articles : articles.slice(0, limit);
+  const total = consideredArticles.length;
 
-  for (const article of consideredArticles) {
+  for (const [offset, article] of consideredArticles.entries()) {
+    const index = offset + 1;
+    const startedAt = new Date().toISOString();
+    emitProgress(onProgress, {
+      type: "article_started",
+      index,
+      total,
+      sourceUrl: article.url,
+      title: article.title,
+      startedAt,
+    });
     try {
       const bundle = createWechat2RssArticleBundle({
         article,
@@ -114,6 +126,15 @@ export async function runWechat2RssCaptureOnce({
           contentHash: bundle.contentHash,
           reason: "already_processed",
           existing,
+        });
+        emitProgress(onProgress, {
+          type: "article_skipped",
+          index,
+          total,
+          sourceUrl: bundle.sourceUrl,
+          contentHash: bundle.contentHash,
+          reason: "already_processed",
+          finishedAt: new Date().toISOString(),
         });
         continue;
       }
@@ -142,18 +163,45 @@ export async function runWechat2RssCaptureOnce({
         storagePrefix: bundleFiles.storagePrefix,
         edgePayload,
       });
+      emitProgress(onProgress, {
+        type: "article_bundled",
+        index,
+        total,
+        sourceUrl: bundle.sourceUrl,
+        bundleId: bundleFiles.bundleId,
+        imageCount: analysisBundle.images?.length ?? 0,
+      });
 
       if (!dryRun) {
         await supabase.uploadAndAnalyzeBundle(bundleFiles);
         result.uploadedCount += 1;
         result.triggeredCount += 1;
       }
+      emitProgress(onProgress, {
+        type: "article_completed",
+        index,
+        total,
+        sourceUrl: bundle.sourceUrl,
+        bundleId: bundleFiles.bundleId,
+        dryRun,
+        finishedAt: new Date().toISOString(),
+      });
     } catch (error) {
+      const reason = mapArticleErrorToCaptureFailureReason(error);
       result.failureCount += 1;
       result.failures.push({
         sourceUrl: article.url,
-        reason: "browser_error",
+        reason,
         message: errorMessage(error),
+      });
+      emitProgress(onProgress, {
+        type: "article_failed",
+        index,
+        total,
+        sourceUrl: article.url,
+        reason,
+        message: errorMessage(error),
+        finishedAt: new Date().toISOString(),
       });
     }
   }
@@ -202,6 +250,29 @@ function mapRuntimeErrorToCaptureFailureReason(error) {
   if (message.includes("404") || message.includes("not found")) return "not_found";
   if (message.includes("blocked") || message.includes("429")) return "fetch_blocked";
   return "source_unhealthy";
+}
+
+function mapArticleErrorToCaptureFailureReason(error) {
+  const message = errorMessage(error).toLowerCase();
+  if (
+    message.includes("edge function") ||
+    message.includes("analyze_function") ||
+    message.includes("provider_")
+  ) {
+    return "analyze_error";
+  }
+  if (message.includes("storage") || message.includes("upload")) {
+    return "upload_error";
+  }
+  if (message.includes("wechat") || message.includes("image") || message.includes("fetch")) {
+    return "capture_error";
+  }
+  return "bundle_error";
+}
+
+function emitProgress(onProgress, event) {
+  if (typeof onProgress !== "function") return;
+  onProgress(event);
 }
 
 function formatWechat2RssDate(date) {

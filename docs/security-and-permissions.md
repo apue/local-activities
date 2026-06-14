@@ -94,6 +94,11 @@ Server-side / Supabase secrets:
 - `ANALYSIS_LLM_API_KEY`
 - map provider credentials when enabled
 
+Server-side non-secret runtime configuration:
+
+- `ANALYSIS_LLM_INPUT_PRICE_CNY_PER_1M`
+- `ANALYSIS_LLM_OUTPUT_PRICE_CNY_PER_1M`
+
 Browser-safe values:
 
 - `NEXT_PUBLIC_SUPABASE_URL`

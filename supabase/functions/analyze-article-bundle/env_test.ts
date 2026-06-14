@@ -3,6 +3,7 @@
 import { assertEquals } from "./test_assertions.ts";
 import {
   readAnalysisTimeoutMs,
+  readAnalysisTokenPricing,
   readBooleanEnv,
   readServiceRoleKey,
 } from "./env.ts";
@@ -49,22 +50,51 @@ Deno.test("readAnalysisTimeoutMs accepts seconds env used by docs and ms env for
 
 Deno.test("readBooleanEnv accepts common true and false values", () => {
   assertEquals(
-    readBooleanEnv("ANALYSIS_LLM_ENABLE_THINKING", envReader({
-      ANALYSIS_LLM_ENABLE_THINKING: "false",
-    })),
+    readBooleanEnv(
+      "ANALYSIS_LLM_ENABLE_THINKING",
+      envReader({
+        ANALYSIS_LLM_ENABLE_THINKING: "false",
+      }),
+    ),
     false,
   );
   assertEquals(
-    readBooleanEnv("ANALYSIS_LLM_ENABLE_THINKING", envReader({
-      ANALYSIS_LLM_ENABLE_THINKING: "1",
-    })),
+    readBooleanEnv(
+      "ANALYSIS_LLM_ENABLE_THINKING",
+      envReader({
+        ANALYSIS_LLM_ENABLE_THINKING: "1",
+      }),
+    ),
     true,
   );
   assertEquals(
-    readBooleanEnv("ANALYSIS_LLM_ENABLE_THINKING", envReader({
-      ANALYSIS_LLM_ENABLE_THINKING: "not-a-boolean",
-    })),
+    readBooleanEnv(
+      "ANALYSIS_LLM_ENABLE_THINKING",
+      envReader({
+        ANALYSIS_LLM_ENABLE_THINKING: "not-a-boolean",
+      }),
+    ),
     undefined,
+  );
+});
+
+Deno.test("readAnalysisTokenPricing reads optional CNY per million token prices", () => {
+  assertEquals(
+    readAnalysisTokenPricing(envReader({
+      ANALYSIS_LLM_INPUT_PRICE_CNY_PER_1M: "0.6",
+      ANALYSIS_LLM_OUTPUT_PRICE_CNY_PER_1M: "4.8",
+    })),
+    {
+      inputPriceCnyPer1M: 0.6,
+      outputPriceCnyPer1M: 4.8,
+    },
+  );
+  assertEquals(
+    readAnalysisTokenPricing(envReader({
+      ANALYSIS_LLM_INPUT_PRICE_CNY_PER_1M: "-1",
+      ANALYSIS_LLM_OUTPUT_PRICE_CNY_PER_1M: "not-a-number",
+    })),
+    {},
   );
 });
 

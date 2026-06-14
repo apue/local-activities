@@ -782,6 +782,7 @@ async function writeUsage(
     input_tokens: usage.inputTokens,
     output_tokens: usage.outputTokens,
     total_tokens: usage.totalTokens,
+    cost_micro_cny: usage.costMicroCny ?? 0,
     cached_input_tokens: usage.cachedInputTokens ?? 0,
     reasoning_output_tokens: usage.reasoningOutputTokens ?? 0,
     latency_ms: usage.latencyMs,

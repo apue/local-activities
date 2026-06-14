@@ -108,6 +108,8 @@ export const targets = {
     optional: [
       "ANALYSIS_LLM_MAX_OUTPUT_TOKENS",
       "ANALYSIS_LLM_TIMEOUT_SECONDS",
+      "ANALYSIS_LLM_INPUT_PRICE_CNY_PER_1M",
+      "ANALYSIS_LLM_OUTPUT_PRICE_CNY_PER_1M",
     ],
   },
 };

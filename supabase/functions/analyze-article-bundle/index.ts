@@ -11,6 +11,7 @@ import {
 } from "./db.ts";
 import {
   readAnalysisTimeoutMs,
+  readAnalysisTokenPricing,
   readBooleanEnv,
   readNumberEnv,
   readRequiredEnv,
@@ -76,6 +77,7 @@ function createProviderFromEnv() {
     model: readRequiredEnv("ANALYSIS_LLM_MODEL"),
     maxOutputTokens: readNumberEnv("ANALYSIS_LLM_MAX_OUTPUT_TOKENS"),
     enableThinking: readBooleanEnv("ANALYSIS_LLM_ENABLE_THINKING"),
+    tokenPricing: readAnalysisTokenPricing(),
     timeoutMs: readAnalysisTimeoutMs(),
   });
 }
