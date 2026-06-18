@@ -61,6 +61,51 @@ Deno.test("readArticleBundle reads manifest, article files, diagnostics, links, 
   );
 });
 
+Deno.test("readArticleBundle retries transient storage text download failures", async () => {
+  const storage = fakeStorage({
+    "production/bundle-1/manifest.json": JSON.stringify({
+      bundleId: "bundle-1",
+      sourceUrl: "https://mp.weixin.qq.com/s/example",
+      images: [],
+    }),
+    "production/bundle-1/article.html": "<article><h1>Concert</h1></article>",
+    "production/bundle-1/article.txt": "Concert in Beijing",
+    "production/bundle-1/links.json": JSON.stringify([]),
+    "production/bundle-1/diagnostics.json": JSON.stringify([]),
+  }, {
+    textFailures: {
+      "article-bundles/production/bundle-1/manifest.json": [
+        new Error("Gateway Timeout"),
+      ],
+    },
+  });
+
+  const bundle = await readArticleBundle(storage, {
+    storagePrefix: "article-bundles/production/bundle-1",
+  });
+
+  assertEquals(bundle.text, "Concert in Beijing");
+});
+
+Deno.test("readArticleBundle reports the storage object path after persistent download failures", async () => {
+  await assertRejects(
+    () =>
+      readArticleBundle(
+        fakeStorage({}, {
+          textFailures: {
+            "article-bundles/production/bundle-1/manifest.json": [
+              new Error("Gateway Timeout"),
+              new Error("Gateway Timeout"),
+              new Error("Gateway Timeout"),
+            ],
+          },
+        }),
+        { storagePrefix: "article-bundles/production/bundle-1" },
+      ),
+    "bundle_storage_download_failed:article-bundles/production/bundle-1/manifest.json: Gateway Timeout",
+  );
+});
+
 Deno.test("readArticleBundle accepts capture-worker links and diagnostics object files", async () => {
   const storage = fakeStorage({
     "production/bundle-1/manifest.json": JSON.stringify({
@@ -925,15 +970,20 @@ function fakeStorage(
     signedUrls = {},
     bytes = {},
     missingBytePaths = new Set<string>(),
+    textFailures = {},
   }: {
     signedUrls?: Record<string, string>;
     bytes?: Record<string, Uint8Array>;
     missingBytePaths?: Set<string>;
+    textFailures?: Record<string, Error[]>;
   } = {},
 ) {
   return {
     async downloadText(bucket: string, path: string): Promise<string | null> {
       assertEquals(bucket, "article-bundles");
+      const failures = textFailures[`${bucket}/${path}`];
+      const failure = failures?.shift();
+      if (failure) throw failure;
       return files[path] ?? null;
     },
     async createSignedUrl(

@@ -1,6 +1,8 @@
 import type { ArticleBundle, BundleImage, StorageReader } from "./types.ts";
 
 const articleBundleBucket = "article-bundles";
+const storageReadMaxAttempts = 3;
+const storageReadRetryDelaysMs = [250, 1000];
 
 export async function readArticleBundle(
   storage: StorageReader,
@@ -84,7 +86,10 @@ async function safeDownloadBytes(
   path: string,
 ): Promise<Uint8Array | null> {
   try {
-    return await downloadBytes(articleBundleBucket, path);
+    return await readStorageObjectWithRetry(
+      () => downloadBytes(articleBundleBucket, path),
+      { bucket: articleBundleBucket, path },
+    );
   } catch {
     return null;
   }
@@ -132,7 +137,10 @@ async function readText(
   storage: StorageReader,
   path: string,
 ): Promise<string | null> {
-  return await storage.downloadText(articleBundleBucket, path);
+  return await readStorageObjectWithRetry(
+    () => storage.downloadText(articleBundleBucket, path),
+    { bucket: articleBundleBucket, path },
+  );
 }
 
 async function readJsonRecord(
@@ -206,6 +214,86 @@ function imageArrayFrom(value: unknown): unknown[] {
 
 function arrayValue(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+async function readStorageObjectWithRetry<T>(
+  operation: () => Promise<T | null>,
+  { bucket, path }: { bucket: string; path: string },
+): Promise<T | null> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= storageReadMaxAttempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (isStorageNotFound(error)) return null;
+      lastError = error;
+      if (
+        attempt >= storageReadMaxAttempts ||
+        !isRetryableStorageError(error)
+      ) {
+        break;
+      }
+      await delay(storageReadRetryDelaysMs[attempt - 1] ?? 0);
+    }
+  }
+  throw storageDownloadError({ bucket, path, cause: lastError });
+}
+
+function isStorageNotFound(error: unknown): boolean {
+  const statusCode = storageStatusCode(error);
+  if (statusCode === 404) return true;
+  const message = errorMessage(error).toLowerCase();
+  return message.includes("object not found");
+}
+
+function isRetryableStorageError(error: unknown): boolean {
+  const statusCode = storageStatusCode(error);
+  if (statusCode !== undefined) {
+    return statusCode === 408 || statusCode === 425 || statusCode === 429 ||
+      statusCode >= 500;
+  }
+  const message = errorMessage(error).toLowerCase();
+  return message.includes("timeout") || message.includes("timed out") ||
+    message.includes("fetch failed") || message.includes("econnreset") ||
+    message.includes("network") || message.includes("aborted");
+}
+
+function storageStatusCode(error: unknown): number | undefined {
+  if (!isRecord(error)) return undefined;
+  const raw = error.statusCode ?? error.status ?? error.code;
+  const value = typeof raw === "number"
+    ? raw
+    : Number.parseInt(String(raw), 10);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function storageDownloadError({
+  bucket,
+  path,
+  cause,
+}: {
+  bucket: string;
+  path: string;
+  cause: unknown;
+}): Error {
+  return new Error(
+    `bundle_storage_download_failed:${bucket}/${path}: ${errorMessage(cause)}`,
+  );
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function uniqueImages(objectPrefix: string, values: unknown[]): BundleImage[] {
