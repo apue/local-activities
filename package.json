@@ -33,7 +33,9 @@
     "capture:wechat2rss:once": "node scripts/capture-worker.mjs",
     "functions:test": "deno test --allow-env --allow-read supabase/functions/analyze-article-bundle",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit --tsBuildInfoFile tsconfig.ts7.tsbuildinfo",
+    "typecheck:ts6": "tsc6 --noEmit --tsBuildInfoFile tsconfig.ts6.tsbuildinfo",
+    "typecheck:compat": "pnpm typecheck && pnpm typecheck:ts6"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
@@ -44,10 +46,11 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "25.9.1",
+    "@types/node": "24.13.3",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
-    "typescript": "6.0.3",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "4.1.7"
   }
 }
