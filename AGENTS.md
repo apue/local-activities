@@ -89,8 +89,19 @@ Do not rely on `docs/superpowers` as the current source of truth unless the user
 
 ## Technical Direction
 
-- Use Node.js 24 LTS and pnpm 11 for the application bootstrap.
-- Use TypeScript for the web app and collector-facing shared contracts.
+- Use Node.js 24 LTS and pnpm 11 for development, tests, builds, and Vercel.
+  Node.js 26 is deferred until it is LTS and Vercel supports the 26.x runtime.
+- Use TypeScript 7.0.x as the primary compiler for web-app and shared-contract
+  `.ts`/`.tsx` code. `pnpm typecheck` is the authoritative TS7 CLI gate.
+- Keep `@typescript/typescript6` only as the package named `typescript` while
+  Next.js requires the TS6 programmatic API; `pnpm typecheck:ts6` is the
+  explicit compatibility gate. Remove this layer in a dedicated issue once
+  Next.js supports the stable TS7 API.
+- Coding agents must run both compiler checks for shared contracts, Next.js
+  integration, compiler configuration, or dependency changes, followed by
+  `pnpm test` and `pnpm build` before handoff.
+- TypeScript checks do not validate `.mjs`, SQL, external providers, or deployed
+  runtime behavior; use their focused tests and smoke checks.
 - Use Next.js as a full-stack app first; do not split frontend and backend in the MVP.
 - Use Hono only where route grouping improves collector/admin API clarity.
 - Use Vitest for unit tests and focused integration tests after scaffolding.

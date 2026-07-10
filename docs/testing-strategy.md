@@ -141,13 +141,26 @@ pnpm agent:regression-gate
 This command runs, in order:
 
 - `pnpm test`
-- `pnpm typecheck`
+- `pnpm typecheck` (TypeScript 7 primary check)
+- `pnpm typecheck:ts6` (temporary Next.js compatibility check)
 - `pnpm pipeline:v5:replay -- --corpus-dir tests/regression-corpus --all --store memory`
 - `pnpm pipeline:v5:eval -- --corpus-dir tests/regression-corpus --all --store memory`
 
 Use `pnpm agent:regression-gate -- --dry-run` to inspect the gate plan without
 running it. The gate must remain deterministic and must not require live WeChat,
 live LLM, or production writes.
+
+Toolchain or compiler changes must run under Node.js 24 and pnpm 11 and include:
+
+- `pnpm install --frozen-lockfile`
+- `pnpm typecheck`
+- `pnpm typecheck:ts6`
+- `pnpm test`
+- `pnpm build`
+
+The two compiler commands use separate incremental build-info files. TypeScript
+validation does not replace focused `.mjs`, SQL, external-provider, deployment,
+or browser checks.
 
 ## Admin/Public UI
 
