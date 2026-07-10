@@ -35,7 +35,8 @@ Next.js 16.2.6 still requires the TypeScript 6 API during build validation.
 ## Fix Options
 
 1. Supported package aliases: retain TS6 API under `typescript`, supply TS7
-   `tsc` through `@typescript/native`. Preserves all gates with temporary cost.
+   `tsc` through `@typescript/native`. The 6.0.2 wrapper currently resolves the
+   internal compiler to TS6.0.3. This preserves all gates with temporary cost.
 2. Disable Next.js type validation. Rejected because it weakens safety.
 3. Wait for framework/API support. Safe but fails the current upgrade goal.
 

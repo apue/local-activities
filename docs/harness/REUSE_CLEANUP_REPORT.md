@@ -51,6 +51,8 @@ Status: complete reconnaissance
 ## Risks
 
 - pnpm binary-link ownership must be verified after frozen installation.
-- The compatibility package currently publishes 6.0.2 rather than the prior
-  direct 6.0.3 package; both compiler results and Next build must pass.
+- The compatibility wrapper publishes as 6.0.2 and intentionally resolves its
+  internal `@typescript/old` dependency to TypeScript 6.0.3, so `tsc6` reports
+  6.0.3. This transitive lockfile entry is expected; both compiler checks and
+  Next build must still pass.
 - Editor plugin behavior is not proof of CLI behavior; CLI probes are mandatory.

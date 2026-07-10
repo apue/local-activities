@@ -8,6 +8,10 @@ Status: scoped for issue #400
   - Replacement: TS7 alias owns `tsc`; TS6 compatibility alias owns the API and
     `tsc6`.
   - Removal condition: migrated scripts and Next.js build pass.
+  - Lockfile note: `@typescript/typescript6@6.0.2` intentionally depends on
+    `@typescript/old`, currently resolved to `typescript@6.0.3`. This transitive
+    compiler is the compatibility implementation and must not be removed while
+    the wrapper remains.
 - `package.json` `@types/node: 25.9.1`
   - Replacement: current Node 24.x type line.
   - Removal condition: TS7, TS6, tests, and build pass under Node 24.
@@ -32,7 +36,8 @@ Status: scoped for issue #400
 
 ## Required Validation
 
-- Search for TS6-only, `tsgo`, native-preview, shared-cache, Node 25, and Node 26
-  active guidance after edits.
+- Search for TS6-only direct dependencies, `tsgo`, native-preview, shared-cache,
+  Node 25, and Node 26 active guidance after edits. Permit the wrapper's
+  documented transitive `@typescript/old` lockfile entry.
 - Run compiler probes, both type checks, focused gate tests, full tests, build,
   Preview, browser smoke, and code review.

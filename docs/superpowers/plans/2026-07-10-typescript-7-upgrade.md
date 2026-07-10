@@ -369,8 +369,10 @@ rg -n "typescript@6\.0\.3|\"typescript\": \"6\.0\.3\"|@types/node.*25\.9\.1|tsgo
   docs/quickstart.md docs/technical-baseline.md docs/testing-strategy.md
 ```
 
-Expected: no active old package/config command remains. A clearly marked Node26
-deferral in active docs is acceptable; preview-era commands should not remain.
+Expected: no active old direct package/config command remains. The documented
+`@typescript/typescript6` -> `@typescript/old` -> `typescript@6.0.3` transitive
+lockfile chain is required and acceptable. A clearly marked Node26 deferral in
+active docs is acceptable; preview-era commands should not remain.
 
 - [ ] **Step 3: Confirm cleanup does not delete runtime coverage**
 
@@ -529,13 +531,16 @@ Expected: base `main`, correct issue branch, and only issue #400 files/commits.
 - Consumes: the pushed branch and linked Vercel project.
 - Produces: a Ready Preview URL, deployment inspection, and browser evidence.
 
-- [ ] **Step 1: Confirm live Vercel project runtime**
+- [ ] **Step 1: Link the worktree deterministically and confirm the runtime**
 
 ```bash
+vercel link --yes --project local-activities --scope apues-projects
 vercel project inspect local-activities
 ```
 
-Expected: project `local-activities`, Node.js Version `24.x`.
+Expected: the ignored `.vercel/project.json` points to project
+`prj_XGfcVKsE77SuMHEgP5RskZUWk889`; inspection reports project
+`local-activities` and Node.js Version `24.x`.
 
 - [ ] **Step 2: Create the Preview deployment**
 
