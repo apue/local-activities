@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "pnpm typecheck && next build",
     "start": "next start",
     "env:check": "node scripts/env-inventory.mjs",
     "agent:regression-gate": "node scripts/agent-operable-regression-gate.mjs",

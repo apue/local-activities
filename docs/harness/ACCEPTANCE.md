@@ -8,6 +8,8 @@ Status: approved
   compatibility API owner.
 - [ ] Node.js 24 and pnpm 11 are explicit and verified.
 - [ ] Both compiler checks, all tests, and the production build pass.
+- [ ] `pnpm build` runs the TS7 primary check before `next build`, including on
+  Vercel.
 - [ ] The agent regression gate includes both compiler checks and its focused
   tests prove ordering and fail-fast behavior.
 - [ ] Canonical docs and `AGENTS.md` describe the new boundary and commands.
@@ -30,7 +32,8 @@ Status: approved
    orders unit tests, TS7, TS6, replay, and evaluation and stops at the first
    failing step.
 5. Given the application, when `pnpm test` and `pnpm build` run under Node 24,
-   then all tests pass and Next.js completes framework type validation.
+   then all tests pass, TS7 runs first, and Next.js completes framework type
+   validation.
 6. Given the Preview deployment, when the public catalog and one public runtime
    boundary are opened, then expected content/status appears without uncaught
    browser errors or introduced console errors.

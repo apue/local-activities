@@ -33,9 +33,10 @@ during `next build`. Separate scripts and caches make ownership observable.
 2. TS7 reads `tsconfig.json` and writes `tsconfig.ts7.tsbuildinfo`.
 3. `pnpm typecheck:ts6` resolves `tsc6` and writes
    `tsconfig.ts6.tsbuildinfo`.
-4. `pnpm build` starts Next.js, which resolves the package named `typescript`
-   and uses its TS6 compiler API for framework type validation.
-5. Vercel installs with pnpm 11 and executes the same build under Node.js 24.
+4. `pnpm build` first executes the TS7 primary check, then starts Next.js.
+5. Next.js resolves the package named `typescript` and uses its TS6 compiler
+   API for framework type validation.
+6. Vercel installs with pnpm 11 and executes the same build under Node.js 24.
 
 ## Agentic Harness Components
 

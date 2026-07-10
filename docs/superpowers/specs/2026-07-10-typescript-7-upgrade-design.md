@@ -63,11 +63,16 @@ The scripts will expose the boundary directly:
 
 ```json
 {
+  "build": "pnpm typecheck && next build",
   "typecheck": "tsc --noEmit --tsBuildInfoFile tsconfig.ts7.tsbuildinfo",
   "typecheck:ts6": "tsc6 --noEmit --tsBuildInfoFile tsconfig.ts6.tsbuildinfo",
   "typecheck:compat": "pnpm typecheck && pnpm typecheck:ts6"
 }
 ```
+
+Keeping the TS7 check inside the stable `build` entry point makes Vercel
+Preview and production builds enforce the same primary compiler gate before
+Next.js performs its TS6-backed framework validation.
 
 Separate build-info files prevent the two compiler implementations from reading
 or overwriting the same incremental state. The existing `*.tsbuildinfo` ignore

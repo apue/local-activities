@@ -7,7 +7,8 @@ Status: current for issue #400
 - Package scripts
   - Path: `package.json`
   - Reuse: retain `test`, `build`, and `typecheck` as stable public commands;
-    extend with explicit TS6 compatibility and combined commands.
+    make `build` run the primary check before Next.js and extend with explicit
+    TS6 compatibility and combined commands.
   - Validation: compiler version probes, both checks, and build.
 - Agent-operable regression gate
   - Path: `scripts/agent-operable-regression-gate.mjs`
@@ -16,7 +17,8 @@ Status: current for issue #400
   - Tests: `scripts/agent-operable-regression-gate.test.mjs`.
 - Next.js build validation
   - Path: `package.json` script `build` and `vercel.json`.
-  - Reuse: keep `next build`; do not add a parallel build pipeline.
+  - Reuse: keep `pnpm build` as Vercel's entry point; do not add a parallel
+    build pipeline.
 - Existing ignored compiler caches
   - Path: `.gitignore` pattern `*.tsbuildinfo`.
   - Reuse: give TS7 and TS6 distinct filenames covered by the existing pattern.

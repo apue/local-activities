@@ -21,6 +21,7 @@ describe("agent-operable regression gate", () => {
       typescript: "npm:@typescript/typescript6@6.0.2",
     });
     expect(packageJson.scripts).toMatchObject({
+      build: "pnpm typecheck && next build",
       typecheck:
         "tsc --noEmit --tsBuildInfoFile tsconfig.ts7.tsbuildinfo",
       "typecheck:ts6":

@@ -70,7 +70,8 @@ pnpm env:check --env-file .env.local --target local-app
 
 `pnpm typecheck` runs the TypeScript 7 primary compiler. The temporary
 `pnpm typecheck:ts6` command verifies compatibility with the TypeScript 6 API
-that Next.js 16.2.6 still loads during `next build`.
+that Next.js 16.2.6 still loads during `next build`. `pnpm build` first reruns
+the TS7 gate, then runs the Next.js build and its compatibility validation.
 
 ## Supabase Development
 

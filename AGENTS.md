@@ -99,7 +99,9 @@ Do not rely on `docs/superpowers` as the current source of truth unless the user
   Next.js supports the stable TS7 API.
 - Coding agents must run both compiler checks for shared contracts, Next.js
   integration, compiler configuration, or dependency changes, followed by
-  `pnpm test` and `pnpm build` before handoff.
+  `pnpm test` and `pnpm build` before handoff. `pnpm build` starts with the TS7
+  primary check so local and Vercel builds cannot bypass it, then lets Next.js
+  run its TS6-backed framework validation.
 - TypeScript checks do not validate `.mjs`, SQL, external providers, or deployed
   runtime behavior; use their focused tests and smoke checks.
 - Use Next.js as a full-stack app first; do not split frontend and backend in the MVP.

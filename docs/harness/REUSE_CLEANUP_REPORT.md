@@ -18,7 +18,8 @@ Status: complete reconnaissance
 - `agentOperableRegressionGateSteps`: insert `typecheck_ts6` immediately after
   primary `typecheck`.
 - Package script contract: keep `typecheck` stable for callers and add
-  `typecheck:ts6` plus `typecheck:compat`.
+  `typecheck:ts6` plus `typecheck:compat`; make the stable `build` entry point
+  execute the TS7 gate before Next.js.
 - PR/issue workflow: record Node 24, compiler, Preview, and review evidence.
 
 ## Deprecated or Removable Logic

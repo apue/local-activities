@@ -160,7 +160,8 @@ Toolchain or compiler changes must run under Node.js 24 and pnpm 11 and include:
 
 The two compiler commands use separate incremental build-info files. TypeScript
 validation does not replace focused `.mjs`, SQL, external-provider, deployment,
-or browser checks.
+or browser checks. The build command reruns the primary TS7 check before Next.js
+so the Vercel build path cannot bypass the authoritative compiler gate.
 
 ## Admin/Public UI
 
