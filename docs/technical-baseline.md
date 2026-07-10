@@ -7,6 +7,27 @@ Edge Function source, and capture-worker normalized data structures.
 
 Use Next.js App Router on Vercel for the public catalog and admin portal.
 
+## Toolchain
+
+Use Node.js 24 LTS and pnpm 11 for local development, validation, Vercel builds,
+and Vercel Functions. Node.js 26 remains a separate future upgrade after it is
+LTS and Vercel exposes the 26.x runtime.
+
+TypeScript 7.0.x is the primary compiler for `.ts` and `.tsx` code.
+`pnpm typecheck` runs its `tsc` CLI and writes
+`tsconfig.ts7.tsbuildinfo`. The package named `typescript` temporarily aliases
+`@typescript/typescript6` because Next.js 16.2.6 still loads the TypeScript 6
+programmatic API during `next build`; `pnpm typecheck:ts6` verifies this path
+and writes `tsconfig.ts6.tsbuildinfo`. Remove the TS6 layer once Next.js supports
+the stable TS7 API.
+
+`pnpm build` runs the primary TS7 check before `next build`, so Vercel Preview
+and production builds enforce TS7 as well as Next.js's TS6-backed validation.
+
+Keep `@types/node` on the Node.js 24 line so compile-time Node APIs match the
+deployed runtime. The TypeScript gates do not cover `.mjs`, SQL, external
+providers, or deployed behavior.
+
 ## Runtime Split
 
 The active production split is:

@@ -13,7 +13,14 @@ Use this quickstart for local development of the reset architecture.
 
 ```bash
 brew install node@24 pnpm supabase vercel-cli direnv
+export PATH="$(brew --prefix node@24)/bin:$PATH"
+node --version
+pnpm --version
 ```
+
+The repository's `.nvmrc` also selects Node.js 24 for developers using nvm.
+Node.js 24.x and pnpm 11.x are required; Node.js 26 is intentionally deferred
+until Vercel supports it.
 
 ## Local Environment
 
@@ -42,7 +49,7 @@ Production analysis provider keys belong in Supabase Edge Function secrets.
 Install dependencies:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
 Run the web app:
@@ -56,8 +63,15 @@ Run routine checks:
 ```bash
 pnpm test
 pnpm typecheck
+pnpm typecheck:ts6
+pnpm build
 pnpm env:check --env-file .env.local --target local-app
 ```
+
+`pnpm typecheck` runs the TypeScript 7 primary compiler. The temporary
+`pnpm typecheck:ts6` command verifies compatibility with the TypeScript 6 API
+that Next.js 16.2.6 still loads during `next build`. `pnpm build` first reruns
+the TS7 gate, then runs the Next.js build and its compatibility validation.
 
 ## Supabase Development
 

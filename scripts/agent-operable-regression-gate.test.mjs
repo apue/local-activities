@@ -14,6 +14,22 @@ describe("agent-operable regression gate", () => {
     );
   });
 
+  it("exposes the isolated TypeScript 7 and TypeScript 6 toolchain", () => {
+    expect(packageJson.devDependencies).toMatchObject({
+      "@types/node": "24.13.3",
+      "@typescript/native": "npm:typescript@7.0.2",
+      typescript: "npm:@typescript/typescript6@6.0.2",
+    });
+    expect(packageJson.scripts).toMatchObject({
+      build: "pnpm typecheck && next build",
+      typecheck:
+        "tsc --noEmit --tsBuildInfoFile tsconfig.ts7.tsbuildinfo",
+      "typecheck:ts6":
+        "tsc6 --noEmit --tsBuildInfoFile tsconfig.ts6.tsbuildinfo",
+      "typecheck:compat": "pnpm typecheck && pnpm typecheck:ts6",
+    });
+  });
+
   it("builds the Phase 1 regression gate command sequence", () => {
     expect(buildAgentOperableRegressionGatePlan()).toEqual([
       expect.objectContaining({
@@ -23,6 +39,10 @@ describe("agent-operable regression gate", () => {
       expect.objectContaining({
         name: "typecheck",
         display: "pnpm typecheck",
+      }),
+      expect.objectContaining({
+        name: "typecheck_ts6",
+        display: "pnpm typecheck:ts6",
       }),
       expect.objectContaining({
         name: "v5_replay_memory",
@@ -52,6 +72,7 @@ describe("agent-operable regression gate", () => {
       steps: [
         expect.objectContaining({ name: "unit_tests" }),
         expect.objectContaining({ name: "typecheck" }),
+        expect.objectContaining({ name: "typecheck_ts6" }),
         expect.objectContaining({ name: "v5_replay_memory" }),
         expect.objectContaining({ name: "v5_eval_memory" }),
       ],
@@ -75,14 +96,15 @@ describe("agent-operable regression gate", () => {
     expect(calls).toEqual([
       "unit_tests",
       "typecheck",
+      "typecheck_ts6",
       "v5_replay_memory",
       "v5_eval_memory",
     ]);
-    expect(result).toMatchObject({ ok: true, stepCount: 4 });
+    expect(result).toMatchObject({ ok: true, stepCount: 5 });
     expect(logs.at(-1)).toMatchObject({
       event: "agent_operable_regression_gate_complete",
       ok: true,
-      stepCount: 4,
+      stepCount: 5,
     });
   });
 
@@ -94,15 +116,15 @@ describe("agent-operable regression gate", () => {
         consoleLike: { log: () => {} },
         runCommandImpl: async (step) => {
           calls.push(step.name);
-          return { exitCode: step.name === "typecheck" ? 1 : 0 };
+          return { exitCode: step.name === "typecheck_ts6" ? 1 : 0 };
         },
       }),
     ).rejects.toMatchObject({
-      message: "agent_operable_regression_gate_failed:typecheck",
-      step: "typecheck",
+      message: "agent_operable_regression_gate_failed:typecheck_ts6",
+      step: "typecheck_ts6",
       exitCode: 1,
     });
 
-    expect(calls).toEqual(["unit_tests", "typecheck"]);
+    expect(calls).toEqual(["unit_tests", "typecheck", "typecheck_ts6"]);
   });
 });

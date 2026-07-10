@@ -13,6 +13,10 @@ export const agentOperableRegressionGateSteps = Object.freeze([
     args: ["typecheck"],
   },
   {
+    name: "typecheck_ts6",
+    args: ["typecheck:ts6"],
+  },
+  {
     name: "v5_replay_memory",
     args: [
       "pipeline:v5:replay",
